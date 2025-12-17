@@ -1,28 +1,28 @@
 extends Node
 
 # These will be autofilled by the StateMachine
-var Host # is our Character node (parent of StateMachine)
-var States # is the StateMachine itself
+var Host  # is our Character node (parent of StateMachine)
+var States  # is the StateMachine itself
 
 signal chase_ended
 
-enum ChaseStatus{ CAUGHT, LOST, CHASING, WAITING = 3 }
-var current_chase_status : ChaseStatus
-var chase_target : Node3D = null
+enum ChaseStatus { CAUGHT, LOST, CHASING, WAITING = 3 }
+var current_chase_status: ChaseStatus
+var chase_target: Node3D = null
 
-@export var target_action_distance : float = 1.0
-@export var action_when_caught : String = "attack"
+@export var target_action_distance: float = 1.0
+@export var action_when_caught: String = "attack"
 ## If the NPC navigation agent can't reach the chase target for this amount of time (in sec), they'll return to their previous state.
-@export var giveup_chase_time : float = 10.0
-@export var face_target_while_waiting : bool = true
+@export var giveup_chase_time: float = 10.0
+@export var face_target_while_waiting: bool = true
 
 @export_group("Animation Settings")
-@export var chase_stance : String = ""
-@export var neutral_stance : String = ""
+@export var chase_stance: String = ""
+@export var neutral_stance: String = ""
 
-var chase_wait_timer : Timer
+var chase_wait_timer: Timer
 var host_animation_statemachine
-var state_before_chase : String
+var state_before_chase: String
 
 
 func _enter_tree() -> void:
@@ -36,9 +36,13 @@ func _enter_tree() -> void:
 func _state_enter():
 	chase_target = Host.attention_target
 	host_animation_statemachine = Host.animation_tree.get("parameters/UpperBodyState/playback")
-	
+
 	if !chase_target:
-		CogitoGlobals.debug_log(true,"npc_state_chase.gd", "Chase target was null. Returning to state = " + States.previous_state)
+		CogitoGlobals.debug_log(
+			true,
+			"npc_state_chase.gd",
+			"Chase target was null. Returning to state = " + States.previous_state
+		)
 		States.load_previous_state()
 	else:
 		host_animation_statemachine.travel(chase_stance)
@@ -52,7 +56,7 @@ func _state_exit():
 
 func _physics_process(_delta):
 	Host.update_animations(_delta)
-	
+
 	match current_chase_status:
 		ChaseStatus.WAITING:
 			# Lerping down the velocity
@@ -62,29 +66,36 @@ func _physics_process(_delta):
 
 			if face_target_while_waiting:
 				Host.face_direction(chase_target.global_position)
-			
+
 			# If chase target becomes reachable again, the chase is resumed.
 			Host.navigation_agent_3d.target_position = chase_target.global_position
 			if Host.navigation_agent_3d.is_target_reachable():
-				chase_wait_timer.stop() 
+				chase_wait_timer.stop()
 				current_chase_status = ChaseStatus.CHASING
-				
+
 			return
-			
+
 		ChaseStatus.CHASING:
 			_running(_delta)
-			
+
 		ChaseStatus.CAUGHT:
 			States.goto(action_when_caught)
-			
-		ChaseStatus.LOST: # Ends this state.
+
+		ChaseStatus.LOST:  # Ends this state.
 			host_animation_statemachine.travel(neutral_stance)
 			chase_ended.emit()
-			CogitoGlobals.debug_log(true,"npc_state_chase.gd", "ChaseStatus LOST, going to state = " + States.previous_state)
+			CogitoGlobals.debug_log(
+				true,
+				"npc_state_chase.gd",
+				"ChaseStatus LOST, going to state = " + States.previous_state
+			)
 			States.load_previous_state()
 
-
-	var look_ahead := Vector3(Host.global_position.x + Host.velocity.x, Host.global_position.y, Host.global_position.z + Host.velocity.z)
+	var look_ahead := Vector3(
+		Host.global_position.x + Host.velocity.x,
+		Host.global_position.y,
+		Host.global_position.z + Host.velocity.z
+	)
 
 
 func _running(delta: float):
@@ -92,11 +103,11 @@ func _running(delta: float):
 	var disance_to_target = Host.global_position.distance_to(chase_target.global_position)
 
 	if disance_to_target <= target_action_distance:
-		current_chase_status =  ChaseStatus.CAUGHT
-		
+		current_chase_status = ChaseStatus.CAUGHT
+
 	if not Host.navigation_agent_3d.is_target_reachable():
 		start_waiting(delta)
-		
+
 	move_host_to_next_position(delta)
 
 
@@ -115,13 +126,17 @@ func start_waiting(_delta: float):
 
 func move_host_to_next_position(_delta: float) -> void:
 	var next_position = Host.navigation_agent_3d.get_next_path_position()
-	
+
 	# Add the gravity.
 	if not Host.is_on_floor():
 		Host.velocity += Host.get_gravity() * _delta
 
 	var direction = Host.global_position.direction_to(next_position)
-	var face_direction := Vector3(Host.global_position.x + Host.velocity.x, Host.global_position.y, Host.global_position.z + Host.velocity.z)
+	var face_direction := Vector3(
+		Host.global_position.x + Host.velocity.x,
+		Host.global_position.y,
+		Host.global_position.z + Host.velocity.z
+	)
 
 	if direction:
 		Host.face_direction(face_direction)
@@ -130,5 +145,5 @@ func move_host_to_next_position(_delta: float) -> void:
 	else:
 		Host.velocity.x = move_toward(Host.velocity.x, 0, Host.move_speed)
 		Host.velocity.z = move_toward(Host.velocity.z, 0, Host.move_speed)
-		
+
 	Host.move_and_slide()

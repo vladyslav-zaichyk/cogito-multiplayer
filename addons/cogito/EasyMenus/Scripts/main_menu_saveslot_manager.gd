@@ -23,15 +23,19 @@ func load_slot_data(save_slot: String) -> CogitoPlayerState:
 		return null
 	else:
 		return CogitoSceneManager._player_state
-	
+
 
 func start_new_game():
 	if CogitoGlobals.cogito_settings.new_game_start_scene:
 		var path_to_scene = CogitoGlobals.cogito_settings.new_game_start_scene.resource_path
-		CogitoSceneManager.load_next_scene(path_to_scene, "", "temp", CogitoSceneManager.CogitoSceneLoadMode.RESET) #Load_mode 2 means there's no attempt to load a state.
+		CogitoSceneManager.load_next_scene(
+			path_to_scene, "", "temp", CogitoSceneManager.CogitoSceneLoadMode.RESET
+		)  #Load_mode 2 means there's no attempt to load a state.
 		#Setting new game world state:
-		CogitoSceneManager._current_world_dict = CogitoGlobals.cogito_settings.new_game_world_state.get_world_dict()
-	#if start_game_scene: 
-		#CogitoSceneManager.load_next_scene(start_game_scene, "", "temp", CogitoSceneManager.CogitoSceneLoadMode.RESET) #Load_mode 2 means there's no attempt to load a state.
+		CogitoSceneManager._current_world_dict = (
+			CogitoGlobals.cogito_settings.new_game_world_state.get_world_dict()
+		)
+	#if start_game_scene:
+	#CogitoSceneManager.load_next_scene(start_game_scene, "", "temp", CogitoSceneManager.CogitoSceneLoadMode.RESET) #Load_mode 2 means there's no attempt to load a state.
 	else:
 		print("ISSUE: No start game scene set.")

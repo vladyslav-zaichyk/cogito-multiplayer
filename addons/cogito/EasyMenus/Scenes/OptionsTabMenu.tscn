@@ -1,10 +1,10 @@
 [gd_scene load_steps=14 format=3 uid="uid://bly6wti1q8bsu"]
 
 [ext_resource type="Theme" uid="uid://by44nnjeu6u4n" path="res://addons/cogito/Theme/Cogito_Theme_A.tres" id="1_6plem"]
-[ext_resource type="Script" uid="uid://cmsn2dv60gimt" path="res://addons/cogito/EasyMenus/Scripts/OptionsTabMenu.gd" id="2_bufp8"]
+[ext_resource type="Script" uid="uid://cmsn2dv60gimt" path="res://addons/cogito/EasyMenus/Scripts/options_tab_menu.gd" id="2_bufp8"]
 [ext_resource type="Script" uid="uid://c656a651xkd0c" path="res://addons/cogito/EasyMenus/Scripts/tab_menu.gd" id="4_h483w"]
 [ext_resource type="FontFile" uid="uid://bfavdpnmorag5" path="res://addons/cogito/Assets/Fonts/Montserrat/Montserrat-Regular.ttf" id="5_23wn5"]
-[ext_resource type="Script" uid="uid://bg6tmerhavxb3" path="res://addons/cogito/Theme/CogitoUiButton.gd" id="6_rlben"]
+[ext_resource type="Script" uid="uid://bg6tmerhavxb3" path="res://addons/cogito/Theme/cogito_ui_button.gd" id="6_rlben"]
 [ext_resource type="Script" uid="uid://6na3wwq1xpex" path="res://addons/cogito/EasyMenus/Scripts/follow_focus_center.gd" id="7_27vxg"]
 [ext_resource type="Script" uid="uid://sdcb7libxd1q" path="res://addons/cogito/EasyMenus/Scripts/option_button_input_propagator.gd" id="8_7fii0"]
 [ext_resource type="Texture2D" uid="uid://dytl8harf5lvv" path="res://addons/cogito/Assets/Graphics/Flags/freepik_flag_us.png" id="8_nrb35"]

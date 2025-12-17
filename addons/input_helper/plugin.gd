@@ -1,12 +1,10 @@
 @tool
 extends EditorPlugin
 
-
 const REMOTE_RELEASES_URL = "https://api.github.com/repos/nathanhoad/godot_input_helper/releases"
 const LOCAL_CONFIG_PATH = "res://addons/input_helper/plugin.cfg"
 
 const DownloadDialogScene = preload("res://addons/input_helper/views/download_dialog.tscn")
-
 
 var http_request: HTTPRequest = HTTPRequest.new()
 var next_version: String = ""
@@ -47,21 +45,26 @@ func version_to_number(version: String) -> int:
 ### Signals
 
 
-func _on_http_request_request_completed(result: int, response_code: int, headers: PackedStringArray, body: PackedByteArray) -> void:
+func _on_http_request_request_completed(
+	result: int, response_code: int, headers: PackedStringArray, body: PackedByteArray
+) -> void:
 	http_request.queue_free()
 
-	if result != HTTPRequest.RESULT_SUCCESS: return
+	if result != HTTPRequest.RESULT_SUCCESS:
+		return
 
 	var current_version: String = get_version()
 
 	# Work out the next version from the releases information on GitHub
 	var response = JSON.parse_string(body.get_string_from_utf8())
-	if typeof(response) != TYPE_ARRAY: return
+	if typeof(response) != TYPE_ARRAY:
+		return
 
 	# GitHub releases are in order of creation, not order of version
-	var versions = (response as Array).filter(func(release):
-		var version: String = release.tag_name.substr(1)
-		return version_to_number(version) > version_to_number(current_version)
+	var versions = (response as Array).filter(
+		func(release):
+			var version: String = release.tag_name.substr(1)
+			return version_to_number(version) > version_to_number(current_version)
 	)
 	if versions.size() > 0:
 		next_version = versions[0].tag_name.substr(1)

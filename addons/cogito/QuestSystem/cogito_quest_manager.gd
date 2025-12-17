@@ -1,9 +1,9 @@
 extends Node
 
-signal quest_activated(quest: CogitoQuest) #Emitted when a quest gets added to the active quests group
-signal quest_updated(quest: CogitoQuest) #Emitted when a quests gets updated (used for the quest counter)
-signal quest_completed(quest: CogitoQuest) #Emitted when a quest gets completed / moved to the completed quests group.
-signal quest_failed(quest: CogitoQuest) #Emitted when a quest gets moved to the failed quests group.
+signal quest_activated(quest: CogitoQuest)  #Emitted when a quest gets added to the active quests group
+signal quest_updated(quest: CogitoQuest)  #Emitted when a quests gets updated (used for the quest counter)
+signal quest_completed(quest: CogitoQuest)  #Emitted when a quest gets completed / moved to the completed quests group.
+signal quest_failed(quest: CogitoQuest)  #Emitted when a quest gets moved to the failed quests group.
 
 const AvailableQuests = preload("./QuestGroups/available_quests_group.gd")
 const ActiveQuests = preload("./QuestGroups/active_quests_group.gd")
@@ -20,7 +20,8 @@ var active: ActiveQuests = ActiveQuests.new("Active")
 var completed: CompletedQuests = CompletedQuests.new("Completed")
 var failed: FailedQuests = FailedQuests.new("Failed")
 
-var quest_audio_volume_db : float = -9
+var quest_audio_volume_db: float = -9
+
 
 func _init() -> void:
 	# Adding quest groups
@@ -38,12 +39,13 @@ func start_quest(quest: CogitoQuest) -> CogitoQuest:
 		CogitoGlobals.debug_log(true, "QuestManager.gd", quest.quest_name + " is already active.")
 		return quest
 	if completed.is_quest_inside(quest):
-		CogitoGlobals.debug_log(true, "QuestManager.gd", quest.quest_name + " is already completed.")
+		CogitoGlobals.debug_log(
+			true, "QuestManager.gd", quest.quest_name + " is already completed."
+		)
 		return quest
 	if failed.is_quest_inside(quest):
 		CogitoGlobals.debug_log(true, "QuestManager.gd", quest.quest_name + " was already failed.")
-		return quest	
-	
+		return quest
 
 	#Add the quest to the actives quests group
 	available.remove_quest(quest)
@@ -52,7 +54,9 @@ func start_quest(quest: CogitoQuest) -> CogitoQuest:
 
 	quest.start()
 	Audio.play_sound(COGITO_QUEST_START).volume_db = quest_audio_volume_db
-	CogitoGlobals.debug_log(true, "QuestManager.gd", "Quest " + quest.quest_name + " has been started.")
+	CogitoGlobals.debug_log(
+		true, "QuestManager.gd", "Quest " + quest.quest_name + " has been started."
+	)
 	return quest
 
 
@@ -90,19 +94,19 @@ func fail_quest(quest: CogitoQuest) -> CogitoQuest:
 
 
 ## Changes quest counter value. Quest needs to be active.
-func change_quest_counter(quest: CogitoQuest, value_change:int) -> CogitoQuest:
+func change_quest_counter(quest: CogitoQuest, value_change: int) -> CogitoQuest:
 	if not active.is_quest_inside(quest):
 		return quest
-	
+
 	quest.quest_counter_current += value_change
 	quest_updated.emit(quest)
-	
+
 	# Checks if counter goal is reached:
 	if quest.quest_counter_current == quest.quest_counter_goal:
 		CogitoGlobals.debug_log(true, "QuestManager.gd", quest.quest_name + ": Quest coal reached!")
 		quest.update()
 		complete_quest(quest)
-	
+
 	return quest
 
 
@@ -125,7 +129,11 @@ func get_failed_quests() -> Array[CogitoQuest]:
 
 ## Gets a quest that's neither in the active, completed or failed groups
 func is_quest_available(quest: CogitoQuest) -> bool:
-	if not (active.is_quest_inside(quest) or completed.is_quest_inside(quest) or failed.is_quest_inside(quest)):
+	if not (
+		active.is_quest_inside(quest)
+		or completed.is_quest_inside(quest)
+		or failed.is_quest_inside(quest)
+	):
 		return true
 	return false
 
@@ -148,11 +156,13 @@ func is_quest_completed(quest: CogitoQuest) -> bool:
 func is_quest_in_group(quest: CogitoQuest, group_name: String) -> bool:
 	if group_name.is_empty():
 		for group in get_children():
-			if group.is_quest_inside(quest): return true
+			if group.is_quest_inside(quest):
+				return true
 		return false
 
 	var group := get_node(group_name)
-	if group.is_quest_inside(quest): return true
+	if group.is_quest_inside(quest):
+		return true
 	return false
 
 
@@ -166,7 +176,8 @@ func call_quest_method(quest_id: int, method: String, args: Array) -> void:
 			break
 
 	# Make sure we've got the quest
-	if quest == null: return
+	if quest == null:
+		return
 
 	if quest.has_method(method):
 		quest.callv(method, args)
@@ -180,12 +191,14 @@ func set_quest_property(quest_id: int, property: String, value: Variant) -> void
 		if groups.get_quest_from_id(quest_id) != null:
 			quest = groups.get_quest_from_id(quest_id)
 
-	if quest == null: return
+	if quest == null:
+		return
 
 	# Now check if the quest has the property
 
 	# First if the property is null -> we return
-	if property == null: return
+	if property == null:
+		return
 
 	var was_property_found: bool = false
 	# Then we check if the property is present
@@ -195,7 +208,8 @@ func set_quest_property(quest_id: int, property: String, value: Variant) -> void
 			break
 
 	# Return if the property was not found
-	if not was_property_found: return
+	if not was_property_found:
+		return
 
 	# Finally we set the value
 	quest.set(property, value)
@@ -203,7 +217,8 @@ func set_quest_property(quest_id: int, property: String, value: Variant) -> void
 
 ## Force moves a quest to a group.
 func move_quest_to_group(quest: CogitoQuest, old_group: String, new_group: String) -> CogitoQuest:
-	if old_group == new_group: return
+	if old_group == new_group:
+		return
 
 	var old_group_instance: CogitoQuestGroup = get_node_or_null(old_group)
 	var new_group_instance: CogitoQuestGroup = get_node_or_null(new_group)
@@ -227,48 +242,47 @@ func reset_group(group_name: String) -> void:
 	group.clear_group()
 	return
 
-
 ## Extra QuestManager methods that are currently not really needed.
 #func quests_as_dict() -> Dictionary:
-	#var quest_dict: Dictionary = {}
+#var quest_dict: Dictionary = {}
 #
-	#for group in get_children():
-		#quest_dict[group.name.to_lower()] = group.get_ids_from_quests()
+#for group in get_children():
+#quest_dict[group.name.to_lower()] = group.get_ids_from_quests()
 #
-	#return quest_dict
+#return quest_dict
 #
 #
 #func dict_to_quests(dict: Dictionary, quests: Array[CogitoQuest]) -> void:
-	#for group in get_children():
+#for group in get_children():
 #
-		## Make sure to iterate only for available pools
-		#if !dict.has(group.name.to_lower()): continue
+## Make sure to iterate only for available pools
+#if !dict.has(group.name.to_lower()): continue
 #
-		## Match quest with their ids and insert them into the quest pool
-		#var quest_with_id: Dictionary = {}
-		#var group_ids: Array[int]
-		#group_ids.append_array(dict[group.name.to_lower()])
-		#for quest in quests:
-			#if quest.id in group_ids:
-				#group.add_quest(quest)
-				#quests.erase(quest)
+## Match quest with their ids and insert them into the quest pool
+#var quest_with_id: Dictionary = {}
+#var group_ids: Array[int]
+#group_ids.append_array(dict[group.name.to_lower()])
+#for quest in quests:
+#if quest.id in group_ids:
+#group.add_quest(quest)
+#quests.erase(quest)
 #
 #
 #func serialize_quests(group: String) -> Dictionary:
-	#var group_node: CogitoQuestGroup = get_node_or_null(group)
+#var group_node: CogitoQuestGroup = get_node_or_null(group)
 #
-	#if group_node == null: return {}
+#if group_node == null: return {}
 #
-	#var quest_dictionary: Dictionary = {}
-	#for quests in group_node.quests:
-		#var quest_data: Dictionary
-		#for name in quests.get_script().get_script_property_list():
+#var quest_dictionary: Dictionary = {}
+#for quests in group_node.quests:
+#var quest_data: Dictionary
+#for name in quests.get_script().get_script_property_list():
 #
-			## Filter only defined properties
-			#if name.usage & PROPERTY_USAGE_STORAGE or name.usage & PROPERTY_USAGE_SCRIPT_VARIABLE:
-				#quest_data[name["name"]] = quests.get(name["name"])
+## Filter only defined properties
+#if name.usage & PROPERTY_USAGE_STORAGE or name.usage & PROPERTY_USAGE_SCRIPT_VARIABLE:
+#quest_data[name["name"]] = quests.get(name["name"])
 #
-		#quest_data.erase("id")
-		#quest_dictionary[quests.id] = quest_data
+#quest_data.erase("id")
+#quest_dictionary[quests.id] = quest_data
 #
-	#return quest_dictionary
+#return quest_dictionary

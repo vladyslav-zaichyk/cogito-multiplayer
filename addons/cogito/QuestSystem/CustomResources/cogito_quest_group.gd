@@ -1,8 +1,8 @@
 extends Node
 class_name CogitoQuestGroup
 
-
 var quests: Array[CogitoQuest] = []
+
 
 func _init(pool_name: String):
 	self.set_name(pool_name)
@@ -12,12 +12,12 @@ func add_quest(quest: CogitoQuest) -> CogitoQuest:
 	assert(quest != null)
 	quests.append(quest)
 	return quest
-	
+
 
 func remove_quest(quest: CogitoQuest) -> CogitoQuest:
 	assert(quest != null)
 	quests.erase(quest)
-	return quest 
+	return quest
 
 
 func is_quest_inside(quest: CogitoQuest) -> bool:
@@ -29,7 +29,7 @@ func get_quest_from_id(id: int) -> CogitoQuest:
 		if quest.id == id:
 			return quest
 	return null
-	
+
 
 func get_ids_from_quests() -> Array[int]:
 	var ids: Array[int] = []
@@ -39,4 +39,4 @@ func get_ids_from_quests() -> Array[int]:
 
 
 func clear_group():
-	quests.clear() 
+	quests.clear()

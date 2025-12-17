@@ -10,6 +10,7 @@ class_name GamepadBindButton
 
 var is_remapping: bool = false
 
+
 func _init():
 	toggle_mode = true
 	theme_type_variation = "RemapButton"
@@ -34,28 +35,28 @@ func _toggled(button_pressed):
 func _input(event):
 	if !is_remapping:
 		return
-	
+
 	# Allow cancelling remapping with the Escape key
 	if event is InputEventKey:
 		if event.pressed and event.keycode == KEY_ESCAPE:
 			end_remapping()
 			accept_event()
 			return
-	
+
 	# Allow cancelling remapping with a mouse click
 	if event is InputEventMouseButton:
 		if event.pressed:
 			end_remapping()
 			accept_event()
 			return
-	
+
 	if event is InputEventJoypadMotion:
-		if abs(event.axis_value) > .1: # Adding threshold for joystick axis input mapping
+		if abs(event.axis_value) > .1:  # Adding threshold for joystick axis input mapping
 			InputHelper.set_joypad_input_for_action(action, event, false)
 			end_remapping()
 			accept_event()
 			return
-	
+
 	if event is InputEventJoypadButton:
 		if event.pressed:
 			InputHelper.set_joypad_input_for_action(action, event, false)

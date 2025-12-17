@@ -1,6 +1,6 @@
 # LANGUAGE translation for Cogito for the following files:
 # res://addons/cogito/DemoScenes/DemoPrefabs/note_welcome.tscn
-# res://addons/cogito/EasyMenus/Scenes/OptionsTabMenu.tscn
+# res://addons/cogito/EasyMenus/Scenes/options_tab_menu.tscn
 # res://addons/cogito/InventoryPD/Items/Cogito_Battery.tres
 #
 # FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.

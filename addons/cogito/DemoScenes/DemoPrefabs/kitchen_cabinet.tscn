@@ -1,7 +1,7 @@
 [gd_scene load_steps=14 format=4 uid="uid://daeim2lleyosd"]
 
 [ext_resource type="Script" uid="uid://cismjpvxmsbf2" path="res://addons/cogito/CogitoObjects/cogito_door.gd" id="1_1t6vp"]
-[ext_resource type="PackedScene" uid="uid://l61jtpfxu5x5" path="res://addons/cogito/Components/Interactions/BasicInteraction.tscn" id="2_hrf4i"]
+[ext_resource type="PackedScene" uid="uid://l61jtpfxu5x5" path="res://addons/cogito/Components/Interactions/basic_interaction.tscn" id="2_hrf4i"]
 [ext_resource type="AudioStream" uid="uid://bipwc8kk30bub" path="res://addons/cogito/Assets/Audio/Kenney/doorOpen_1.ogg" id="2_uqpdi"]
 [ext_resource type="AudioStream" uid="uid://g8n7a73j5qqo" path="res://addons/cogito/Assets/Audio/Kenney/doorClose_4.ogg" id="3_rgsat"]
 

@@ -2,39 +2,43 @@
 extends Node3D
 class_name CogitoStaticInteractable
 
-signal damage_received(damage_value:float)
+signal damage_received(damage_value: float)
 
 ## Name that will displayed when interacting. Leave blank to hide
-@export var display_name : String
+@export var display_name: String
 
-enum PromptPositionMode{
-	ORIGIN, MARKER, AABB_CENTER, 
+enum PromptPositionMode {
+	ORIGIN,
+	MARKER,
+	AABB_CENTER,
 }
-## This sets where interaction prompt gets displayed on the object. ORIGIN = at the objects origin point. Recommended for smaller objects. MARKER = at the position of an assigned Marker3D node. Recommended for big objects/doors. AABB_CENTER = at the center of the calculated AABoundingBox. Works well but has a slight performance impact. 
-@export var prompt_pos_mode : PromptPositionMode = PromptPositionMode.ORIGIN
-@export var prompt_marker : Marker3D
+## This sets where interaction prompt gets displayed on the object. ORIGIN = at the objects origin point. Recommended for smaller objects. MARKER = at the position of an assigned Marker3D node. Recommended for big objects/doors. AABB_CENTER = at the center of the calculated AABoundingBox. Works well but has a slight performance impact.
+@export var prompt_pos_mode: PromptPositionMode = PromptPositionMode.ORIGIN
+@export var prompt_marker: Marker3D
 
-var interaction_nodes : Array[Node]
-var cogito_properties : CogitoProperties = null
-var properties : int
+var interaction_nodes: Array[Node]
+var cogito_properties: CogitoProperties = null
+var properties: int
+
 
 func _ready():
 	self.add_to_group("interactable")
 	find_interaction_nodes()
 	find_cogito_properties()
 
+
 func find_interaction_nodes():
-	interaction_nodes = find_children("","InteractionComponent",true) #Grabs all attached interaction components
+	interaction_nodes = find_children("", "InteractionComponent", true)  #Grabs all attached interaction components
 
 
 func find_cogito_properties():
-	var property_nodes = find_children("","CogitoProperties",true) #Grabs all attached property components
+	var property_nodes = find_children("", "CogitoProperties", true)  #Grabs all attached property components
 	if property_nodes:
 		cogito_properties = property_nodes[0]
 
 
 # Future method to set object state when a scene state file is loaded.
-func set_state():	
+func set_state():
 	#TODO: Find a way to possibly save health of health attribute.
 	find_cogito_properties()
 	pass

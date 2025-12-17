@@ -1,10 +1,10 @@
 # LANGUAGE translation for Cogito for the following files:
-# res://addons/cogito/EasyMenus/Scenes/OptionsTabMenu.tscn
+# res://addons/cogito/EasyMenus/Scenes/options_tab_menu.tscn
 # res://addons/cogito/EasyMenus/Scenes/PauseMenu.tscn
 # res://addons/cogito/Localization/translation_keys_resources/loc_keys_keybindings.tres
-# res://addons/cogito/Components/Interactions/CarryableComponent.tscn
-# res://addons/cogito/Components/Interactions/PickupComponent.tscn
-# res://addons/cogito/Components/Interactions/BackpackComponent.tscn
+# res://addons/cogito/Components/Interactions/carryable_component.tscn
+# res://addons/cogito/Components/Interactions/pickup_component.tscn
+# res://addons/cogito/Components/Interactions/backpack_component.tscn
 # res://addons/cogito/Localization/translation_keys_resources/loc_keys_attributes.tres
 # res://addons/cogito/PackedScenes/Player_HUD.tscn
 # res://addons/cogito/PackedScenes/death_screen.tscn

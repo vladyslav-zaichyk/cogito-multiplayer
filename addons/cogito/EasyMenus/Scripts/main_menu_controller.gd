@@ -7,9 +7,9 @@ signal start_game_pressed
 @onready var options_button: CogitoUiButton = $ContentMain/GameMenu/VBoxContainer/OptionsButton
 
 #region UI AUDIO
-@export var sound_hover : AudioStream
-@export var sound_click : AudioStream
-var playback : AudioStreamPlaybackPolyphonic
+@export var sound_hover: AudioStream
+@export var sound_click: AudioStream
+var playback: AudioStreamPlaybackPolyphonic
 
 
 func _enter_tree() -> void:
@@ -28,7 +28,7 @@ func _enter_tree() -> void:
 	get_tree().node_added.connect(_on_node_added)
 
 
-func _on_node_added(node:Node) -> void:
+func _on_node_added(node: Node) -> void:
 	if node is Button:
 		# If the added node is a button we connect to its mouse_entered and pressed signals
 		# and play a sound
@@ -42,6 +42,8 @@ func _play_hover() -> void:
 
 func _play_pressed() -> void:
 	playback.play_stream(sound_click, 0, 0, 1)
+
+
 #endregion
 
 
@@ -54,7 +56,10 @@ func quit():
 
 
 func _input(event):
-	if (event.is_action_pressed("ui_cancel") or event.is_action_pressed("menu")) and !game_menu.visible:
+	if (
+		(event.is_action_pressed("ui_cancel") or event.is_action_pressed("menu"))
+		and !game_menu.visible
+	):
 		accept_event()
 		options_tab_menu.hide()
 		game_menu.show()

@@ -1,10 +1,10 @@
 [gd_scene load_steps=14 format=4 uid="uid://dh4srvw372cf5"]
 
-[ext_resource type="PackedScene" uid="uid://cio4x05ipvslu" path="res://addons/cogito/Components/Interactions/CarryableComponent.tscn" id="1_kmxxf"]
+[ext_resource type="PackedScene" uid="uid://cio4x05ipvslu" path="res://addons/cogito/Components/Interactions/carryable_component.tscn" id="1_kmxxf"]
 [ext_resource type="Script" uid="uid://buphmm2nywggj" path="res://addons/cogito/CogitoObjects/cogito_sittable.gd" id="1_sr3ae"]
-[ext_resource type="PackedScene" uid="uid://m82ivreg3ugd" path="res://addons/cogito/Components/ImpactSounds.tscn" id="2_x3y0h"]
+[ext_resource type="PackedScene" uid="uid://m82ivreg3ugd" path="res://addons/cogito/Components/impact_sounds.tscn" id="2_x3y0h"]
 [ext_resource type="AudioStream" uid="uid://dvbd46d7c28ee" path="res://addons/cogito/Assets/Audio/Kenney/bookPlace1.ogg" id="4_tg5yq"]
-[ext_resource type="PackedScene" uid="uid://l61jtpfxu5x5" path="res://addons/cogito/Components/Interactions/BasicInteraction.tscn" id="5_i3nba"]
+[ext_resource type="PackedScene" uid="uid://l61jtpfxu5x5" path="res://addons/cogito/Components/Interactions/basic_interaction.tscn" id="5_i3nba"]
 [ext_resource type="AudioStream" uid="uid://ba8gpptnnapyh" path="res://addons/cogito/Assets/Audio/Kenney/cloth2.ogg" id="6_w4le7"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_vrxli"]

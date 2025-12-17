@@ -6,7 +6,7 @@
 [ext_resource type="AudioStream" uid="uid://ckxotbwm6qtui" path="res://addons/cogito/Assets/Audio/Kenney/cardTakeOutPackage2.ogg" id="4_4064u"]
 [ext_resource type="PackedScene" uid="uid://cyy2kpk7e36if" path="res://addons/cogito/PackedScenes/Shelf_Drawer.tscn" id="5_61f6l"]
 [ext_resource type="AudioStream" uid="uid://bipwc8kk30bub" path="res://addons/cogito/Assets/Audio/Kenney/doorOpen_1.ogg" id="6_q1lg4"]
-[ext_resource type="PackedScene" uid="uid://l61jtpfxu5x5" path="res://addons/cogito/Components/Interactions/BasicInteraction.tscn" id="6_vb6qn"]
+[ext_resource type="PackedScene" uid="uid://l61jtpfxu5x5" path="res://addons/cogito/Components/Interactions/basic_interaction.tscn" id="6_vb6qn"]
 [ext_resource type="AudioStream" uid="uid://g8n7a73j5qqo" path="res://addons/cogito/Assets/Audio/Kenney/doorClose_4.ogg" id="7_takda"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_e38y8"]

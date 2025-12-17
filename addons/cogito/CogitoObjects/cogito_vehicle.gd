@@ -2,7 +2,7 @@
 extends CogitoSittable
 class_name CogitoVehicle
 
-signal vehicle_moved()
+signal vehicle_moved
 
 #region Variables
 @export var move_speed: float = 5
@@ -15,13 +15,13 @@ var rotation_momentum: float = 0.0
 var acceleration: Vector3 = Vector3.ZERO
 #endregion
 
+
 func _ready():
 	super._ready()
 	physics_sittable = true
 
 
 func _physics_process(delta):
-
 	if player_node and player_node.is_sitting and CogitoSceneManager._current_sittable_node == self:
 		handle_input(delta)
 		apply_momentum(delta)
@@ -34,7 +34,6 @@ func _physics_process(delta):
 
 
 func handle_input(delta):
-
 	var input_vector = Vector3.ZERO
 	if Input.is_action_pressed("forward"):
 		input_vector.z += 1

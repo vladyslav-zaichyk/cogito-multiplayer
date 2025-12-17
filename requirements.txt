@@ -1,0 +1,3 @@
+# GDScript formatting and linting tools
+gdtoolkit>=4.5.0
+

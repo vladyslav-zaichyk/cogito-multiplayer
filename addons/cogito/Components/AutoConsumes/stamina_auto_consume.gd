@@ -1,6 +1,7 @@
 class_name StaminaAutoConsume
 extends AutoConsume
 
+
 func _init() -> void:
 	# The attribute name is reset to the AutoConsume default of "" on load, rename it
 	attribute_name = "stamina"

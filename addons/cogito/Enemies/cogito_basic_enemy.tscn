@@ -8,7 +8,7 @@
 [ext_resource type="PackedScene" uid="uid://bc2hryr610vgo" path="res://addons/cogito/PackedScenes/simple_particle_puff.tscn" id="5_ni6ul"]
 [ext_resource type="PackedScene" uid="uid://crv3r7dscbxlx" path="res://addons/cogito/Enemies/body/basic_enemy_corpse.tscn" id="7_8vdb4"]
 [ext_resource type="PackedScene" uid="uid://cj0yaeh3yg7tu" path="res://addons/cogito/Components/Properties/CogitoProperties.tscn" id="7_15n6t"]
-[ext_resource type="PackedScene" uid="uid://k28yrbg3k3pw" path="res://addons/cogito/Components/HitboxComponent.tscn" id="8_lq5js"]
+[ext_resource type="PackedScene" uid="uid://k28yrbg3k3pw" path="res://addons/cogito/Components/hitbox_component.tscn" id="8_lq5js"]
 [ext_resource type="AudioStream" uid="uid://up2hfhgq1qx6" path="res://addons/cogito/Assets/Audio/Kenney/Footsteps/footstep00.ogg" id="8_vyi83"]
 [ext_resource type="AudioStream" uid="uid://crj07wq4oocwi" path="res://addons/cogito/Assets/Audio/Kenney/Footsteps/footstep01.ogg" id="9_5fsuu"]
 [ext_resource type="AudioStream" uid="uid://dewyukd562k37" path="res://addons/cogito/Assets/Audio/Kenney/Footsteps/footstep02.ogg" id="10_ab7fy"]

@@ -10,6 +10,7 @@ class_name KbmBindButton
 
 var is_remapping: bool = false
 
+
 func _init():
 	toggle_mode = true
 	theme_type_variation = "RemapButton"
@@ -34,16 +35,16 @@ func _toggled(button_pressed):
 func _input(event):
 	if !is_remapping:
 		return
-	
+
 	if event is InputEventJoypadMotion:
 		end_remapping()
 		accept_event()
 		return
-	
+
 	if event is InputEventKey || (event is InputEventMouseButton && event.pressed):
 		InputHelper.set_keyboard_input_for_action(action, event, false)
 		end_remapping()
-		
+
 	accept_event()
 
 

@@ -2,13 +2,10 @@
 
 extends AcceptDialog
 
-
-signal update_finished()
-signal update_failed()
-
+signal update_finished
+signal update_failed
 
 @onready var download_update_panel := $DownloadUpdatePanel
-
 
 var next_version: String
 

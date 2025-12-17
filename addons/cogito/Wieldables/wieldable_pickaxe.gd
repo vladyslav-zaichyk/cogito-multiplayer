@@ -1,28 +1,27 @@
 extends CogitoWieldable
 
 @export_group("Pickaxe Settings")
-@export var damage_area : Area3D
-@export var uses_stamina : bool = false
-@export var stamina_cost : int = 4
+@export var damage_area: Area3D
+@export var uses_stamina: bool = false
+@export var stamina_cost: int = 4
 ##Collision hit can be defined using Camera-Collider raycast, or Hitbox-Collider raycast. Camera-Collider is more reliable but less accurate, Hitbox-collider is more accurate but less reliable
-@export var use_camera_collision : bool
+@export var use_camera_collision: bool
 
 @export_group("Audio")
-@export var swing_sound : AudioStream
+@export var swing_sound: AudioStream
 
-var trigger_has_been_pressed : bool = false
-var player_stamina : CogitoAttribute = null
+var trigger_has_been_pressed: bool = false
+var player_stamina: CogitoAttribute = null
 
 
 func _ready():
 	if wieldable_mesh:
 		wieldable_mesh.hide()
-		
+
 	damage_area.body_entered.connect(_on_body_entered)
 
 	if uses_stamina:
 		player_stamina = grab_player_stamina_attribute()
-		
 
 
 func grab_player_stamina_attribute() -> CogitoAttribute:
@@ -34,10 +33,10 @@ func grab_player_stamina_attribute() -> CogitoAttribute:
 
 
 # Primary action called by the Player Interaction Component when flashlight is wielded.
-func action_primary(_passed_item_reference:InventoryItemPD, _is_released: bool):
+func action_primary(_passed_item_reference: InventoryItemPD, _is_released: bool):
 	if _is_released:
 		return
-	
+
 	# Not swinging if animation player is playing. This enforces swing rate.
 	if animation_player.is_playing():
 		return
@@ -49,7 +48,7 @@ func action_primary(_passed_item_reference:InventoryItemPD, _is_released: bool):
 			return
 		else:
 			player_stamina.subtract(stamina_cost)
-	
+
 	animation_player.play(anim_action_primary)
 	audio_stream_player_3d.stream = swing_sound
 	audio_stream_player_3d.play()
@@ -58,8 +57,8 @@ func action_primary(_passed_item_reference:InventoryItemPD, _is_released: bool):
 func _on_body_entered(collider):
 	if collider.has_signal("damage_received"):
 		var player = player_interaction_component.get_parent()
-		var hit_position : Vector3
-		var bullet_direction : Vector3
+		var hit_position: Vector3
+		var bullet_direction: Vector3
 
 		if use_camera_collision:
 			#Camera-Collider raycast
@@ -76,5 +75,7 @@ func _on_body_entered(collider):
 			if result.size() > 0:
 				hit_position = result.position
 				bullet_direction = (hit_position - hitbox_origin).normalized()
-		
-		collider.damage_received.emit(item_reference.wieldable_damage, bullet_direction, hit_position)
+
+		collider.damage_received.emit(
+			item_reference.wieldable_damage, bullet_direction, hit_position
+		)

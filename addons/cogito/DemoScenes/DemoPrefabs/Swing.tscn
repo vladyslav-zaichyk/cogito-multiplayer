@@ -2,10 +2,10 @@
 
 [ext_resource type="Script" uid="uid://buphmm2nywggj" path="res://addons/cogito/CogitoObjects/cogito_sittable.gd" id="1_ljpjm"]
 [ext_resource type="Material" uid="uid://btcifedtf2mc4" path="res://addons/cogito/DynamicFootstepSystem/Assets/Materials/Example_Stone.tres" id="2_g611i"]
-[ext_resource type="PackedScene" uid="uid://m82ivreg3ugd" path="res://addons/cogito/Components/ImpactSounds.tscn" id="3_4okg1"]
+[ext_resource type="PackedScene" uid="uid://m82ivreg3ugd" path="res://addons/cogito/Components/impact_sounds.tscn" id="3_4okg1"]
 [ext_resource type="Material" uid="uid://hhhudvarh7gk" path="res://addons/cogito/Assets/Materials/Prototype_Orange.tres" id="4_oxytt"]
 [ext_resource type="Material" uid="uid://cprws42ycnkgk" path="res://addons/cogito/Assets/Materials/Lamp_Shade.tres" id="5_cs71e"]
-[ext_resource type="PackedScene" uid="uid://l61jtpfxu5x5" path="res://addons/cogito/Components/Interactions/BasicInteraction.tscn" id="6_bpx36"]
+[ext_resource type="PackedScene" uid="uid://l61jtpfxu5x5" path="res://addons/cogito/Components/Interactions/basic_interaction.tscn" id="6_bpx36"]
 [ext_resource type="AudioStream" uid="uid://ba8gpptnnapyh" path="res://addons/cogito/Assets/Audio/Kenney/cloth2.ogg" id="7_sy63g"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_w77fs"]

@@ -2,10 +2,10 @@
 
 [ext_resource type="Script" uid="uid://dmeh01c5ccjqc" path="res://addons/cogito/CogitoObjects/cogito_object.gd" id="1_kx4rj"]
 [ext_resource type="Resource" uid="uid://geac0jkegsqu" path="res://addons/cogito/InventoryPD/Items/Cogito_StaminaExtPotion.tres" id="2_mm3jo"]
-[ext_resource type="PackedScene" uid="uid://1xq4y42qkcur" path="res://addons/cogito/Components/Interactions/PickupComponent.tscn" id="2_nw8cr"]
+[ext_resource type="PackedScene" uid="uid://1xq4y42qkcur" path="res://addons/cogito/Components/Interactions/pickup_component.tscn" id="2_nw8cr"]
 [ext_resource type="Script" uid="uid://di15gqemrkk0x" path="res://addons/cogito/InventoryPD/CustomResources/InventorySlotPD.gd" id="3_3krbl"]
-[ext_resource type="PackedScene" uid="uid://cio4x05ipvslu" path="res://addons/cogito/Components/Interactions/CarryableComponent.tscn" id="5_j43ql"]
-[ext_resource type="PackedScene" uid="uid://m82ivreg3ugd" path="res://addons/cogito/Components/ImpactSounds.tscn" id="6_gsyan"]
+[ext_resource type="PackedScene" uid="uid://cio4x05ipvslu" path="res://addons/cogito/Components/Interactions/carryable_component.tscn" id="5_j43ql"]
+[ext_resource type="PackedScene" uid="uid://m82ivreg3ugd" path="res://addons/cogito/Components/impact_sounds.tscn" id="6_gsyan"]
 [ext_resource type="AudioStream" uid="uid://cl1llyise451u" path="res://addons/cogito/Assets/Audio/Kenney/Impacts/impactGlass_light_000.ogg" id="7_msffk"]
 [ext_resource type="AudioStream" uid="uid://c3ruc72xidtx6" path="res://addons/cogito/Assets/Audio/Kenney/Impacts/impactGlass_light_001.ogg" id="8_5vewp"]
 [ext_resource type="AudioStream" uid="uid://bmy2fw6y1gc42" path="res://addons/cogito/Assets/Audio/Kenney/Impacts/impactGlass_light_002.ogg" id="9_8l84o"]
@@ -16,7 +16,7 @@
 [ext_resource type="AudioStream" uid="uid://dm0jc0t81prps" path="res://addons/cogito/Assets/Audio/Kenney/Impacts/impactGlass_medium_002.ogg" id="14_su1tv"]
 [ext_resource type="AudioStream" uid="uid://d2by8ro32cpp7" path="res://addons/cogito/Assets/Audio/Kenney/Impacts/impactGlass_medium_003.ogg" id="15_f0vq0"]
 [ext_resource type="AudioStream" uid="uid://d2nrnx15l5aux" path="res://addons/cogito/Assets/Audio/Kenney/Impacts/impactGlass_medium_004.ogg" id="16_tqhen"]
-[ext_resource type="PackedScene" uid="uid://bqp8nl7x2c37m" path="res://addons/cogito/Components/Interactions/DualInteraction.tscn" id="17_shih7"]
+[ext_resource type="PackedScene" uid="uid://bqp8nl7x2c37m" path="res://addons/cogito/Components/Interactions/dual_interaction.tscn" id="17_shih7"]
 
 [sub_resource type="CylinderShape3D" id="CylinderShape3D_jsdyv"]
 height = 0.7

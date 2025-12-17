@@ -2,21 +2,20 @@ class_name InteractionRayCast
 extends RayCast3D
 
 signal interactable_seen(interactable)
-signal interactable_unseen()
+signal interactable_unseen
 
-@onready var shapecast : ShapeCast3D = $InteractionShapecast
+@onready var shapecast: ShapeCast3D = $InteractionShapecast
 # currently a node, but could just be an offset position
 # if shapecasting, the collider closest to the hotspot's position is used
-@onready var hotspot : Node3D = $ShapecastHotspot
+@onready var hotspot: Node3D = $ShapecastHotspot
 # the starting position of the hotspot, which is closer to the raycast target position
-var hotspot_base_pos_z : float = -1.5
+var hotspot_base_pos_z: float = -1.5
 
 # DEBUGGING
 @onready var raycast_highlighter = $RaycastHighlighter
 @onready var target_highlighter = $TargetHighlighter
 
-
-@export var show_debug_shapes : bool = false
+@export var show_debug_shapes: bool = false
 
 var _interactable = null:
 	set = _set_interactable
@@ -49,7 +48,7 @@ func _update_interactable() -> void:
 	# used for positioning the hotspot to refine shapecasted target selection
 	var hotspot_global_position: Vector3 = get_collision_point() if collider else global_position
 
-	if show_debug_shapes: 	# DEBUGGING
+	if show_debug_shapes:  # DEBUGGING
 		target_highlighter.visible = false
 
 	# Handle freed objects.
@@ -63,24 +62,23 @@ func _update_interactable() -> void:
 	# Handle all colliders that aren't in the interactable group as null.
 	if collider != null and not collider.is_in_group("interactable"):
 		collider = null
-		
+
 		# conver the global position to local position and move
 		# the hotspot out to the distance of the hit point to better
 		# predict what the player seems to intend to interact with
 		# **this could be a problem when attempting to interact around corners**
 		hotspot.transform.origin = to_local(hotspot_global_position)
-		
-		if show_debug_shapes: 	# DEBUGGING
+
+		if show_debug_shapes:  # DEBUGGING
 			raycast_highlighter.global_position = hotspot_global_position
 			raycast_highlighter.visible = true
 	else:
 		# set the hotspot to the base position if not raycasting anything
 		hotspot.transform.origin = Vector3(0.0, 0.0, hotspot_base_pos_z)
-		
-		if show_debug_shapes: 	# DEBUGGING
+
+		if show_debug_shapes:  # DEBUGGING
 			raycast_highlighter.transform.origin = Vector3(0.0, 0.0, hotspot_base_pos_z)
 			raycast_highlighter.visible = false
-
 
 	# if not raycasting a collider, then attempt a shapecast
 	if collider == null:
@@ -97,12 +95,12 @@ func _update_interactable() -> void:
 					if distance < closest_distance:
 						collider = shape_collider
 						closest_distance = distance
-						
-						if show_debug_shapes: 	# DEBUGGING
+
+						if show_debug_shapes:  # DEBUGGING
 							target_highlighter.global_position = collision_point
 							target_highlighter.visible = true
 	else:
-		if show_debug_shapes: 	# DEBUGGING
+		if show_debug_shapes:  # DEBUGGING
 			target_highlighter.global_position = hotspot_global_position
 			target_highlighter.visible = true
 

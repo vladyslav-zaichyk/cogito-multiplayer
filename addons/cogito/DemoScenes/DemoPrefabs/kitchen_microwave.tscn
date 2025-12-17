@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://cismjpvxmsbf2" path="res://addons/cogito/CogitoObjects/cogito_door.gd" id="1_ncels"]
 [ext_resource type="AudioStream" uid="uid://d32mt2lrtuogk" path="res://addons/cogito/Assets/Audio/Kenney/bookOpen.ogg" id="2_0ao51"]
 [ext_resource type="AudioStream" uid="uid://dvbd46d7c28ee" path="res://addons/cogito/Assets/Audio/Kenney/bookPlace1.ogg" id="3_lt4en"]
-[ext_resource type="PackedScene" uid="uid://l61jtpfxu5x5" path="res://addons/cogito/Components/Interactions/BasicInteraction.tscn" id="4_lbhvj"]
+[ext_resource type="PackedScene" uid="uid://l61jtpfxu5x5" path="res://addons/cogito/Components/Interactions/basic_interaction.tscn" id="4_lbhvj"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_wvokj"]
 size = Vector3(0.581573, 0.0372162, 0.402344)

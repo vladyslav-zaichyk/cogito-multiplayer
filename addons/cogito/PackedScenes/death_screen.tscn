@@ -5,7 +5,7 @@
 [ext_resource type="AudioStream" uid="uid://cr3bcp0u6w1pl" path="res://addons/cogito/Assets/Audio/Kenney/UiAudio/mouseclick1.ogg" id="3_un7fm"]
 [ext_resource type="AudioStream" uid="uid://kbw2s407quul" path="res://addons/cogito/Assets/Audio/Kenney/UiAudio/click1.ogg" id="4_8jkn7"]
 [ext_resource type="Texture2D" uid="uid://tjkesqff2f4g" path="res://addons/cogito/Assets/Graphics/EmptySaveSlot.png" id="5_0gwvb"]
-[ext_resource type="Script" uid="uid://bg6tmerhavxb3" path="res://addons/cogito/Theme/CogitoUiButton.gd" id="6_wjvf8"]
+[ext_resource type="Script" uid="uid://bg6tmerhavxb3" path="res://addons/cogito/Theme/cogito_ui_button.gd" id="6_wjvf8"]
 [ext_resource type="Script" uid="uid://dyiaeif1d4pmo" path="res://addons/cogito/Scripts/menu_scene_switcher.gd" id="7_rf8vv"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_t83el"]

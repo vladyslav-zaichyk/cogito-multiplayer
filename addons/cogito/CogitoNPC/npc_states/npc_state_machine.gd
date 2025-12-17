@@ -6,19 +6,21 @@ var allowed: Dictionary = {}
 @export var host: NodePath
 @export var logging := false
 @export var current := ""
-@export var start_state : String = ""
-@export var fallback_state : String = "idle"
+@export var start_state: String = ""
+@export var fallback_state: String = "idle"
 
 var previous_state = null
 var previous_args = null
 var states = {}
+
 
 func get_host() -> Node:
 	return get_node(host)
 
 
 func logger(to_log: String) -> void:
-	if not logging: return
+	if not logging:
+		return
 	print("[SimpleState]: <%s>, <%s>" % [get_host().name, to_log])
 
 
@@ -43,7 +45,8 @@ func _exit_tree() -> void:
 ##	Returns true when called from the current running state. Returns false from any other state
 func is_current() -> bool:
 	var stack = get_stack()
-	if len(stack) < 2: return false
+	if len(stack) < 2:
+		return false
 	return stack[1].source == states[current].script.get_path()
 
 
@@ -83,7 +86,7 @@ func setup() -> void:
 			self.remove_child(child)
 
 	self.restart()
-	
+
 	# Calling deferred to make sure Host is ready.
 	if start_state:
 		goto.call_deferred(start_state)
@@ -91,9 +94,10 @@ func setup() -> void:
 
 func save_state_as_previous(state: String, args = null) -> void:
 	print("NPC State machine. Saved state as previous state = ", state)
-	previous_state = state #Saves the state so it can be called later
+	previous_state = state  #Saves the state so it can be called later
 	if args:
-		previous_args = args #Saves the args the state was called with
+		previous_args = args  #Saves the args the state was called with
+
 
 func load_previous_state(_fallback_state: String = ""):
 	if !previous_state:
@@ -112,7 +116,7 @@ func goto(state: String, args = null) -> void:
 	if not state in states:
 		push_error("Could not find state <%s> in state list" % state)
 		return
-		
+
 	# Restart the state if we are asked to change to the same
 	if state == current:
 		return self.restart(args)

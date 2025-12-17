@@ -3,33 +3,32 @@
 extends Node3D
 class_name CogitoObject
 
-signal damage_received(damage_value:float)
-signal object_exits_tree()
+signal damage_received(damage_value: float)
+signal object_exits_tree
 
-@export var cogito_name : String = self.name
+@export var cogito_name: String = self.name
 ## Name that will displayed when interacting. Leave blank to hide
-@export var display_name : String
+@export var display_name: String
 
-enum PromptPositionMode{
-	ORIGIN, ## at the objects origin point. Recommended for smaller objects.
-	MARKER, ## at the position of an assigned Marker3D node. Will throw an error if no marker is assigned. Recommended for big objects/doors.
-	AABB_CENTER, ## at the center of the calculated AABoundingBox. Works well but has a slight performance impact. 
+enum PromptPositionMode {
+	ORIGIN,  ## at the objects origin point. Recommended for smaller objects.
+	MARKER,  ## at the position of an assigned Marker3D node. Will throw an error if no marker is assigned. Recommended for big objects/doors.
+	AABB_CENTER,  ## at the center of the calculated AABoundingBox. Works well but has a slight performance impact.
 }
-## This sets where interaction prompt gets displayed on the object. 
-@export var prompt_pos_mode : PromptPositionMode = PromptPositionMode.ORIGIN
-@export var prompt_marker : Marker3D
-
+## This sets where interaction prompt gets displayed on the object.
+@export var prompt_pos_mode: PromptPositionMode = PromptPositionMode.ORIGIN
+@export var prompt_marker: Marker3D
 
 @export_group("Object Size and Shape")
 ## Set a custom shape used for calculating object size when dropping.
-@export var custom_aabb : AABB = AABB():
+@export var custom_aabb: AABB = AABB():
 	set(new_aabb):
 		custom_aabb = new_aabb
 		if show_aabb_debug_shape:
 			CogitoGlobals.draw_box_aabb(get_aabb(), Color.AQUA)
 
 ## Shows the objects AABB debug shape in Editor.
-@export var show_aabb_debug_shape : bool = false:
+@export var show_aabb_debug_shape: bool = false:
 	set(new_show_debug_shape):
 		show_aabb_debug_shape = new_show_debug_shape
 		if Engine.is_editor_hint() and show_aabb_debug_shape:
@@ -37,18 +36,15 @@ enum PromptPositionMode{
 		else:
 			CogitoGlobals.clear_debug_shape()
 
-var interaction_nodes : Array[Node]
-var cogito_properties : CogitoProperties = null
-var properties : int
+var interaction_nodes: Array[Node]
+var cogito_properties: CogitoProperties = null
+var properties: int
 var spawned_loot_item: bool = false
-
-
-
 
 
 func _ready():
 	self.add_to_group("interactable")
-	self.add_to_group("Persist") #Adding object to group for persistence
+	self.add_to_group("Persist")  #Adding object to group for persistence
 	find_interaction_nodes()
 	find_cogito_properties()
 
@@ -56,33 +52,33 @@ func _ready():
 func get_aabb():
 	if custom_aabb:
 		return custom_aabb
-		
-	var aabb : AABB = AABB()
-	
+
+	var aabb: AABB = AABB()
+
 	for child in find_children("*", "MeshInstance3D", true, false):
 		if child.visible:
 			aabb = aabb.merge(child.transform * child.get_aabb())
-	
+
 	return aabb
 
 
 # Future method to set object state when a scene state file is loaded.
-func set_state():	
+func set_state():
 	#TODO: Find a way to possibly save health of health attribute.
 	find_cogito_properties()
-	
+
 	if spawned_loot_item:
 		add_to_group("spawned_loot_items")
-		
+
 	pass
 
 
 func find_interaction_nodes():
-	interaction_nodes = find_children("","InteractionComponent",true) #Grabs all attached interaction components
+	interaction_nodes = find_children("", "InteractionComponent", true)  #Grabs all attached interaction components
 
 
 func find_cogito_properties():
-	var property_nodes = find_children("","CogitoProperties",true) #Grabs all attached property components
+	var property_nodes = find_children("", "CogitoProperties", true)  #Grabs all attached property components
 	if property_nodes:
 		cogito_properties = property_nodes[0]
 
@@ -91,20 +87,20 @@ func find_cogito_properties():
 func save():
 	if self.is_in_group("spawned_loot_items"):
 		spawned_loot_item = true
-		
+
 	var node_data = {
-		"filename" : get_scene_file_path(),
-		"parent" : get_parent().get_path(),
+		"filename": get_scene_file_path(),
+		"parent": get_parent().get_path(),
 		#"slot_data" : slot_data,
 		#"item_charge" : slot_data.inventory_item.charge_current,
-		"interaction_nodes" : interaction_nodes,
-		"pos_x" : position.x,
-		"pos_y" : position.y,
-		"pos_z" : position.z,
-		"rot_x" : rotation.x,
-		"rot_y" : rotation.y,
-		"rot_z" : rotation.z,
-		"spawned_loot_item" : spawned_loot_item,
+		"interaction_nodes": interaction_nodes,
+		"pos_x": position.x,
+		"pos_y": position.y,
+		"pos_z": position.z,
+		"rot_x": rotation.x,
+		"rot_y": rotation.y,
+		"rot_z": rotation.z,
+		"spawned_loot_item": spawned_loot_item,
 	}
 
 	# If the node is a RigidBody3D, then save the physics properties of it

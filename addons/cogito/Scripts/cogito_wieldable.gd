@@ -3,9 +3,9 @@ class_name CogitoWieldable
 
 @export_group("General Wieldable Settings")
 ## Item resource that this wieldable refers to.
-var item_reference : WieldableItemPD
+var item_reference: WieldableItemPD
 ## Visible parts of the wieldable. Used to hide/show on equip/unequip.
-@export var wieldable_mesh : Node3D
+@export var wieldable_mesh: Node3D
 
 @export_group("Animations")
 @onready var animation_player: AnimationPlayer = $AnimationPlayer
@@ -17,10 +17,11 @@ var item_reference : WieldableItemPD
 @export var anim_action_secondary: String = "action_secondary"
 @export var anim_reload: String = "reload"
 
-var player_interaction_component : PlayerInteractionComponent
+var player_interaction_component: PlayerInteractionComponent
 
 ### Every wieldable needs the following functions:
 ### equip(_player_interaction_component), unequip(), action_primary(), action_secondary(), reload()
+
 
 func _ready():
 	if wieldable_mesh:
@@ -39,7 +40,7 @@ func unequip():
 
 
 # Primary action called by the Player Interaction Component when flashlight is wielded.
-func action_primary(_passed_item_reference:InventoryItemPD, _is_released: bool):
+func action_primary(_passed_item_reference: InventoryItemPD, _is_released: bool):
 	pass
 
 

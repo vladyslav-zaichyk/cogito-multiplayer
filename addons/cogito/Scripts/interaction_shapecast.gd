@@ -1,9 +1,8 @@
 class_name InteractionShapeCast
 extends ShapeCast3D
 
-
 signal interactable_seen(interactable)
-signal interactable_unseen()
+signal interactable_unseen
 
 var _interactable = null:
 	set = _set_interactable

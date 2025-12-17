@@ -1,10 +1,10 @@
 [gd_scene load_steps=13 format=3 uid="uid://8m1mwoi5qca0"]
 
 [ext_resource type="Script" uid="uid://dmeh01c5ccjqc" path="res://addons/cogito/CogitoObjects/cogito_object.gd" id="1_1y2da"]
-[ext_resource type="PackedScene" uid="uid://1xq4y42qkcur" path="res://addons/cogito/Components/Interactions/PickupComponent.tscn" id="2_7s0yq"]
+[ext_resource type="PackedScene" uid="uid://1xq4y42qkcur" path="res://addons/cogito/Components/Interactions/pickup_component.tscn" id="2_7s0yq"]
 [ext_resource type="Resource" uid="uid://b4jf372h4li0b" path="res://addons/cogito/InventoryPD/Items/Cogito_EmergencyInjector.tres" id="3_sap6d"]
 [ext_resource type="Script" uid="uid://di15gqemrkk0x" path="res://addons/cogito/InventoryPD/CustomResources/InventorySlotPD.gd" id="4_m76o8"]
-[ext_resource type="PackedScene" uid="uid://cio4x05ipvslu" path="res://addons/cogito/Components/Interactions/CarryableComponent.tscn" id="16_2cvr2"]
+[ext_resource type="PackedScene" uid="uid://cio4x05ipvslu" path="res://addons/cogito/Components/Interactions/carryable_component.tscn" id="16_2cvr2"]
 
 [sub_resource type="CylinderShape3D" id="CylinderShape3D_tvmxx"]
 height = 0.49

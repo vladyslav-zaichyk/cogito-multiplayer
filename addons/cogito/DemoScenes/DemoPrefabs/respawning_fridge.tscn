@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://dbanxdnun675s" path="res://addons/cogito/CogitoObjects/cogito_lootable_container.gd" id="1_ijcjw"]
 [ext_resource type="Script" uid="uid://di15gqemrkk0x" path="res://addons/cogito/InventoryPD/CustomResources/InventorySlotPD.gd" id="2_ijcjw"]
-[ext_resource type="PackedScene" uid="uid://l61jtpfxu5x5" path="res://addons/cogito/Components/Interactions/BasicInteraction.tscn" id="3_esjkp"]
+[ext_resource type="PackedScene" uid="uid://l61jtpfxu5x5" path="res://addons/cogito/Components/Interactions/basic_interaction.tscn" id="3_esjkp"]
 [ext_resource type="Script" uid="uid://btnha2whsheir" path="res://addons/cogito/InventoryPD/cogito_inventory.gd" id="3_rewbh"]
 [ext_resource type="Resource" uid="uid://h6ystnqxae1m" path="res://addons/cogito/Components/LootTables/LootTablePotions.tres" id="5_6mhn0"]
 

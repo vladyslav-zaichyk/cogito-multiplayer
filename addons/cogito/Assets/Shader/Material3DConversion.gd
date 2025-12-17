@@ -38,16 +38,17 @@ const shader_names = {
 	"distance_fade_max": "distance_fade_max",
 	"msdf_pixel_range": "msdf_pixel_range",
 	"msdf_outline_size": "msdf_outline_size",
-#	"metallic_texture_channel": "metallic_texture_channel",
-#	"ao_texture_channel": "ao_texture_channel",
-#	"clearcoat_texture_channel": "clearcoat_texture_channel",
-#	"rim_texture_channel": "rim_texture_channel",
-#	"heightmap_texture_channel": "heightmap_texture_channel",
-#	"refraction_texture_channel": "refraction_texture_channel",
+	#	"metallic_texture_channel": "metallic_texture_channel",
+	#	"ao_texture_channel": "ao_texture_channel",
+	#	"clearcoat_texture_channel": "clearcoat_texture_channel",
+	#	"rim_texture_channel": "rim_texture_channel",
+	#	"heightmap_texture_channel": "heightmap_texture_channel",
+	#	"refraction_texture_channel": "refraction_texture_channel",
 	"transmittance_color": "transmittance_color",
 	"transmittance_depth": "transmittance_depth",
 	"transmittance_boost": "transmittance_boost",
-	"texture_names": {
+	"texture_names":
+	{
 		TEXTURE_ALBEDO: "texture_albedo",
 		TEXTURE_METALLIC: "texture_metallic",
 		TEXTURE_ROUGHNESS: "texture_roughness",
@@ -73,7 +74,10 @@ const shader_names = {
 	"albedo_texture_size": "albedo_texture_size"
 }
 
-static func convert_to_shadermat(mat : StandardMaterial3D, injected_vars : String, injected_vertex : String):
+
+static func convert_to_shadermat(
+	mat: StandardMaterial3D, injected_vars: String, injected_vertex: String
+):
 	var shader_mat = ConvertedMaterial.new()
 	shader_mat.cache(mat)
 	shader_mat.shader = Shader.new()
@@ -81,13 +85,18 @@ static func convert_to_shadermat(mat : StandardMaterial3D, injected_vars : Strin
 	for property in shader_names:
 		if property == "texture_names":
 			for texture in shader_names[property]:
-				shader_mat.set_shader_parameter(shader_names[property][texture],mat.get_texture(texture))
+				shader_mat.set_shader_parameter(
+					shader_names[property][texture], mat.get_texture(texture)
+				)
 		else:
-			shader_mat.set_shader_parameter(shader_names[property],mat.get(property))
-	
+			shader_mat.set_shader_parameter(shader_names[property], mat.get(property))
+
 	return shader_mat
 
-static func write_texture_channel(var_name : String, texture_channel : TextureChannel, prefix = "uniform"):
+
+static func write_texture_channel(
+	var_name: String, texture_channel: TextureChannel, prefix = "uniform"
+):
 	# fun fact: Godot engine (as of right now) does not do these correctly, and implementation varies per feature. Yay. *sigh*
 	var code = prefix + " vec4 " + var_name + " = vec4("
 	match texture_channel:
@@ -103,7 +112,10 @@ static func write_texture_channel(var_name : String, texture_channel : TextureCh
 			code += "0.333333,0.333333,0.333333,0.0);\n"
 	return code
 
-static func create_shader_code(mat : StandardMaterial3D, injected_vars : String, injected_vertex : String):
+
+static func create_shader_code(
+	mat: StandardMaterial3D, injected_vars: String, injected_vertex: String
+):
 	var texfilter_str: String
 	var texfilter_height_str: String
 
@@ -127,7 +139,7 @@ static func create_shader_code(mat : StandardMaterial3D, injected_vars : String,
 			texfilter_str = "filter_linear_mipmap_anisotropic"
 			texfilter_height_str = "filter_linear_mipmap_anisotropic"
 		TEXTURE_FILTER_MAX:
-			pass # Internal value, skip.
+			pass  # Internal value, skip.
 
 	if mat.get_flag(FLAG_USE_TEXTURE_REPEAT):
 		texfilter_str += ",repeat_enable"
@@ -151,52 +163,50 @@ static func create_shader_code(mat : StandardMaterial3D, injected_vars : String,
 	var ddm = mat.depth_draw_mode
 	if mat.get_feature(FEATURE_REFRACTION):
 		ddm = DEPTH_DRAW_ALWAYS
-	
 
 	match ddm:
 		DEPTH_DRAW_OPAQUE_ONLY:
 			code += ",depth_draw_opaque"
-			
+
 		DEPTH_DRAW_ALWAYS:
 			code += ",depth_draw_always"
-			
+
 		DEPTH_DRAW_DISABLED:
 			code += ",depth_draw_never"
-	
 
 	match mat.cull_mode:
 		CULL_BACK:
 			code += ",cull_back"
-			
+
 		CULL_FRONT:
 			code += ",cull_front"
-			
+
 		CULL_DISABLED:
 			code += ",cull_disabled"
-	
+
 	match mat.diffuse_mode:
 		DIFFUSE_BURLEY:
 			code += ",diffuse_burley"
-			
+
 		DIFFUSE_LAMBERT:
 			code += ",diffuse_lambert"
-			
+
 		DIFFUSE_LAMBERT_WRAP:
 			code += ",diffuse_lambert_wrap"
-			
+
 		DIFFUSE_TOON:
 			code += ",diffuse_toon"
-	
+
 	match mat.specular_mode:
 		SPECULAR_SCHLICK_GGX:
 			code += ",specular_schlick_ggx"
-			
+
 		SPECULAR_TOON:
 			code += ",specular_toon"
-			
+
 		SPECULAR_DISABLED:
 			code += ",specular_disabled"
-	
+
 	if mat.get_feature(FEATURE_SUBSURFACE_SCATTERING) && mat.get_flag(FLAG_SUBSURFACE_MODE_SKIN):
 		code += ",sss_mode_skin"
 
@@ -221,14 +231,17 @@ static func create_shader_code(mat : StandardMaterial3D, injected_vars : String,
 		code += ",depth_prepass_alpha"
 
 	# Alpha antialiasing
-	if mat.transparency == TRANSPARENCY_ALPHA_HASH or mat.transparency == TRANSPARENCY_ALPHA_SCISSOR:
+	if (
+		mat.transparency == TRANSPARENCY_ALPHA_HASH
+		or mat.transparency == TRANSPARENCY_ALPHA_SCISSOR
+	):
 		if mat.alpha_antialiasing_mode == ALPHA_ANTIALIASING_ALPHA_TO_COVERAGE:
 			code += ",alpha_to_coverage"
 		elif mat.alpha_antialiasing_mode == ALPHA_ANTIALIASING_ALPHA_TO_COVERAGE_AND_TO_ONE:
 			code += ",alpha_to_coverage_and_one"
 
 	code += ";\n"
-	
+
 	code += injected_vars
 
 	code += "uniform vec4 albedo : source_color;\n"
@@ -253,7 +266,13 @@ static func create_shader_code(mat : StandardMaterial3D, injected_vars : String,
 		code += "uniform float alpha_hash_scale;\n"
 
 	# Alpha antialiasing edge
-	if mat.alpha_antialiasing_mode != ALPHA_ANTIALIASING_OFF and (mat.transparency == TRANSPARENCY_ALPHA_SCISSOR or mat.transparency == TRANSPARENCY_ALPHA_HASH):
+	if (
+		mat.alpha_antialiasing_mode != ALPHA_ANTIALIASING_OFF
+		and (
+			mat.transparency == TRANSPARENCY_ALPHA_SCISSOR
+			or mat.transparency == TRANSPARENCY_ALPHA_HASH
+		)
+	):
 		code += "uniform float alpha_antialiasing_edge;\n"
 		code += "uniform ivec2 albedo_texture_size;\n"
 
@@ -261,23 +280,27 @@ static func create_shader_code(mat : StandardMaterial3D, injected_vars : String,
 
 	code += "uniform float roughness : hint_range(0,1);\n"
 	code += "uniform sampler2D texture_metallic : " + texfilter_str + ";\n"
-	
+
 	code += write_texture_channel("metallic_texture_channel", mat.metallic_texture_channel)
-	
+
 	code += write_texture_channel("roughness_texture_channel", mat.roughness_texture_channel)
-	
+
 	code += "uniform sampler2D texture_roughness : " + texfilter_str + ";\n"
 
 	code += "uniform float specular;\n"
 	code += "uniform float metallic;\n"
-	
+
 	if mat.billboard_mode == BILLBOARD_PARTICLES:
 		code += "uniform int particles_anim_h_frames;\n"
 		code += "uniform int particles_anim_v_frames;\n"
 		code += "uniform bool particles_anim_loop;\n"
 
 	if mat.get_feature(FEATURE_EMISSION):
-		code += "uniform sampler2D texture_emission : source_color, hint_default_black," + texfilter_str + ";\n"
+		code += (
+			"uniform sampler2D texture_emission : source_color, hint_default_black,"
+			+ texfilter_str
+			+ ";\n"
+		)
 		code += "uniform vec4 emission : source_color;\n"
 		code += "uniform float emission_energy;\n"
 
@@ -311,23 +334,37 @@ static func create_shader_code(mat : StandardMaterial3D, injected_vars : String,
 		code += "uniform sampler2D texture_flowmap : hint_anisotropy," + texfilter_str + ";\n"
 
 	if mat.get_feature(FEATURE_AMBIENT_OCCLUSION):
-		code += "uniform sampler2D texture_ambient_occlusion : hint_default_white, " + texfilter_str + ";\n"
+		code += (
+			"uniform sampler2D texture_ambient_occlusion : hint_default_white, "
+			+ texfilter_str
+			+ ";\n"
+		)
 		code += write_texture_channel("ao_texture_channel", mat.ao_texture_channel)
 		code += "uniform float ao_light_affect;\n"
 
 	if mat.get_feature(FEATURE_DETAIL):
 		code += "uniform sampler2D texture_detail_albedo : source_color," + texfilter_str + ";\n"
 		code += "uniform sampler2D texture_detail_normal : hint_normal," + texfilter_str + ";\n"
-		code += "uniform sampler2D texture_detail_mask : hint_default_white," + texfilter_str + ";\n"
+		code += (
+			"uniform sampler2D texture_detail_mask : hint_default_white," + texfilter_str + ";\n"
+		)
 
 	if mat.get_feature(FEATURE_SUBSURFACE_SCATTERING):
 		code += "uniform float subsurface_scattering_strength : hint_range(0,1);\n"
-		code += "uniform sampler2D texture_subsurface_scattering : hint_default_white," + texfilter_str + ";\n"
+		code += (
+			"uniform sampler2D texture_subsurface_scattering : hint_default_white,"
+			+ texfilter_str
+			+ ";\n"
+		)
 
 	if mat.get_feature(FEATURE_SUBSURFACE_TRANSMITTANCE):
 		code += "uniform vec4 transmittance_color : source_color;\n"
 		code += "uniform float transmittance_depth;\n"
-		code += "uniform sampler2D texture_subsurface_transmittance : hint_default_white," + texfilter_str + ";\n"
+		code += (
+			"uniform sampler2D texture_subsurface_transmittance : hint_default_white,"
+			+ texfilter_str
+			+ ";\n"
+		)
 		code += "uniform float transmittance_boost;\n"
 
 	if mat.get_feature(FEATURE_BACKLIGHT):
@@ -335,7 +372,11 @@ static func create_shader_code(mat : StandardMaterial3D, injected_vars : String,
 		code += "uniform sampler2D texture_backlight : hint_default_black," + texfilter_str + ";\n"
 
 	if mat.get_feature(FEATURE_HEIGHT_MAPPING):
-		code += "uniform sampler2D texture_heightmap : hint_default_black," + texfilter_height_str + ";\n"
+		code += (
+			"uniform sampler2D texture_heightmap : hint_default_black,"
+			+ texfilter_height_str
+			+ ";\n"
+		)
 		code += "uniform float heightmap_scale;\n"
 		code += "uniform int heightmap_min_layers;\n"
 		code += "uniform int heightmap_max_layers;\n"
@@ -438,7 +479,7 @@ static func create_shader_code(mat : StandardMaterial3D, injected_vars : String,
 			code += "	TANGENT = inverse(MODEL_NORMAL_MATRIX) * normalize(TANGENT);\n"
 		else:
 			code += "	TANGENT = normalize(TANGENT);\n"
-		
+
 		code += "	BINORMAL = vec3(0.0,1.0,0.0) * abs(normal.x);\n"
 		code += "	BINORMAL+= vec3(0.0,0.0,-1.0) * abs(normal.y);\n"
 		code += "	BINORMAL+= vec3(0.0,1.0,0.0) * abs(normal.z);\n"
@@ -488,14 +529,18 @@ static func create_shader_code(mat : StandardMaterial3D, injected_vars : String,
 		code += "	samp+= texture(p_sampler,p_triplanar_pos.zy * vec2(-1.0,1.0)) * p_weights.x;\n"
 		code += "	return samp;\n"
 		code += "}\n"
-	
+
 	code += "\n\n"
 	code += "void fragment() {\n"
 
 	if not mat.get_flag(FLAG_UV1_USE_TRIPLANAR):
 		code += "	vec2 base_uv = UV;\n"
-		
-	if (mat.get_feature(FEATURE_DETAIL) && mat.detail_uv_layer == DETAIL_UV_2) || (mat.get_feature(FEATURE_AMBIENT_OCCLUSION) && mat.get_flag(FLAG_AO_ON_UV2)) || (mat.get_feature(FEATURE_EMISSION) && mat.get_flag(FLAG_EMISSION_ON_UV2)):
+
+	if (
+		(mat.get_feature(FEATURE_DETAIL) && mat.detail_uv_layer == DETAIL_UV_2)
+		|| (mat.get_feature(FEATURE_AMBIENT_OCCLUSION) && mat.get_flag(FLAG_AO_ON_UV2))
+		|| (mat.get_feature(FEATURE_EMISSION) && mat.get_flag(FLAG_EMISSION_ON_UV2))
+	):
 		code += "	vec2 base_uv2 = UV2;\n"
 
 	if mat.get_feature(FEATURE_HEIGHT_MAPPING) && !mat.get_flag(FLAG_UV1_USE_TRIPLANAR):
@@ -586,7 +631,6 @@ static func create_shader_code(mat : StandardMaterial3D, injected_vars : String,
 		code += "	float metallic_tex = dot(texture(texture_metallic,base_uv),metallic_texture_channel);\n"
 	code += "	METALLIC = metallic_tex * metallic;\n"
 
-
 	if mat.get_flag(FLAG_UV1_USE_TRIPLANAR):
 		code += "	float roughness_tex = dot(triplanar_texture(texture_roughness,uv1_power_normal,uv1_triplanar_pos),roughness_texture_channel);\n"
 	else:
@@ -637,7 +681,12 @@ static func create_shader_code(mat : StandardMaterial3D, injected_vars : String,
 		code += "	ALBEDO *= 1.0 - ref_amount;\n"
 		code += "	ALPHA = 1.0;\n"
 
-	elif mat.transparency != TRANSPARENCY_DISABLED || mat.get_flag(FLAG_USE_SHADOW_TO_OPACITY) || (mat.distance_fade_mode == DISTANCE_FADE_PIXEL_ALPHA) || mat.proximity_fade_enabled:
+	elif (
+		mat.transparency != TRANSPARENCY_DISABLED
+		|| mat.get_flag(FLAG_USE_SHADOW_TO_OPACITY)
+		|| (mat.distance_fade_mode == DISTANCE_FADE_PIXEL_ALPHA)
+		|| mat.proximity_fade_enabled
+	):
 		code += "	ALPHA *= albedo.a * albedo_tex.a;\n"
 
 	if mat.transparency == TRANSPARENCY_ALPHA_HASH:
@@ -645,7 +694,13 @@ static func create_shader_code(mat : StandardMaterial3D, injected_vars : String,
 	elif mat.transparency == TRANSPARENCY_ALPHA_SCISSOR:
 		code += "	ALPHA_SCISSOR_THRESHOLD = alpha_scissor_threshold;\n"
 
-	if mat.alpha_antialiasing_mode != ALPHA_ANTIALIASING_OFF and (mat.transparency == TRANSPARENCY_ALPHA_HASH or mat.transparency == TRANSPARENCY_ALPHA_SCISSOR):
+	if (
+		mat.alpha_antialiasing_mode != ALPHA_ANTIALIASING_OFF
+		and (
+			mat.transparency == TRANSPARENCY_ALPHA_HASH
+			or mat.transparency == TRANSPARENCY_ALPHA_SCISSOR
+		)
+	):
 		code += "	ALPHA_ANTIALIASING_EDGE = alpha_antialiasing_edge;\n"
 		code += "	ALPHA_TEXTURE_COORDINATE = UV * vec2(albedo_texture_size);\n"
 
@@ -656,7 +711,10 @@ static func create_shader_code(mat : StandardMaterial3D, injected_vars : String,
 		code += "	ALPHA*=clamp(1.0-smoothstep(world_pos.z+proximity_fade_distance,world_pos.z,VERTEX.z),0.0,1.0);\n"
 
 	if mat.distance_fade_mode != DISTANCE_FADE_DISABLED:
-		if mat.distance_fade_mode == DISTANCE_FADE_OBJECT_DITHER or mat.distance_fade_mode == DISTANCE_FADE_PIXEL_DITHER:
+		if (
+			mat.distance_fade_mode == DISTANCE_FADE_OBJECT_DITHER
+			or mat.distance_fade_mode == DISTANCE_FADE_PIXEL_DITHER
+		):
 			code += "	{\n"
 
 			if mat.distance_fade_mode == DISTANCE_FADE_OBJECT_DITHER:
@@ -709,7 +767,6 @@ static func create_shader_code(mat : StandardMaterial3D, injected_vars : String,
 				code += "	AO = dot(texture(texture_ambient_occlusion, base_uv), ao_texture_channel);\n"
 		code += "	AO_LIGHT_AFFECT = ao_light_affect;\n"
 
-
 	if mat.get_feature(FEATURE_SUBSURFACE_SCATTERING):
 		if mat.get_flag(FLAG_UV1_USE_TRIPLANAR):
 			code += "	float sss_tex = triplanar_texture(texture_subsurface_scattering, uv1_power_normal, uv1_triplanar_pos).r;\n"
@@ -734,12 +791,27 @@ static func create_shader_code(mat : StandardMaterial3D, injected_vars : String,
 		code += "	BACKLIGHT = backlight.rgb + backlight_tex;\n"
 
 	if mat.get_feature(FEATURE_DETAIL):
-		var triplanar = (mat.get_flag(FLAG_UV1_USE_TRIPLANAR) && mat.detail_uv_layer == DETAIL_UV_1) || (mat.get_flag(FLAG_UV2_USE_TRIPLANAR) && mat.detail_uv_layer == DETAIL_UV_2)
+		var triplanar = (
+			(mat.get_flag(FLAG_UV1_USE_TRIPLANAR) && mat.detail_uv_layer == DETAIL_UV_1)
+			|| (mat.get_flag(FLAG_UV2_USE_TRIPLANAR) && mat.detail_uv_layer == DETAIL_UV_2)
+		)
 
 		if triplanar:
 			var tp_uv = "uv1" if mat.detail_uv_layer == DETAIL_UV_1 else "uv2"
-			code += "	vec4 detail_tex = triplanar_texture(texture_detail_albedo," + tp_uv + "_power_normal," + tp_uv + "_triplanar_pos);\n"
-			code += "	vec4 detail_norm_tex = triplanar_texture(texture_detail_normal," + tp_uv + "_power_normal," + tp_uv + "_triplanar_pos);\n"
+			code += (
+				"	vec4 detail_tex = triplanar_texture(texture_detail_albedo,"
+				+ tp_uv
+				+ "_power_normal,"
+				+ tp_uv
+				+ "_triplanar_pos);\n"
+			)
+			code += (
+				"	vec4 detail_norm_tex = triplanar_texture(texture_detail_normal,"
+				+ tp_uv
+				+ "_power_normal,"
+				+ tp_uv
+				+ "_triplanar_pos);\n"
+			)
 		else:
 			var det_uv = "base_uv" if mat.detail_uv_layer == DETAIL_UV_1 else "base_uv2"
 			code += "	vec4 detail_tex = texture(texture_detail_albedo," + det_uv + ");\n"

@@ -1,7 +1,7 @@
 [gd_scene load_steps=8 format=3 uid="uid://3gwo23kpr58f"]
 
 [ext_resource type="Material" uid="uid://cprws42ycnkgk" path="res://addons/cogito/Assets/Materials/Lamp_Shade.tres" id="1_id4jn"]
-[ext_resource type="PackedScene" uid="uid://ctr7n0w3hgys7" path="res://addons/cogito/Components/LightzoneComponent.tscn" id="2_6j8r6"]
+[ext_resource type="PackedScene" uid="uid://ctr7n0w3hgys7" path="res://addons/cogito/Components/lightzone_component.tscn" id="2_6j8r6"]
 
 [sub_resource type="CylinderMesh" id="CylinderMesh_c3n65"]
 material = ExtResource("1_id4jn")

@@ -18,7 +18,7 @@
 [ext_resource type="Material" uid="uid://bnepeulvkh40w" path="res://addons/cogito/DynamicFootstepSystem/Assets/Materials/Example_Dirt.tres" id="13_ndygr"]
 [ext_resource type="Material" uid="uid://btcifedtf2mc4" path="res://addons/cogito/DynamicFootstepSystem/Assets/Materials/Example_Stone.tres" id="18_kbomt"]
 [ext_resource type="Script" uid="uid://dmeh01c5ccjqc" path="res://addons/cogito/CogitoObjects/cogito_object.gd" id="19_j6bha"]
-[ext_resource type="PackedScene" uid="uid://cio4x05ipvslu" path="res://addons/cogito/Components/Interactions/CarryableComponent.tscn" id="20_5hoci"]
+[ext_resource type="PackedScene" uid="uid://cio4x05ipvslu" path="res://addons/cogito/Components/Interactions/carryable_component.tscn" id="20_5hoci"]
 [ext_resource type="AudioStream" uid="uid://cqgsihtcw0gl4" path="res://addons/cogito/Assets/Audio/Kenney/UiAudio/rollover1.ogg" id="21_0438d"]
 [ext_resource type="AudioStream" uid="uid://1w0db1u6lv7t" path="res://addons/cogito/Assets/Audio/Kenney/UiAudio/rollover6.ogg" id="22_stsjx"]
 

@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://cismjpvxmsbf2" path="res://addons/cogito/CogitoObjects/cogito_door.gd" id="1_oc7nd"]
 [ext_resource type="AudioStream" uid="uid://bipwc8kk30bub" path="res://addons/cogito/Assets/Audio/Kenney/doorOpen_1.ogg" id="2_f5idq"]
-[ext_resource type="PackedScene" uid="uid://l61jtpfxu5x5" path="res://addons/cogito/Components/Interactions/BasicInteraction.tscn" id="2_pg8bu"]
+[ext_resource type="PackedScene" uid="uid://l61jtpfxu5x5" path="res://addons/cogito/Components/Interactions/basic_interaction.tscn" id="2_pg8bu"]
 [ext_resource type="AudioStream" uid="uid://g8n7a73j5qqo" path="res://addons/cogito/Assets/Audio/Kenney/doorClose_4.ogg" id="3_01v55"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_iaurv"]

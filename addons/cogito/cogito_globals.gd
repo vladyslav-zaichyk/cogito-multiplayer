@@ -1,19 +1,20 @@
 @tool
 extends Node
 
-var cogito_settings : CogitoSettings
+var cogito_settings: CogitoSettings
 var cogito_settings_filepath := "res://addons/cogito/CogitoSettings.tres"
 
 ### Cached settings
-var is_logging : bool
-var player_state_prefix : String
-var scene_state_prefix : String
-var default_transition_duration : float = .4
+var is_logging: bool
+var player_state_prefix: String
+var scene_state_prefix: String
+var default_transition_duration: float = .4
 
 ### Debug shape variables
-var _debug_shape_pool : Array[MeshInstance3D]
+var _debug_shape_pool: Array[MeshInstance3D]
 var _box_pool := []
-var _box_mesh : Mesh = null
+var _box_mesh: Mesh = null
+
 
 func _ready() -> void:
 	load_cogito_project_settings()
@@ -25,14 +26,16 @@ func _enter_tree() -> void:
 
 func load_cogito_project_settings():
 	if ResourceLoader.exists(cogito_settings_filepath):
-		cogito_settings = ResourceLoader.load(cogito_settings_filepath, "", ResourceLoader.CACHE_MODE_IGNORE)
+		cogito_settings = ResourceLoader.load(
+			cogito_settings_filepath, "", ResourceLoader.CACHE_MODE_IGNORE
+		)
 		print("COGITO: cogito settings loaded: ", cogito_settings_filepath)
-		
+
 		is_logging = cogito_settings.is_logging
 		player_state_prefix = cogito_settings.player_state_prefix
 		scene_state_prefix = cogito_settings.scene_state_prefix
 		default_transition_duration = cogito_settings.default_transition_duration
-		
+
 	else:
 		print("COGITO: No cogito settings found.")
 
@@ -43,7 +46,7 @@ func debug_log(log_this: bool, _class: String, _message: String) -> void:
 
 
 func get_debug_line_material() -> StandardMaterial3D:
-	var mat : StandardMaterial3D
+	var mat: StandardMaterial3D
 	mat = StandardMaterial3D.new()
 	mat.flags_unshaded = true
 	mat.vertex_color_use_as_albedo = true
@@ -52,7 +55,7 @@ func get_debug_line_material() -> StandardMaterial3D:
 
 
 func get_debug_box() -> MeshInstance3D:
-	var mi : MeshInstance3D
+	var mi: MeshInstance3D
 	if len(_box_pool) == 0:
 		mi = MeshInstance3D.new()
 		if _box_mesh == null:
@@ -87,36 +90,33 @@ func draw_box_aabb(aabb: AABB, color = Color.WHITE, linger_frames = 0):
 static func _create_wirecube_mesh(color := Color.WHITE) -> ArrayMesh:
 	var n = -0.5
 	var p = 0.5
-	var positions := PackedVector3Array([
-		Vector3(n, n, n),
-		Vector3(p, n, n),
-		Vector3(p, n, p),
-		Vector3(n, n, p),
-		Vector3(n, p, n),
-		Vector3(p, p, n),
-		Vector3(p, p, p),
-		Vector3(n, p, p)
-	])
-	var colors := PackedColorArray([
-		color, color, color, color,
-		color, color, color, color,
-	])
-	var indices := PackedInt32Array([
-		0, 1,
-		1, 2,
-		2, 3,
-		3, 0,
-
-		4, 5,
-		5, 6,
-		6, 7,
-		7, 4,
-
-		0, 4,
-		1, 5,
-		2, 6,
-		3, 7
-	])
+	var positions := PackedVector3Array(
+		[
+			Vector3(n, n, n),
+			Vector3(p, n, n),
+			Vector3(p, n, p),
+			Vector3(n, n, p),
+			Vector3(n, p, n),
+			Vector3(p, p, n),
+			Vector3(p, p, p),
+			Vector3(n, p, p)
+		]
+	)
+	var colors := PackedColorArray(
+		[
+			color,
+			color,
+			color,
+			color,
+			color,
+			color,
+			color,
+			color,
+		]
+	)
+	var indices := PackedInt32Array(
+		[0, 1, 1, 2, 2, 3, 3, 0, 4, 5, 5, 6, 6, 7, 7, 4, 0, 4, 1, 5, 2, 6, 3, 7]
+	)
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = positions
@@ -125,7 +125,6 @@ static func _create_wirecube_mesh(color := Color.WHITE) -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, arrays)
 	return mesh
-
 
 
 func _on_check_box_print_logs_toggled(toggled_on: bool) -> void:

@@ -2,34 +2,34 @@
 class_name CogitoPressureplate
 extends Node3D
 
-signal object_state_updated(interaction_text: String) #used to display correct interaction prompts
-signal plate_activated()
-signal plate_deactivated()
-signal damage_received(damage_value:float)
+signal object_state_updated(interaction_text: String)  #used to display correct interaction prompts
+signal plate_activated
+signal plate_deactivated
+signal damage_received(damage_value: float)
 
 @onready var audio_stream_player_3d = $AudioStreamPlayer3D
 @onready var base: StaticBody3D = $Base
 
 ## Sets this pressure plate as active (can be activated etc)
-@export var is_usable : bool = true
+@export var is_usable: bool = true
 ## Toggle if switchable can be interacted with repeatedly or not.
-@export var allows_repeated_interaction : bool = true
+@export var allows_repeated_interaction: bool = true
 ## Sound that plays when weighed down.
-@export var activation_sound : AudioStream
+@export var activation_sound: AudioStream
 
 ## Nodes that will have their interact function called when this switch is used.
-@export var objects_call_interact : Array[NodePath]
-@export var objects_call_delay : float = 0.0
+@export var objects_call_interact: Array[NodePath]
+@export var objects_call_delay: float = 0.0
 
 @export_group("Plate settings")
-@export var plate_node : Node3D
-@export var unweighted_plate_position : Vector3
-@export var weighted_down_plate_position : Vector3
-@export var tween_time : float = .3
+@export var plate_node: Node3D
+@export var unweighted_plate_position: Vector3
+@export var weighted_down_plate_position: Vector3
+@export var tween_time: float = .3
 
-var is_activated : bool = false
-var cogito_properties : CogitoProperties = null
-var player_interaction_component : PlayerInteractionComponent
+var is_activated: bool = false
+var cogito_properties: CogitoProperties = null
+var player_interaction_component: PlayerInteractionComponent
 
 
 func _ready():
@@ -39,10 +39,10 @@ func _ready():
 
 func weigh_down():
 	audio_stream_player_3d.play()
-	
+
 	is_activated = true
 	plate_activated.emit()
-	
+
 	if !objects_call_interact:
 		return
 	for nodepath in objects_call_interact:
@@ -73,30 +73,31 @@ func set_state():
 
 func save():
 	var state_dict = {
-		"node_path" : self.get_path(),
-		"is_activated" : is_activated,
-		"is_usable" : is_usable,
-		"pos_x" : position.x,
-		"pos_y" : position.y,
-		"pos_z" : position.z,
-		"rot_x" : rotation.x,
-		"rot_y" : rotation.y,
-		"rot_z" : rotation.z,
-		
+		"node_path": self.get_path(),
+		"is_activated": is_activated,
+		"is_usable": is_usable,
+		"pos_x": position.x,
+		"pos_y": position.y,
+		"pos_z": position.z,
+		"rot_x": rotation.x,
+		"rot_y": rotation.y,
+		"rot_z": rotation.z,
 	}
 	return state_dict
 
 
 func _on_plate_body_exited(body: Node) -> void:
 	if body is CogitoObject:
-		CogitoGlobals.debug_log(true,"cogito_pressure_plate.gd", str(body) + " has exited.")
+		CogitoGlobals.debug_log(true, "cogito_pressure_plate.gd", str(body) + " has exited.")
 		weight_lifted()
 	if body is CogitoPlayer:
 		plate_node.constant_force = Vector3(0, 0, 0)
 
 
 func _on_plate_body_entered(body: Node) -> void:
-	CogitoGlobals.debug_log(true,"cogito_pressure_plate.gd","Detected " + body.name)
+	CogitoGlobals.debug_log(true, "cogito_pressure_plate.gd", "Detected " + body.name)
 	if body.is_in_group("Player"):
-		CogitoGlobals.debug_log(true,"cogito_pressure_plate.gd", "Player detected. applying force.")
-		plate_node.add_constant_central_force(Vector3(0,-3,0))
+		CogitoGlobals.debug_log(
+			true, "cogito_pressure_plate.gd", "Player detected. applying force."
+		)
+		plate_node.add_constant_central_force(Vector3(0, -3, 0))

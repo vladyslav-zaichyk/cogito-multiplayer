@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://b4cfmnk8b7nru" path="res://addons/cogito/CogitoObjects/cogito_switch.gd" id="1_ueccq"]
 [ext_resource type="AudioStream" uid="uid://0himm415mqex" path="res://addons/cogito/Assets/Audio/Kenney/UiAudio/switch29.ogg" id="2_bq20n"]
 [ext_resource type="Material" uid="uid://cprws42ycnkgk" path="res://addons/cogito/Assets/Materials/Lamp_Shade.tres" id="2_va873"]
-[ext_resource type="PackedScene" uid="uid://ctr7n0w3hgys7" path="res://addons/cogito/Components/LightzoneComponent.tscn" id="4_lybt7"]
+[ext_resource type="PackedScene" uid="uid://ctr7n0w3hgys7" path="res://addons/cogito/Components/lightzone_component.tscn" id="4_lybt7"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_05p8f"]
 albedo_color = Color(1, 0.890196, 0.631373, 1)

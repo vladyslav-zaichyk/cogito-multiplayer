@@ -1,7 +1,7 @@
 [gd_scene load_steps=10 format=3 uid="uid://b458yjhvdd7xn"]
 
 [ext_resource type="Script" uid="uid://o5wuht0ug1ir" path="res://addons/cogito/CogitoObjects/cogito_snap_slot.gd" id="1_kxcj6"]
-[ext_resource type="PackedScene" uid="uid://l61jtpfxu5x5" path="res://addons/cogito/Components/Interactions/BasicInteraction.tscn" id="2_6oth6"]
+[ext_resource type="PackedScene" uid="uid://l61jtpfxu5x5" path="res://addons/cogito/Components/Interactions/basic_interaction.tscn" id="2_6oth6"]
 [ext_resource type="PackedScene" uid="uid://x23tip44172h" path="res://addons/cogito/PackedScenes/metal_bar.tscn" id="2_qucpu"]
 [ext_resource type="AudioStream" uid="uid://bhce82qflwaur" path="res://addons/cogito/Assets/Audio/Kenney/cardPlace1.ogg" id="3_rewhd"]
 [ext_resource type="AudioStream" uid="uid://ocm2blyfthyq" path="res://addons/cogito/Assets/Audio/Kenney/woosh1.ogg" id="4_vdrba"]

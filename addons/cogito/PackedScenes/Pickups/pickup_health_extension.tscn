@@ -1,10 +1,10 @@
 [gd_scene load_steps=24 format=3 uid="uid://b60auyyy0apwb"]
 
 [ext_resource type="Script" uid="uid://dmeh01c5ccjqc" path="res://addons/cogito/CogitoObjects/cogito_object.gd" id="1_jslki"]
-[ext_resource type="PackedScene" uid="uid://1xq4y42qkcur" path="res://addons/cogito/Components/Interactions/PickupComponent.tscn" id="2_ys4lp"]
+[ext_resource type="PackedScene" uid="uid://1xq4y42qkcur" path="res://addons/cogito/Components/Interactions/pickup_component.tscn" id="2_ys4lp"]
 [ext_resource type="Resource" uid="uid://cxkkn6xk1v6bm" path="res://addons/cogito/InventoryPD/Items/Cogito_HealthExtension.tres" id="3_lmeso"]
 [ext_resource type="Script" uid="uid://di15gqemrkk0x" path="res://addons/cogito/InventoryPD/CustomResources/InventorySlotPD.gd" id="4_idj1w"]
-[ext_resource type="PackedScene" uid="uid://m82ivreg3ugd" path="res://addons/cogito/Components/ImpactSounds.tscn" id="5_k52x1"]
+[ext_resource type="PackedScene" uid="uid://m82ivreg3ugd" path="res://addons/cogito/Components/impact_sounds.tscn" id="5_k52x1"]
 [ext_resource type="AudioStream" uid="uid://cl1llyise451u" path="res://addons/cogito/Assets/Audio/Kenney/Impacts/impactGlass_light_000.ogg" id="6_6sn8j"]
 [ext_resource type="AudioStream" uid="uid://c3ruc72xidtx6" path="res://addons/cogito/Assets/Audio/Kenney/Impacts/impactGlass_light_001.ogg" id="7_055fp"]
 [ext_resource type="AudioStream" uid="uid://bmy2fw6y1gc42" path="res://addons/cogito/Assets/Audio/Kenney/Impacts/impactGlass_light_002.ogg" id="8_hfctl"]
@@ -15,7 +15,7 @@
 [ext_resource type="AudioStream" uid="uid://dm0jc0t81prps" path="res://addons/cogito/Assets/Audio/Kenney/Impacts/impactGlass_medium_002.ogg" id="13_qd83w"]
 [ext_resource type="AudioStream" uid="uid://d2by8ro32cpp7" path="res://addons/cogito/Assets/Audio/Kenney/Impacts/impactGlass_medium_003.ogg" id="14_kxleo"]
 [ext_resource type="AudioStream" uid="uid://d2nrnx15l5aux" path="res://addons/cogito/Assets/Audio/Kenney/Impacts/impactGlass_medium_004.ogg" id="15_y6ho2"]
-[ext_resource type="PackedScene" uid="uid://cio4x05ipvslu" path="res://addons/cogito/Components/Interactions/CarryableComponent.tscn" id="16_tsdxc"]
+[ext_resource type="PackedScene" uid="uid://cio4x05ipvslu" path="res://addons/cogito/Components/Interactions/carryable_component.tscn" id="16_tsdxc"]
 
 [sub_resource type="CylinderMesh" id="CylinderMesh_jf5x7"]
 top_radius = 0.07

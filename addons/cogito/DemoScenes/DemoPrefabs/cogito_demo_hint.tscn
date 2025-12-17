@@ -5,7 +5,7 @@
 [ext_resource type="Script" uid="uid://bxr2onwa06jra" path="res://addons/cogito/Scripts/cogito_rotator_tool.gd" id="3_04ruj"]
 [ext_resource type="Texture2D" uid="uid://c2t5w06mlog62" path="res://addons/cogito/Assets/Graphics/CogitoIconSeparated/COGITO_icon_layer_02.png" id="4_j2t2d"]
 [ext_resource type="Texture2D" uid="uid://1oslnc23jviv" path="res://addons/cogito/Assets/Graphics/CogitoIconSeparated/COGITO_icon_layer_03.png" id="5_66ruk"]
-[ext_resource type="PackedScene" uid="uid://cct0itdltyppg" path="res://addons/cogito/Components/Interactions/ReadableComponent.tscn" id="6_1xwxr"]
+[ext_resource type="PackedScene" uid="uid://cct0itdltyppg" path="res://addons/cogito/Components/Interactions/readable_component.tscn" id="6_1xwxr"]
 [ext_resource type="AudioStream" uid="uid://d32mt2lrtuogk" path="res://addons/cogito/Assets/Audio/Kenney/bookOpen.ogg" id="7_bb2nk"]
 
 [sub_resource type="SphereShape3D" id="SphereShape3D_n25yf"]

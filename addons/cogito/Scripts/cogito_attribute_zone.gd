@@ -1,6 +1,6 @@
 extends Area3D
 
-signal apply_attribute_effect()
+signal apply_attribute_effect
 
 ## Enter the player attribute that is effected within the zone.
 @export var player_attribute: String
@@ -58,23 +58,23 @@ func interact(_player_interaction_component: PlayerInteractionComponent):
 func _process(delta):
 	if effect_amount == 0.0 or !is_active:
 		return
-	
+
 	if is_within_zone:
 		# Run the timer out before changing the attribute value
 		delay_time -= delta
 		if delay_time > 0:
 			return
 		delay_time = effect_delay
-		
+
 		# Instantly change the attribute by the effect amount if running a delay
 		# Otherwise, change the effect amount over time using the frame delta
 		var amount = effect_amount if effect_delay > 0 else effect_amount * delta
-		
+
 		if increase_attribute:
 			player.increase_attribute(player_attribute, amount, ConsumableItemPD.ValueType.CURRENT)
 		else:
 			player.decrease_attribute(player_attribute, amount)
-		
+
 		if hint_message != "" and hint_rate > 0:
 			if effect_delay > 0:
 				hint_count += 1

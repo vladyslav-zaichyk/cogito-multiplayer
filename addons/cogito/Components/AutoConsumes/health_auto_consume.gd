@@ -22,12 +22,14 @@ func _ready() -> void:
 func prevent_death(_value_current: float) -> void:
 	var max_subtracted_amount: float = attribute.last_passed_subtracted_amount
 	var remainder: float = max_subtracted_amount - last_value_current
-	
+
 	# Attempt to auto-consume an inventory item after health fell below threshold value
 	if last_value_current > 0.0 and remainder <= max_damage_remainder:
 		_auto_consume(false, remainder)
-	
+
 		if apply_damage_remainder:
 			var lowest_remainder: float = floorf(remainder)
 			attribute.subtract(lowest_remainder)
-			CogitoGlobals.debug_log(true, "HealthAutoConsume", "Applied damage remainder of " + str(lowest_remainder))
+			CogitoGlobals.debug_log(
+				true, "HealthAutoConsume", "Applied damage remainder of " + str(lowest_remainder)
+			)

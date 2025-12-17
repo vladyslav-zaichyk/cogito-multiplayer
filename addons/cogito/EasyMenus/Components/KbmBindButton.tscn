@@ -2,7 +2,7 @@
 
 [ext_resource type="Theme" uid="uid://by44nnjeu6u4n" path="res://addons/cogito/Theme/Cogito_Theme_A.tres" id="1_oqol2"]
 [ext_resource type="Script" uid="uid://m36wvld0nyc4" path="res://addons/cogito/EasyMenus/Components/kbm_bind_button.gd" id="2_cj5if"]
-[ext_resource type="PackedScene" uid="uid://btf6bmlgtfk1b" path="res://addons/cogito/Components/DynamicInputIcon.tscn" id="3_0rc8b"]
+[ext_resource type="PackedScene" uid="uid://btf6bmlgtfk1b" path="res://addons/cogito/Components/dynamic_input_icon.tscn" id="3_0rc8b"]
 
 [node name="KbmBindButton" type="Button"]
 custom_minimum_size = Vector2(40, 40)

@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://dmeh01c5ccjqc" path="res://addons/cogito/CogitoObjects/cogito_object.gd" id="1_7bqcr"]
 [ext_resource type="Texture2D" uid="uid://cgcrwmu2bs4se" path="res://addons/cogito/Assets/Textures/Prototype Textures/PNG/Green/texture_01.png" id="2_s86do"]
-[ext_resource type="Script" uid="uid://b0a3vpjf8hylo" path="res://addons/cogito/Components/Interactions/PickupComponent.gd" id="3_5d1o6"]
+[ext_resource type="Script" uid="uid://b0a3vpjf8hylo" path="res://addons/cogito/Components/Interactions/pickup_component.gd" id="3_5d1o6"]
 [ext_resource type="Resource" uid="uid://dk1nq2ptfp2op" path="res://addons/cogito/InventoryPD/Items/Cogito_UselessItem.tres" id="4_5d1o6"]
 [ext_resource type="Script" uid="uid://di15gqemrkk0x" path="res://addons/cogito/InventoryPD/CustomResources/InventorySlotPD.gd" id="5_q65id"]
 

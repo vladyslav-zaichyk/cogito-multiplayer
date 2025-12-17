@@ -1,7 +1,7 @@
 [gd_scene load_steps=15 format=4 uid="uid://dlm5kc3g1g18h"]
 
 [ext_resource type="Script" uid="uid://fo2f3fr8frg4" path="res://addons/cogito/CogitoObjects/cogito_projectile.gd" id="1_c4027"]
-[ext_resource type="PackedScene" uid="uid://1xq4y42qkcur" path="res://addons/cogito/Components/Interactions/PickupComponent.tscn" id="2_kvhv2"]
+[ext_resource type="PackedScene" uid="uid://1xq4y42qkcur" path="res://addons/cogito/Components/Interactions/pickup_component.tscn" id="2_kvhv2"]
 [ext_resource type="Resource" uid="uid://bnuhj8svbmuls" path="res://addons/cogito/InventoryPD/Items/Cogito_Dart_Water.tres" id="3_4qh6n"]
 [ext_resource type="Script" uid="uid://di15gqemrkk0x" path="res://addons/cogito/InventoryPD/CustomResources/InventorySlotPD.gd" id="4_ba3i6"]
 [ext_resource type="PackedScene" uid="uid://cj0yaeh3yg7tu" path="res://addons/cogito/Components/Properties/CogitoProperties.tscn" id="5_5fw3h"]

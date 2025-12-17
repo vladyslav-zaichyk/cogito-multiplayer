@@ -2,20 +2,20 @@ extends Node
 class_name OptionsConstants
 
 const sfx_bus_name = "SFX"
-const music_bus_name = "Music" 
+const music_bus_name = "Music"
 const config_file_name = "user://options.cfg"
 
-const section_name = "Options" 
+const section_name = "Options"
 # Auido options
 const sfx_volume_key_name = "sfx_volume"
-const music_volume_key_name = "music_volume" 
+const music_volume_key_name = "music_volume"
 # Graphics options
 const fullscreen_mode_key_name = "fullscreen_mode"
 const resolution_index_key_name = "resolution_index"
 const fullscreen_resolution_scale_key = "fullscreen_resolution_scale"
 const gui_scale_key = "gui_scale"
 const vsync_key = "vsync"
-const msaa_2d_key = "msaa_2d" 
+const msaa_2d_key = "msaa_2d"
 const msaa_3d_key = "msaa_3d"
 
 # Gameplay options

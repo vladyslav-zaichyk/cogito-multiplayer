@@ -2,8 +2,8 @@
 
 [ext_resource type="Script" uid="uid://b4cfmnk8b7nru" path="res://addons/cogito/CogitoObjects/cogito_switch.gd" id="1_8r8fc"]
 [ext_resource type="AudioStream" uid="uid://0himm415mqex" path="res://addons/cogito/Assets/Audio/Kenney/UiAudio/switch29.ogg" id="2_m3jxc"]
-[ext_resource type="PackedScene" uid="uid://l61jtpfxu5x5" path="res://addons/cogito/Components/Interactions/BasicInteraction.tscn" id="3_v8dn1"]
-[ext_resource type="PackedScene" uid="uid://k28yrbg3k3pw" path="res://addons/cogito/Components/HitboxComponent.tscn" id="4_dkn68"]
+[ext_resource type="PackedScene" uid="uid://l61jtpfxu5x5" path="res://addons/cogito/Components/Interactions/basic_interaction.tscn" id="3_v8dn1"]
+[ext_resource type="PackedScene" uid="uid://k28yrbg3k3pw" path="res://addons/cogito/Components/hitbox_component.tscn" id="4_dkn68"]
 [ext_resource type="PackedScene" uid="uid://cj0yaeh3yg7tu" path="res://addons/cogito/Components/Properties/CogitoProperties.tscn" id="5_mihmv"]
 
 [sub_resource type="CylinderMesh" id="CylinderMesh_clo4d"]

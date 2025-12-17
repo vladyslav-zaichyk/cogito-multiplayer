@@ -2,13 +2,10 @@
 
 extends Control
 
-
-signal failed()
+signal failed
 signal updated(updated_to_version: String)
 
-
 const TEMP_FILE_NAME = "user://temp.zip"
-
 
 @onready var logo: TextureRect = %Logo
 @onready var label: Label = $VBox/Label
@@ -39,12 +36,16 @@ func _on_download_button_pressed() -> void:
 		failed.emit()
 		return
 
-	http_request.request("https://github.com/nathanhoad/godot_input_helper/archive/refs/tags/v%s.zip" % next_version)
+	http_request.request(
+		"https://github.com/nathanhoad/godot_input_helper/archive/refs/tags/v%s.zip" % next_version
+	)
 	download_button.disabled = true
 	download_button.text = "Downloading..."
 
 
-func _on_http_request_request_completed(result: int, response_code: int, headers: PackedStringArray, body: PackedByteArray) -> void:
+func _on_http_request_request_completed(
+	result: int, response_code: int, headers: PackedStringArray, body: PackedByteArray
+) -> void:
 	if result != HTTPRequest.RESULT_SUCCESS:
 		failed.emit()
 		return
@@ -69,7 +70,9 @@ func _on_http_request_request_completed(result: int, response_code: int, headers
 		if path.ends_with("/"):
 			DirAccess.make_dir_recursive_absolute("res://addons/%s" % new_file_path)
 		else:
-			var file: FileAccess = FileAccess.open("res://addons/%s" % new_file_path, FileAccess.WRITE)
+			var file: FileAccess = FileAccess.open(
+				"res://addons/%s" % new_file_path, FileAccess.WRITE
+			)
 			file.store_buffer(zip_reader.read_file(path))
 
 	zip_reader.close()
@@ -80,4 +83,6 @@ func _on_http_request_request_completed(result: int, response_code: int, headers
 
 
 func _on_notes_button_pressed() -> void:
-	OS.shell_open("https://github.com/nathanhoad/godot_input_helper/releases/tag/v%s" % next_version)
+	OS.shell_open(
+		"https://github.com/nathanhoad/godot_input_helper/releases/tag/v%s" % next_version
+	)

@@ -2,11 +2,11 @@
 
 [ext_resource type="PackedScene" uid="uid://cqgg1nng0vvbh" path="res://addons/cogito/Components/Attributes/HealthAttribute.tscn" id="1_c1b02"]
 [ext_resource type="Script" uid="uid://dmeh01c5ccjqc" path="res://addons/cogito/CogitoObjects/cogito_object.gd" id="1_e8c88"]
-[ext_resource type="PackedScene" uid="uid://k28yrbg3k3pw" path="res://addons/cogito/Components/HitboxComponent.tscn" id="3_4xfw8"]
+[ext_resource type="PackedScene" uid="uid://k28yrbg3k3pw" path="res://addons/cogito/Components/hitbox_component.tscn" id="3_4xfw8"]
 [ext_resource type="AudioStream" uid="uid://cn3yrske0mwlf" path="res://addons/cogito/Assets/Audio/Kenney/jingles-pizzicato_14.ogg" id="4_k2oo6"]
 [ext_resource type="PackedScene" uid="uid://bc2hryr610vgo" path="res://addons/cogito/PackedScenes/simple_particle_puff.tscn" id="4_rjxm0"]
 [ext_resource type="PackedScene" uid="uid://cj0yaeh3yg7tu" path="res://addons/cogito/Components/Properties/CogitoProperties.tscn" id="6_3b4ij"]
-[ext_resource type="Script" uid="uid://d2dr6c2kvr57f" path="res://addons/cogito/Components/LootComponent.gd" id="7_s82pn"]
+[ext_resource type="Script" uid="uid://d2dr6c2kvr57f" path="res://addons/cogito/Components/loot_component.gd" id="7_s82pn"]
 [ext_resource type="Resource" uid="uid://cng2vry7x3qg4" path="res://addons/cogito/Components/LootTables/LootTableGeneric.tres" id="8_ywkh5"]
 [ext_resource type="PackedScene" uid="uid://eq5tc21gdk8" path="res://addons/cogito/PackedScenes/loot_chest.tscn" id="9_dtbx4"]
 

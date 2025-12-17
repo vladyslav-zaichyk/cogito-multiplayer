@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" uid="uid://djpuxgkv8c6ux" path="res://addons/cogito/CogitoObjects/cogito_container.gd" id="1_n63mt"]
 [ext_resource type="Resource" uid="uid://cxwga3ee80mxm" path="res://addons/cogito/DemoScenes/DemoInventories/Fridge_Inventory.tres" id="2_27aia"]
-[ext_resource type="PackedScene" uid="uid://l61jtpfxu5x5" path="res://addons/cogito/Components/Interactions/BasicInteraction.tscn" id="3_jl0td"]
+[ext_resource type="PackedScene" uid="uid://l61jtpfxu5x5" path="res://addons/cogito/Components/Interactions/basic_interaction.tscn" id="3_jl0td"]
 [ext_resource type="Script" uid="uid://b8x88ii6md62w" path="res://addons/cogito/Scripts/inventory_checker.gd" id="4_trges"]
 [ext_resource type="Resource" uid="uid://ca0wjra4aq00v" path="res://addons/cogito/InventoryPD/Items/Cogito_LaptopReal.tres" id="5_838le"]
 [ext_resource type="Resource" uid="uid://b7myxblvr7lty" path="res://addons/cogito/InventoryPD/Items/Cogito_Laptop.tres" id="6_6xc2m"]
