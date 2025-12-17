@@ -21,6 +21,8 @@ func _enter_tree():
 	add_autoload_singleton("SceneManager", "/scene_management/scene_manager.gd")
 	add_autoload_singleton("SaveManager", "/scene_management/save_manager.gd")
 	add_autoload_singleton("PlayerStateManager", "/scene_management/player_state_manager.gd")
+	add_autoload_singleton("WorldLoadingManager", "/network/world_loading_manager.gd")
+	add_autoload_singleton("PlayerSpawner", "/network/player_spawner.gd")
 
 	# Initialization of the plugin goes here.
 	parser_plugin = load("res://addons/cogito/Localization/scripts/loc_resource_parser.gd").new()
@@ -42,6 +44,8 @@ func _exit_tree():
 	remove_autoload_singleton("SceneManager")
 	remove_autoload_singleton("SaveManager")
 	remove_autoload_singleton("PlayerStateManager")
+	remove_autoload_singleton("WorldLoadingManager")
+	remove_autoload_singleton("PlayerSpawner")
 
 	remove_translation_parser_plugin(parser_plugin)
 

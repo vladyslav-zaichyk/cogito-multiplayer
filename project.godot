@@ -34,6 +34,8 @@ NetworkManager="*res://addons/cogito/network/network_manager.gd"
 SceneManager="*res://addons/cogito/scene_management/scene_manager.gd"
 SaveManager="*res://addons/cogito/scene_management/save_manager.gd"
 PlayerStateManager="*res://addons/cogito/scene_management/player_state_manager.gd"
+WorldLoadingManager="*res://addons/cogito/network/world_loading_manager.gd"
+PlayerSpawner="*res://addons/cogito/network/player_spawner.gd"
 
 [display]
 

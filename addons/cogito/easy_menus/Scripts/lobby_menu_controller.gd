@@ -181,7 +181,41 @@ func _on_start_game_pressed() -> void:
 		_set_status("Need at least 1 player to start!", true)
 		return
 	
+	# Load the game scene using WorldLoadingManager
+	_set_status("Starting game...", false)
+	
+	# Use demo scene for now (can be made configurable later)
+	var demo_scene_path = "res://addons/cogito/demo_scenes/cogito_3_lobby.tscn"
+	
+	if WorldLoadingManager:
+		# Start loading scene and wait for all peers
+		WorldLoadingManager.start_loading_scene(
+			demo_scene_path,
+			_on_all_peers_loaded
+		)
+	else:
+		# Fallback: use old system
+		if CogitoSceneManager:
+			CogitoSceneManager.load_next_scene(
+				demo_scene_path,
+				"",
+				"temp",
+				CogitoSceneManager.CogitoSceneLoadMode.RESET
+			)
+	
 	start_game_pressed.emit()
+
+
+## Callback when all peers have loaded the scene
+func _on_all_peers_loaded() -> void:
+	CogitoGlobals.debug_log(
+		true,
+		"LobbyMenu",
+		"All peers loaded scene - ready to spawn players"
+	)
+	# Hide lobby menu
+	visible = false
+	# Player spawning will be handled in Phase 1.1
 
 
 func _on_leave_lobby_pressed() -> void:

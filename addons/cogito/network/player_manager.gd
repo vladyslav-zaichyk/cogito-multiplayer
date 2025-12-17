@@ -160,3 +160,28 @@ func get_current_player() -> Node:
 	
 	return null
 
+
+## Get player by peer ID (for multiplayer)
+func get_player_by_peer_id(peer_id: int) -> Node:
+	# Search through all players
+	for player_id in _players.keys():
+		var player = _players[player_id]
+		if player and multiplayer:
+			var authority = multiplayer.get_authority(player.get_path())
+			if authority == peer_id:
+				return player
+	return null
+
+
+## Check if player exists by peer ID
+func has_player_by_peer_id(peer_id: int) -> bool:
+	return get_player_by_peer_id(peer_id) != null
+
+
+## Get player ID for a player node
+func get_player_id(player_node: Node) -> int:
+	for player_id in _players.keys():
+		if _players[player_id] == player_node:
+			return player_id
+	return -1
+
