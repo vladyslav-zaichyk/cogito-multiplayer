@@ -13,6 +13,8 @@ func _enter_tree():
 	add_autoload_singleton("CogitoSceneManager", "/scene_management/cogito_scene_manager.gd")
 	add_autoload_singleton("CogitoQuestManager", "/quest_system/cogito_quest_manager.gd")
 	add_autoload_singleton("MenuTemplateManager", "/easy_menus/Nodes/menu_template_manager.tscn")
+	add_autoload_singleton("NetworkEventBus", "/network/event_bus.gd")
+	add_autoload_singleton("PlayerManager", "/network/player_manager.gd")
 
 	# Initialization of the plugin goes here.
 	parser_plugin = load("res://addons/cogito/Localization/scripts/loc_resource_parser.gd").new()
@@ -26,6 +28,8 @@ func _exit_tree():
 	remove_autoload_singleton("MenuTemplateManager")
 	remove_autoload_singleton("CogitoSceneManager")
 	remove_autoload_singleton("CogitoGlobals")
+	remove_autoload_singleton("NetworkEventBus")
+	remove_autoload_singleton("PlayerManager")
 
 	remove_translation_parser_plugin(parser_plugin)
 

@@ -17,12 +17,16 @@ enum ValueType { CURRENT, MAX }
 func use(target) -> bool:
 	# Target should always be player? Null check to override using the CogitoSceneManager, which stores a reference to current player node
 	if target == null or target.is_in_group("external_inventory"):
+		# Get player from PlayerManager (new system) or fallback to old system
+		var player = PlayerManager.get_current_player() if PlayerManager else null
+		if not player and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+			player = CogitoSceneManager._current_player_node
 		CogitoGlobals.debug_log(
 			true,
 			"ConsumableItemPD",
-			"Bad target pass. Setting target to" + str(CogitoSceneManager._current_player_node)
+			"Bad target pass. Setting target to" + str(player)
 		)
-		target = CogitoSceneManager._current_player_node
+		target = player
 
 	if target.increase_attribute(attribute_name, attribute_change_amount, value_to_change):
 		print("Inventory item: Target ", target, " is using ", self)

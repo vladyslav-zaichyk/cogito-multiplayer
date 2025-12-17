@@ -217,7 +217,11 @@ func clear_external_inventory():
 
 
 func set_player_inventory_data(inventory_data: CogitoInventory):
-	inventory_data.owner = CogitoSceneManager._current_player_node  # Setting player inventory owner reference to player node
+	# Get player from PlayerManager (new system) or fallback to old system
+	var player = PlayerManager.get_current_player() if PlayerManager else null
+	if not player and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+		player = CogitoSceneManager._current_player_node
+	inventory_data.owner = player  # Setting player inventory owner reference to player node
 
 #	inventory_data.inventory_interact.connect(on_inventory_interact)
 	if !inventory_data.inventory_button_press.is_connected(on_inventory_button_press):

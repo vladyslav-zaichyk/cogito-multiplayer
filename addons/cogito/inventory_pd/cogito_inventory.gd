@@ -217,15 +217,17 @@ func drop_single_slot_data(grabbed_slot_data: InventorySlotPD, index: int) -> In
 			slot_data.inventory_item.charge_max - slot_data.inventory_item.charge_current
 			>= grabbed_slot_data.inventory_item.reload_amount
 		):
-			get_local_scene().player_interaction_component.send_hint(
-				null,
-				(
-					"Charging "
-					+ slot_data.inventory_item.name
-					+ " by "
-					+ str(grabbed_slot_data.inventory_item.reload_amount)
+			var player = _get_player_node()
+			if player and player.has_method("player_interaction_component"):
+				player.player_interaction_component.send_hint(
+					null,
+					(
+						"Charging "
+						+ slot_data.inventory_item.name
+						+ " by "
+						+ str(grabbed_slot_data.inventory_item.reload_amount)
+					)
 				)
-			)
 			slot_data.inventory_item.add(grabbed_slot_data.inventory_item.reload_amount)
 			grabbed_slot_data.quantity -= 1
 		else:
@@ -284,9 +286,10 @@ func pick_up_slot_data(slot_data: InventorySlotPD) -> bool:
 			picked_up_new_inventory_item.emit(slot_data)
 			return true
 
-	CogitoSceneManager._current_player_node.player_interaction_component.send_hint(
-		null, "Unable to pick up item."
-	)
+	# Try to get player from owner, PlayerManager, or fallback to CogitoSceneManager
+	var player = _get_player_node()
+	if player and player.has_method("player_interaction_component"):
+		player.player_interaction_component.send_hint(null, "Unable to pick up item.")
 	return false
 
 
@@ -361,6 +364,23 @@ func get_item_to_swap(grabbed_slot_data: InventorySlotPD, to_place_index: int):
 				continue
 			if adj_item.origin_index != -1:
 				return adj_item
+
+
+## Helper function to get player node (for backward compatibility)
+func _get_player_node() -> Node:
+	# First try to use owner if it's a player
+	if owner and owner is CogitoPlayer:
+		return owner
+	
+	# Try PlayerManager (new system)
+	if PlayerManager and PlayerManager.has_local_player():
+		return PlayerManager.get_local_player()
+	
+	# Fallback to old system
+	if CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+		return CogitoSceneManager._current_player_node
+	
+	return null
 
 
 ## Returns whether the given item fits in inventory

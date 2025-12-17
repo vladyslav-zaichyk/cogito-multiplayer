@@ -36,12 +36,18 @@ func use(target) -> bool:
 
 	# Target should always be player? Null check to override using the CogitoSceneManager, which stores a reference to current player node
 	if target == null:
-		CogitoGlobals.debug_log(
-			true,
-			"WieldableItemPD.gd",
-			"Bad target pass. Setting target to " + CogitoSceneManager._current_player_node.name
-		)
-		target = CogitoSceneManager._current_player_node
+		# Get player from PlayerManager (new system) or fallback to old system
+		var player = PlayerManager.get_current_player() if PlayerManager else null
+		if not player and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+			player = CogitoSceneManager._current_player_node
+		
+		if player:
+			CogitoGlobals.debug_log(
+				true,
+				"WieldableItemPD.gd",
+				"Bad target pass. Setting target to " + player.name
+			)
+			target = player
 
 	player_interaction_component = target.player_interaction_component
 	if player_interaction_component.carried_object != null:

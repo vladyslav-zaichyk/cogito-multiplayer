@@ -26,6 +26,8 @@ CogitoGlobals="*res://addons/cogito/cogito_globals.gd"
 CogitoSceneManager="*res://addons/cogito/scene_management/cogito_scene_manager.gd"
 CogitoQuestManager="*res://addons/cogito/quest_system/cogito_quest_manager.gd"
 MenuTemplateManager="*res://addons/cogito/easy_menus/Nodes/menu_template_manager.tscn"
+NetworkEventBus="*res://addons/cogito/network/event_bus.gd"
+PlayerManager="*res://addons/cogito/network/player_manager.gd"
 
 [display]
 

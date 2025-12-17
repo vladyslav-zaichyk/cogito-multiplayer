@@ -31,9 +31,15 @@ func _ready() -> void:
 		quickslot.quickslot_cleared.connect(unbind_quickslot)
 
 	await get_tree().process_frame
-	player_interaction_component = (
-		(CogitoSceneManager._current_player_node as CogitoPlayer).player_interaction_component
-	)
+	# Get player from PlayerManager (new system) or fallback to old system
+	var player = PlayerManager.get_current_player() if PlayerManager else null
+	if not player and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+		player = CogitoSceneManager._current_player_node
+	
+	if player and player is CogitoPlayer:
+		player_interaction_component = player.player_interaction_component
+	else:
+		push_warning("CogitoQuickSlots: Could not find player node to get interaction component")
 
 
 # Using this to either set up new inventory or load quickslot of existing inventory

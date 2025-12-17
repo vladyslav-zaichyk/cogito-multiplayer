@@ -176,6 +176,9 @@ var is_dead: bool = false
 var slide_audio_player: AudioStreamPlayer3D
 var radius: float
 
+## Player ID assigned by PlayerManager (for multiplayer support)
+var player_id: int = -1
+
 # Node caching
 @onready var player_interaction_component: PlayerInteractionComponent = $PlayerInteractionComponent
 @onready var body: Node3D = $Body
@@ -215,7 +218,12 @@ var radius: float
 
 func _ready():
 	#Some Setup steps
-	CogitoSceneManager._current_player_node = self
+	CogitoSceneManager._current_player_node = self  # Keep for backward compatibility
+	
+	# Register player in PlayerManager (new system)
+	if PlayerManager:
+		player_id = PlayerManager.register_player(self, true)  # true = is_local_player
+	
 	player_interaction_component.exclude_player(get_rid())
 
 	randomize()
@@ -1449,3 +1457,10 @@ func _on_player_state_loaded():
 	#self.global_transform.basis = Basis()
 	#neck.global_transform.basis = Basis()
 	pass
+
+
+func _exit_tree() -> void:
+	# Unregister player from PlayerManager when exiting
+	if PlayerManager and player_id != -1:
+		PlayerManager.unregister_player(player_id)
+		player_id = -1
