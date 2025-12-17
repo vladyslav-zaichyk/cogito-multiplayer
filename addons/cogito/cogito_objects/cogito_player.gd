@@ -235,11 +235,15 @@ func _ready():
 	if PlayerManager:
 		player_id = PlayerManager.register_player(self, is_local_player)
 	
-	# Add network position sync component for multiplayer
+	# Add network sync components for multiplayer
 	if NetworkManager and NetworkManager.is_multiplayer():
 		var position_sync = preload("res://addons/cogito/network/network_position_sync.gd").new()
 		position_sync.name = "NetworkPositionSync"
 		add_child(position_sync)
+		
+		var rotation_sync = preload("res://addons/cogito/network/network_rotation_sync.gd").new()
+		rotation_sync.name = "NetworkRotationSync"
+		add_child(rotation_sync)
 	
 	# Disable input and physics for remote players
 	if NetworkManager and NetworkManager.is_multiplayer() and not is_local_player:
