@@ -9,8 +9,6 @@
 [sub_resource type="Resource" id="Resource_njshw"]
 script = ExtResource("3_awjgv")
 inventory_item = ExtResource("2_mlc3l")
-quantity = 1
-origin_index = -1
 
 [resource]
 script = ExtResource("1_g52q8")
@@ -19,14 +17,7 @@ resulting_item = SubResource("Resource_njshw")
 name = "Ripped Page A"
 description = "A piece of paper ripped in half. It has some numbers on it but parts are missing."
 icon = ExtResource("1_hcvti")
-is_stackable = false
 is_droppable = false
-is_unique = false
-stack_size = 0
 drop_scene = "res://addons/cogito/PackedScenes/Pickups/ripped_page_a_pickup.tscn"
-item_drop_size = 0.5
 hint_text_on_use = "I need the other half."
-item_size = Vector2(1, 1)
 sound_pickup = ExtResource("3_q33gx")
-can_auto_slot = false
-slot_number = -1

@@ -9,28 +9,21 @@
 
 [sub_resource type="Resource" id="Resource_e0gov"]
 script = ExtResource("1_d40ao")
-attribute_name = ""
-attribute_change_amount = 0.0
-value_to_change = 0
 
 [resource]
 script = ExtResource("3_4qsd3")
 attribute_name = "health"
 attribute_change_amount = 10.0
-value_to_change = 0
 consumable_effects = Array[ExtResource("1_d40ao")]([SubResource("Resource_e0gov")])
 name = "Health Potion"
 description = "Tastes better than it looks."
 icon = ExtResource("1_net5f")
 is_stackable = true
-is_droppable = true
-is_unique = false
 stack_size = 5
 drop_scene = "res://addons/cogito/PackedScenes/Pickups/pickup_health_potion.tscn"
 item_drop_size = 0.1
 hint_icon_on_use = ExtResource("1_5eqwj")
 hint_text_on_use = "You've gained 10 health."
-item_size = Vector2(1, 1)
 sound_use = ExtResource("4_41mfm")
 sound_pickup = ExtResource("4_sr2jy")
 can_auto_slot = true

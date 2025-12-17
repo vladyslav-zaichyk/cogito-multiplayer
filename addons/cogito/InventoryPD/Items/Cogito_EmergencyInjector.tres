@@ -9,29 +9,20 @@
 
 [sub_resource type="Resource" id="Resource_e0gov"]
 script = ExtResource("1_cok0t")
-attribute_name = ""
-attribute_change_amount = 0.0
-value_to_change = 0
 
 [resource]
 script = ExtResource("4_qjcpt")
 attribute_name = "health"
 attribute_change_amount = 10.0
-value_to_change = 0
 consumable_effects = Array[ExtResource("1_cok0t")]([SubResource("Resource_e0gov")])
 name = "Emergency Injector"
 description = "Administered automatically for your convenience."
 icon = ExtResource("3_qxr6y")
 is_stackable = true
-is_droppable = true
-is_unique = false
 stack_size = 5
 drop_scene = "uid://8m1mwoi5qca0"
 item_drop_size = 0.1
 hint_icon_on_use = ExtResource("2_cok0t")
 hint_text_on_use = "Restored 10 health."
-item_size = Vector2(1, 1)
 sound_use = ExtResource("6_cok0t")
 sound_pickup = ExtResource("5_nx2qt")
-can_auto_slot = false
-slot_number = -1
