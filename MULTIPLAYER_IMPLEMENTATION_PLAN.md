@@ -40,10 +40,12 @@
 - [ ] Тестування: меню працює, не ламає single-player, оригінальні сцени незмінні
 
 ### Етап 0.2: Host Game UI
-- [ ] Створити **нову** `HostGameMenu` сцену (не редагувати існуючі)
-- [ ] Налаштування: Port, Max Players, Server Name
-- [ ] Кнопки: Start Server, Cancel
-- [ ] Інтеграція з NetworkManager.start_hosting()
+- [x] Створити **нову** `HostGameMenu` сцену (не редагувати існуючі)
+- [x] Налаштування: Port, Max Players, Server Name
+- [x] Кнопки: Start Server, Cancel
+- [x] Інтеграція з NetworkManager.start_hosting()
+- [x] Валідація введених даних
+- [x] Відображення статусу (успіх/помилка)
 - [ ] Тестування: можна створити хост, оригінальні сцени незмінні
 
 ### Етап 0.3: Join Game UI
