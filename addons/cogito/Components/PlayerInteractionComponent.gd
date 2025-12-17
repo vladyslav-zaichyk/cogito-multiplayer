@@ -67,17 +67,17 @@ var can_cycle_quickslots: bool = true
 @onready var cycle_quickslots_interrupt_timer: Timer = $Timer
 
 
-func _ready():
+func _ready() -> void:
 	player = get_parent() as CogitoPlayer
 	cycle_quickslots_interrupt_timer.connect("timeout", Callable(self, "_on_can_cycle_quickslots_timeout"))
 
 
-func exclude_player(rid: RID):
+func exclude_player(rid: RID) -> void:
 	player_rid = rid
 	interaction_raycast.add_exception_rid(rid)
 
 
-func _process(_delta):
+func _process(_delta: float) -> void:
 	pass
 
 
@@ -197,17 +197,17 @@ func get_carryable_destination_point(distance_offset: float) -> Vector3:
 
 
 ### Carryable Management
-func start_carrying(_carried_object):
+func start_carrying(_carried_object) -> void:
 	carried_object = _carried_object
 
 
-func stop_carrying():
+func stop_carrying() -> void:
 	carried_object = null
 	_rebuild_interaction_prompts() # Ensures the drop prompt gets deleted
 
 
 ### Wieldable Management
-func equip_wieldable(wieldable_item: WieldableItemPD):
+func equip_wieldable(wieldable_item: WieldableItemPD) -> void:
 	if wieldable_item != null:
 		equipped_wieldable_item = wieldable_item #Set Inventory Item reference
 		# Set Wieldable node reference
@@ -223,7 +223,7 @@ func equip_wieldable(wieldable_item: WieldableItemPD):
 		is_changing_wieldables = false
 
 
-func change_wieldable_to(next_wieldable: InventoryItemPD):
+func change_wieldable_to(next_wieldable: InventoryItemPD) -> void:
 	is_changing_wieldables = true
 	if equipped_wieldable_item != null:
 		equipped_wieldable_item.is_being_wielded = false
@@ -238,7 +238,7 @@ func change_wieldable_to(next_wieldable: InventoryItemPD):
 	equip_wieldable(next_wieldable)
 
 
-func attempt_action_primary(is_released: bool):
+func attempt_action_primary(is_released: bool) -> void:
 	if is_changing_wieldables: # Block action if currently in the process of changing wieldables
 		return
 	if equipped_wieldable_node == null:
@@ -249,7 +249,7 @@ func attempt_action_primary(is_released: bool):
 	equipped_wieldable_node.action_primary(equipped_wieldable_item, is_released)
 
 
-func attempt_action_secondary(is_released: bool):
+func attempt_action_secondary(is_released: bool) -> void:
 	if is_changing_wieldables: # Block action if currently in the process of changing wieldables
 		return
 	if equipped_wieldable_node == null:
@@ -259,7 +259,7 @@ func attempt_action_secondary(is_released: bool):
 		equipped_wieldable_node.action_secondary(is_released)
 
 
-func attempt_reload():
+func attempt_reload() -> void:
 	var inventory: CogitoInventory = get_parent().inventory_data
 	# Some safety checks if reload should even be triggered.
 	if inventory == null:
@@ -312,7 +312,7 @@ func attempt_reload():
 	equipped_wieldable_item.update_wieldable_data(self)
 
 
-func on_death():
+func on_death() -> void:
 	if equipped_wieldable_item:
 		equipped_wieldable_item.is_being_wielded = false
 	
@@ -321,7 +321,7 @@ func on_death():
 
 
 # Function called by interactables if they need to send a hint. The signal sent here gets picked up by the Player_Hud_Manager.
-func send_hint(hint_icon: Texture2D, hint_text: String):
+func send_hint(hint_icon: Texture2D, hint_text: String) -> void:
 	hint_prompt.emit(hint_icon, hint_text)
 
 
@@ -351,7 +351,7 @@ func get_camera_collision() -> Vector3:
 		return ray_end
 
 
-func save():
+func save() -> Dictionary:
 	if equipped_wieldable_node and equipped_wieldable_node.has_method("toggle_on_off"):
 		wieldable_was_on = equipped_wieldable_node.is_on
 	
@@ -365,7 +365,7 @@ func save():
 	return interaction_component_data
 
 
-func set_state():
+func set_state() -> void:
 	### Clearing out data from previous player state
 	updated_wieldable_data.emit(null, 0, null) # Clearing out wieldable HUD Data
 	
