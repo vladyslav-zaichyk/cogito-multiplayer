@@ -88,10 +88,23 @@ signal network_error(error: String)
 #endregion
 
 
+## Enable/disable automatic network synchronization
+@export var enable_network_sync: bool = true
+
+## Authority mode: SERVER_ONLY (only server can emit), CLIENT_AUTHORITY (any client can emit)
+enum AuthorityMode { SERVER_ONLY, CLIENT_AUTHORITY }
+@export var authority_mode: AuthorityMode = AuthorityMode.SERVER_ONLY
+
+
 func _ready() -> void:
 	CogitoGlobals.debug_log(
 		true, "NetworkEventBus", "Event Bus initialized and ready to receive events."
 	)
+	
+	# Connect to network events (NetworkManager emits through this Event Bus)
+	# We connect to our own signals to track network state
+	network_connected.connect(_on_network_connected)
+	network_disconnected.connect(_on_network_disconnected)
 
 
 ## Helper function to emit events with optional logging
@@ -129,3 +142,89 @@ func emit_world_state_changed(key: String, value: Variant, old_value: Variant = 
 		world_state_changed.emit(key, value, old_value)
 	else:
 		world_state_changed.emit(key, value, null)
+
+
+## Check if we should sync this event over network
+func _should_sync_event() -> bool:
+	if not enable_network_sync:
+		return false
+	
+	if not NetworkManager or not NetworkManager.is_multiplayer():
+		return false
+	
+	return true
+
+
+## Check if this peer has authority to emit events
+func _has_authority() -> bool:
+	if not NetworkManager or not NetworkManager.is_multiplayer():
+		return true  # Single-player always has authority
+	
+	if authority_mode == AuthorityMode.SERVER_ONLY:
+		return NetworkManager.is_host()
+	
+	# CLIENT_AUTHORITY mode - any client can emit
+	return true
+
+
+## Callback when network connects
+func _on_network_connected(peer_id: int) -> void:
+	CogitoGlobals.debug_log(
+		enable_event_logging,
+		"NetworkEventBus",
+		"Network connected, event sync enabled for peer: %d" % peer_id
+	)
+
+
+## Callback when network disconnects
+func _on_network_disconnected(peer_id: int) -> void:
+	CogitoGlobals.debug_log(
+		enable_event_logging,
+		"NetworkEventBus",
+		"Network disconnected for peer: %d" % peer_id
+	)
+
+
+## Emit event locally and sync over network if needed
+func emit_and_sync(signal_name: String, args: Array) -> void:
+	# Emit locally first
+	emit_event(signal_name, args)
+	
+	# Sync over network if needed
+	if _should_sync_event() and _has_authority():
+		_sync_event_rpc.rpc(signal_name, args)
+
+
+## RPC method to sync events between clients
+@rpc("any_peer", "call_local", "reliable")
+func _sync_event_rpc(signal_name: String, args: Array) -> void:
+	# Only process if we're not the sender (to avoid duplicate events)
+	var sender_id = multiplayer.get_remote_sender_id()
+	if sender_id == multiplayer.get_unique_id():
+		return
+	
+	# Emit the event locally on receiving clients
+	emit_event("network_sync_" + signal_name, args)
+	
+	# Map signal names to actual signal emissions
+	# This is a simplified version - in production, you'd want a more robust mapping
+	match signal_name:
+		"player_registered":
+			if args.size() >= 2:
+				player_registered.emit(args[0], args[1])
+		"player_unregistered":
+			if args.size() >= 1:
+				player_unregistered.emit(args[0])
+		"inventory_changed":
+			if args.size() >= 2:
+				inventory_changed.emit(args[0], args[1])
+		"world_state_changed":
+			if args.size() >= 3:
+				world_state_changed.emit(args[0], args[1], args[2])
+		"interaction_started":
+			if args.size() >= 3:
+				interaction_started.emit(args[0], args[1], args[2])
+		"interaction_completed":
+			if args.size() >= 3:
+				interaction_completed.emit(args[0], args[1], args[2])
+		# Add more mappings as needed
