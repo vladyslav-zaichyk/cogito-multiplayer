@@ -32,8 +32,15 @@ func _init() -> void:
 
 
 ## Starts a given quest by calling its start() method and moving it to the active group
-func start_quest(quest: CogitoQuest) -> CogitoQuest:
+## If player_id is -1, tries to get it from PlayerManager
+func start_quest(quest: CogitoQuest, player_id: int = -1) -> CogitoQuest:
 	assert(quest != null)
+	
+	# Set player_id if not set and player_id is provided
+	if quest.player_id == -1 and player_id != -1:
+		quest.player_id = player_id
+	elif quest.player_id == -1 and PlayerManager and PlayerManager.has_local_player():
+		quest.player_id = PlayerManager.get_local_player_id()
 
 	if active.is_quest_inside(quest):
 		CogitoGlobals.debug_log(true, "QuestManager.gd", quest.quest_name + " is already active.")
@@ -51,6 +58,10 @@ func start_quest(quest: CogitoQuest) -> CogitoQuest:
 	available.remove_quest(quest)
 	active.add_quest(quest)
 	quest_activated.emit(quest)
+	
+	# Emit through Event Bus
+	if NetworkEventBus and quest.player_id != -1:
+		NetworkEventBus.quest_started.emit(quest.player_id, quest)
 
 	quest.start()
 	Audio.play_sound(COGITO_QUEST_START).volume_db = quest_audio_volume_db
@@ -74,11 +85,16 @@ func complete_quest(quest: CogitoQuest) -> CogitoQuest:
 	completed.add_quest(quest)
 
 	quest_completed.emit(quest)
+	
+	# Emit through Event Bus
+	if NetworkEventBus and quest.player_id != -1:
+		NetworkEventBus.quest_completed.emit(quest.player_id, quest)
+	
 	Audio.play_sound(COGITO_QUEST_COMPLETE).volume_db = quest_audio_volume_db
 	return quest
 
 
-## Moves a quest to the completed group. Quest needs to be active to be completed.
+## Moves a quest to the failed group. Quest needs to be active to be failed.
 func fail_quest(quest: CogitoQuest) -> CogitoQuest:
 	if not active.is_quest_inside(quest):
 		return quest
@@ -89,6 +105,11 @@ func fail_quest(quest: CogitoQuest) -> CogitoQuest:
 	failed.add_quest(quest)
 
 	quest_failed.emit(quest)
+	
+	# Emit through Event Bus
+	if NetworkEventBus and quest.player_id != -1:
+		NetworkEventBus.quest_failed.emit(quest.player_id, quest)
+	
 	Audio.play_sound(COGITO_QUEST_FAILED).volume_db = quest_audio_volume_db
 	return quest
 
@@ -100,10 +121,14 @@ func change_quest_counter(quest: CogitoQuest, value_change: int) -> CogitoQuest:
 
 	quest.quest_counter_current += value_change
 	quest_updated.emit(quest)
+	
+	# Emit through Event Bus
+	if NetworkEventBus and quest.player_id != -1:
+		NetworkEventBus.quest_updated.emit(quest.player_id, quest)
 
 	# Checks if counter goal is reached:
 	if quest.quest_counter_current == quest.quest_counter_goal:
-		CogitoGlobals.debug_log(true, "QuestManager.gd", quest.quest_name + ": Quest coal reached!")
+		CogitoGlobals.debug_log(true, "QuestManager.gd", quest.quest_name + ": Quest goal reached!")
 		quest.update()
 		complete_quest(quest)
 
@@ -125,6 +150,46 @@ func get_completed_quests() -> Array[CogitoQuest]:
 
 func get_failed_quests() -> Array[CogitoQuest]:
 	return failed.quests
+
+
+## Get quests for a specific player
+func get_player_available_quests(player_id: int) -> Array[CogitoQuest]:
+	var result: Array[CogitoQuest] = []
+	for quest in available.quests:
+		if quest.player_id == player_id:
+			result.append(quest)
+	return result
+
+
+func get_player_active_quests(player_id: int) -> Array[CogitoQuest]:
+	var result: Array[CogitoQuest] = []
+	for quest in active.quests:
+		if quest.player_id == player_id:
+			result.append(quest)
+	return result
+
+
+func get_player_completed_quests(player_id: int) -> Array[CogitoQuest]:
+	var result: Array[CogitoQuest] = []
+	for quest in completed.quests:
+		if quest.player_id == player_id:
+			result.append(quest)
+	return result
+
+
+func get_player_failed_quests(player_id: int) -> Array[CogitoQuest]:
+	var result: Array[CogitoQuest] = []
+	for quest in failed.quests:
+		if quest.player_id == player_id:
+			result.append(quest)
+	return result
+
+
+## Get local player quests (convenience method)
+func get_local_player_active_quests() -> Array[CogitoQuest]:
+	if PlayerManager and PlayerManager.has_local_player():
+		return get_player_active_quests(PlayerManager.get_local_player_id())
+	return []
 
 
 ## Gets a quest that's neither in the active, completed or failed groups

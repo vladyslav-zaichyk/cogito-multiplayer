@@ -6,6 +6,12 @@ extends Node
 ## Enable/disable event logging for debugging
 @export var enable_event_logging: bool = false
 
+# Preload classes to ensure they're available when parsing signals
+const CogitoInventory = preload("res://addons/cogito/inventory_pd/cogito_inventory.gd")
+const InventoryItemPD = preload("res://addons/cogito/inventory_pd/CustomResources/InventoryItemPD.gd")
+const InventorySlotPD = preload("res://addons/cogito/inventory_pd/CustomResources/InventorySlotPD.gd")
+const CogitoQuest = preload("res://addons/cogito/quest_system/CustomResources/cogito_quest.gd")
+
 #region Player Events
 ## Emitted when a player is registered in the system
 signal player_registered(player_id: int, player_node: Node)
@@ -23,30 +29,28 @@ signal player_input(player_id: int, action: String, pressed: bool)
 
 #region Inventory Events
 ## Emitted when a player picks up an item
-## Note: Using Resource/Variant to avoid class loading order issues
-signal inventory_item_picked(player_id: int, item: Resource, slot_data: Resource)
+signal inventory_item_picked(player_id: int, item: InventoryItemPD, slot_data: InventorySlotPD)
 ## Emitted when a player drops an item
-signal inventory_item_dropped(player_id: int, item: Resource, position: Vector3)
+signal inventory_item_dropped(player_id: int, item: InventoryItemPD, position: Vector3)
 ## Emitted when an inventory changes (items moved, used, etc.)
-signal inventory_changed(player_id: int, inventory: Resource)
+signal inventory_changed(player_id: int, inventory: CogitoInventory)
 ## Emitted when an item is used from inventory
-signal inventory_item_used(player_id: int, item: Resource)
+signal inventory_item_used(player_id: int, item: InventoryItemPD)
 ## Emitted when an item is equipped to quickslot
-signal item_equipped(player_id: int, item: Resource, quickslot_index: int)
+signal item_equipped(player_id: int, item: InventoryItemPD, quickslot_index: int)
 ## Emitted when an item is unequipped from quickslot
 signal item_unequipped(player_id: int, quickslot_index: int)
 #endregion
 
 #region Quest Events
 ## Emitted when a quest is started for a player
-## Note: Using Resource to avoid class loading order issues
-signal quest_started(player_id: int, quest: Resource)
+signal quest_started(player_id: int, quest: CogitoQuest)
 ## Emitted when a quest is completed by a player
-signal quest_completed(player_id: int, quest: Resource)
+signal quest_completed(player_id: int, quest: CogitoQuest)
 ## Emitted when a quest is updated (counter changed, etc.)
-signal quest_updated(player_id: int, quest: Resource)
+signal quest_updated(player_id: int, quest: CogitoQuest)
 ## Emitted when a quest fails
-signal quest_failed(player_id: int, quest: Resource)
+signal quest_failed(player_id: int, quest: CogitoQuest)
 #endregion
 
 #region World Events
@@ -113,7 +117,7 @@ func emit_player_unregistered(player_id: int) -> void:
 
 
 ## Convenience method to emit inventory changed event
-func emit_inventory_changed(player_id: int, inventory: Resource) -> void:
+func emit_inventory_changed(player_id: int, inventory: CogitoInventory) -> void:
 	emit_event("inventory_changed", [player_id, inventory])
 	inventory_changed.emit(player_id, inventory)
 

@@ -21,28 +21,23 @@ Event Bus автоматично реєструється як автолоад 
 
 ### Inventory Events
 Події, пов'язані з інвентарем:
-- `inventory_item_picked(player_id: int, item: Resource, slot_data: Resource)` - предмет піднято (використовується Resource для уникнення проблем з порядком завантаження)
-- `inventory_item_dropped(player_id: int, item: Resource, position: Vector3)` - предмет скинуто
-- `inventory_changed(player_id: int, inventory: Resource)` - інвентар змінився (використовується Resource для уникнення проблем з порядком завантаження)
-- `inventory_item_used(player_id: int, item: Resource)` - предмет використано
-- `item_equipped(player_id: int, item: Resource, quickslot_index: int)` - предмет екіпіровано
+- `inventory_item_picked(player_id: int, item: InventoryItemPD, slot_data: InventorySlotPD)` - предмет піднято
+- `inventory_item_dropped(player_id: int, item: InventoryItemPD, position: Vector3)` - предмет скинуто
+- `inventory_changed(player_id: int, inventory: CogitoInventory)` - інвентар змінився
+- `inventory_item_used(player_id: int, item: InventoryItemPD)` - предмет використано
+- `item_equipped(player_id: int, item: InventoryItemPD, quickslot_index: int)` - предмет екіпіровано
 - `item_unequipped(player_id: int, quickslot_index: int)` - предмет знято
 
-**Примітка:** Типи `Resource` використовуються замість конкретних класів (`CogitoInventory`, `InventoryItemPD`, тощо) для уникнення проблем з порядком завантаження класів. При отриманні подій можна використовувати `is` для перевірки типу:
-```gdscript
-if inventory is CogitoInventory:
-    var inv = inventory as CogitoInventory
-    # Використовуйте inv як CogitoInventory
-```
+**Примітка:** Класи попередньо завантажуються через `preload` в Event Bus для уникнення проблем з порядком завантаження.
 
 ### Quest Events
 Події, пов'язані з квестами:
-- `quest_started(player_id: int, quest: Resource)` - квест розпочато (використовується Resource для уникнення проблем з порядком завантаження)
-- `quest_completed(player_id: int, quest: Resource)` - квест завершено
-- `quest_updated(player_id: int, quest: Resource)` - квест оновлено
-- `quest_failed(player_id: int, quest: Resource)` - квест провалено
+- `quest_started(player_id: int, quest: CogitoQuest)` - квест розпочато
+- `quest_completed(player_id: int, quest: CogitoQuest)` - квест завершено
+- `quest_updated(player_id: int, quest: CogitoQuest)` - квест оновлено
+- `quest_failed(player_id: int, quest: CogitoQuest)` - квест провалено
 
-**Примітка:** Тип `Resource` використовується замість `CogitoQuest` для уникнення проблем з порядком завантаження. При отриманні подій можна використовувати `is` для перевірки типу.
+**Примітка:** Клас `CogitoQuest` попередньо завантажується через `preload` в Event Bus.
 
 ### World Events
 Події, пов'язані зі світом:
@@ -83,13 +78,10 @@ func _on_player_registered(player_id: int, player_node: Node) -> void:
     print("Player %d registered: %s" % [player_id, player_node.name])
 
 
-func _on_inventory_changed(player_id: int, inventory: Resource) -> void:
+func _on_inventory_changed(player_id: int, inventory: CogitoInventory) -> void:
     print("Inventory changed for player %d" % player_id)
-    # Cast to CogitoInventory if needed
-    if inventory is CogitoInventory:
-        var inv = inventory as CogitoInventory
-        # Use inventory here
-        print("Inventory size: %d" % inv.inventory_slots.size())
+    # Use inventory directly - it's already typed as CogitoInventory
+    print("Inventory size: %d" % inventory.inventory_slots.size())
 ```
 
 ### Емісія подій

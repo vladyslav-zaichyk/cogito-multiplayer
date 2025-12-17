@@ -3,6 +3,9 @@ extends Node
 ## Supports both player inventories and external inventories (containers, NPCs, etc.)
 ## Note: This is an autoload singleton, not a class_name
 
+# Preload class to ensure it's available
+const CogitoInventory = preload("res://addons/cogito/inventory_pd/cogito_inventory.gd")
+
 ## Dictionary of registered inventories: owner_id -> inventory
 var _inventories: Dictionary = {}
 
@@ -18,7 +21,7 @@ func _ready() -> void:
 
 ## Register an inventory in the system
 ## owner_id can be player_id or any unique identifier for the owner
-func register_inventory(owner_id: int, inventory: Resource) -> void:
+func register_inventory(owner_id: int, inventory: CogitoInventory) -> void:
 	if not inventory:
 		push_error("InventoryManager: Cannot register null inventory")
 		return
@@ -56,17 +59,17 @@ func unregister_inventory(owner_id: int) -> void:
 
 
 ## Get an inventory by owner ID
-func get_inventory(owner_id: int) -> Resource:
+func get_inventory(owner_id: int) -> CogitoInventory:
 	return _inventories.get(owner_id)
 
 
 ## Get player inventory by player ID
-func get_player_inventory(player_id: int) -> Resource:
+func get_player_inventory(player_id: int) -> CogitoInventory:
 	return get_inventory(player_id)
 
 
 ## Get local player inventory
-func get_local_player_inventory() -> Resource:
+func get_local_player_inventory() -> CogitoInventory:
 	if PlayerManager and PlayerManager.has_local_player():
 		var player_id = PlayerManager.get_local_player_id()
 		return get_inventory(player_id)
@@ -110,7 +113,7 @@ func clear_all_inventories() -> void:
 
 ## Helper function for backward compatibility
 ## Returns the local player inventory, or falls back to finding inventory from owner
-func get_current_player_inventory() -> Resource:
+func get_current_player_inventory() -> CogitoInventory:
 	# Try to get from local player ID
 	var local_inv = get_local_player_inventory()
 	if local_inv:
