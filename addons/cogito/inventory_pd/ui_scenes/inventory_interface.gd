@@ -181,7 +181,8 @@ func set_external_inventory(_external_inventory_owner):
 	external_inventory_owner = _external_inventory_owner
 	var inventory_data = external_inventory_owner.inventory_data
 
-	inventory_data.owner = external_inventory_owner  # Setting reference to external inventory owner node
+	# Setting reference to external inventory owner node
+	inventory_data.set_owner(external_inventory_owner)
 #	inventory_data.inventory_interact.connect(on_inventory_interact)
 	inventory_data.inventory_button_press.connect(
 		on_inventory_button_press.bind(external_inventory_ui)
@@ -221,7 +222,8 @@ func set_player_inventory_data(inventory_data: CogitoInventory):
 	var player = PlayerManager.get_current_player() if PlayerManager else null
 	if not player and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
 		player = CogitoSceneManager._current_player_node
-	inventory_data.owner = player  # Setting player inventory owner reference to player node
+	# Setting player inventory owner reference to player node
+	inventory_data.set_owner(player)
 
 #	inventory_data.inventory_interact.connect(on_inventory_interact)
 	if !inventory_data.inventory_button_press.is_connected(on_inventory_button_press):

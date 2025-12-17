@@ -252,6 +252,13 @@ func _ready():
 	var sanity_attribute = player_attributes.get("sanity")
 	if sanity_attribute and visibility_attribute:
 		visibility_attribute.attribute_changed.connect(sanity_attribute.on_visibility_changed)
+	
+	# Register inventory in InventoryManager if it exists
+	if inventory_data:
+		inventory_data.set_owner(self)
+	
+	# Check visibility if attribute exists
+	if visibility_attribute:
 		visibility_attribute.check_current_visibility()
 
 	### CURRENCY SETUP

@@ -23,28 +23,30 @@ signal player_input(player_id: int, action: String, pressed: bool)
 
 #region Inventory Events
 ## Emitted when a player picks up an item
-signal inventory_item_picked(player_id: int, item: InventoryItemPD, slot_data: InventorySlotPD)
+## Note: Using Resource/Variant to avoid class loading order issues
+signal inventory_item_picked(player_id: int, item: Resource, slot_data: Resource)
 ## Emitted when a player drops an item
-signal inventory_item_dropped(player_id: int, item: InventoryItemPD, position: Vector3)
+signal inventory_item_dropped(player_id: int, item: Resource, position: Vector3)
 ## Emitted when an inventory changes (items moved, used, etc.)
-signal inventory_changed(player_id: int, inventory: CogitoInventory)
+signal inventory_changed(player_id: int, inventory: Resource)
 ## Emitted when an item is used from inventory
-signal inventory_item_used(player_id: int, item: InventoryItemPD)
+signal inventory_item_used(player_id: int, item: Resource)
 ## Emitted when an item is equipped to quickslot
-signal item_equipped(player_id: int, item: InventoryItemPD, quickslot_index: int)
+signal item_equipped(player_id: int, item: Resource, quickslot_index: int)
 ## Emitted when an item is unequipped from quickslot
 signal item_unequipped(player_id: int, quickslot_index: int)
 #endregion
 
 #region Quest Events
 ## Emitted when a quest is started for a player
-signal quest_started(player_id: int, quest: CogitoQuest)
+## Note: Using Resource to avoid class loading order issues
+signal quest_started(player_id: int, quest: Resource)
 ## Emitted when a quest is completed by a player
-signal quest_completed(player_id: int, quest: CogitoQuest)
+signal quest_completed(player_id: int, quest: Resource)
 ## Emitted when a quest is updated (counter changed, etc.)
-signal quest_updated(player_id: int, quest: CogitoQuest)
+signal quest_updated(player_id: int, quest: Resource)
 ## Emitted when a quest fails
-signal quest_failed(player_id: int, quest: CogitoQuest)
+signal quest_failed(player_id: int, quest: Resource)
 #endregion
 
 #region World Events
@@ -111,7 +113,7 @@ func emit_player_unregistered(player_id: int) -> void:
 
 
 ## Convenience method to emit inventory changed event
-func emit_inventory_changed(player_id: int, inventory: CogitoInventory) -> void:
+func emit_inventory_changed(player_id: int, inventory: Resource) -> void:
 	emit_event("inventory_changed", [player_id, inventory])
 	inventory_changed.emit(player_id, inventory)
 
@@ -123,4 +125,3 @@ func emit_world_state_changed(key: String, value: Variant, old_value: Variant = 
 		world_state_changed.emit(key, value, old_value)
 	else:
 		world_state_changed.emit(key, value, null)
-

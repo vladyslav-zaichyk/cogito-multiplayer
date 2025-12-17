@@ -16,6 +16,8 @@ signal picked_up_new_inventory_item(slot_data: InventorySlotPD)
 
 var assigned_quickslots: Array[InventorySlotPD]
 var owner: Node
+## Owner ID for multiplayer support (player_id or other unique identifier)
+var owner_id: int = -1
 
 @export var first_slot: InventorySlotPD
 
@@ -70,7 +72,7 @@ func grab_slot_data(index: int) -> InventorySlotPD:
 
 	if slot_data:
 		null_out_slots(slot_data)
-		inventory_updated.emit(self)
+		_emit_inventory_updated()
 		return slot_data
 	else:
 		return null
@@ -82,7 +84,7 @@ func grab_single_slot_data(index: int) -> InventorySlotPD:
 		slot_data.quantity -= 1
 		if slot_data.quantity < 1:
 			null_out_slots(slot_data)
-		inventory_updated.emit(self)
+		_emit_inventory_updated()
 		return slot_data
 	else:
 		return null
@@ -106,7 +108,7 @@ func use_slot_data(index: int):
 		if slot_data.quantity < 1:
 			null_out_slots(slot_data)
 
-	inventory_updated.emit(self)
+	_emit_inventory_updated()
 
 
 # Function to remove a specific item from inventory directly (without picking it up etc)
@@ -121,7 +123,7 @@ func remove_slot_data(slot_data_to_remove: InventorySlotPD):
 	else:
 		print("Removing ", slot_data_to_remove, " at index ", index)
 		null_out_slots(slot_data_to_remove)
-		inventory_updated.emit(self)
+		_emit_inventory_updated()
 
 
 func remove_item_from_stack(slot_data: InventorySlotPD):
@@ -143,7 +145,7 @@ func remove_item_from_stack(slot_data: InventorySlotPD):
 			if quickslot_index > -1:
 				unbind_quickslot_by_index.emit(quickslot_index)
 
-		inventory_updated.emit(self)
+		_emit_inventory_updated()
 
 
 func drop_slot_data(grabbed_slot_data: InventorySlotPD, index: int) -> InventorySlotPD:
@@ -274,7 +276,7 @@ func pick_up_slot_data(slot_data: InventorySlotPD) -> bool:
 		if inventory_slots[index] and inventory_slots[index].can_fully_merge_with(slot_data):
 			slot_data.origin_index = index
 			inventory_slots[index].fully_merge_with(slot_data)
-			inventory_updated.emit(self)
+			_emit_inventory_updated()
 			return true
 
 	for index in inventory_slots.size():
@@ -282,8 +284,11 @@ func pick_up_slot_data(slot_data: InventorySlotPD) -> bool:
 		if not inventory_slots[index] and is_enough_space(slot_data, index, true):
 			inventory_slots[index] = slot_data
 			add_adjacent_slots(index)
-			inventory_updated.emit(self)
+			_emit_inventory_updated()
 			picked_up_new_inventory_item.emit(slot_data)
+			# Emit through Event Bus
+			if owner_id != -1 and NetworkEventBus:
+				NetworkEventBus.inventory_item_picked.emit(owner_id, slot_data.inventory_item, slot_data)
 			return true
 
 	# Try to get player from owner, PlayerManager, or fallback to CogitoSceneManager
@@ -366,6 +371,30 @@ func get_item_to_swap(grabbed_slot_data: InventorySlotPD, to_place_index: int):
 				return adj_item
 
 
+## Set owner and register inventory in InventoryManager
+func set_owner(new_owner: Node) -> void:
+	owner = new_owner
+	
+	# Try to get owner_id from owner
+	if owner and owner.has_method("get"):
+		var pid = owner.get("player_id")
+		if pid != null and pid != -1:
+			owner_id = pid
+			# Register in InventoryManager
+			if InventoryManager and not InventoryManager.has_inventory(owner_id):
+				InventoryManager.register_inventory(owner_id, self)
+			return
+	
+	# If owner is a player but doesn't have player_id yet, try to get it
+	if owner and owner is CogitoPlayer:
+		if PlayerManager and PlayerManager.has_local_player():
+			var local_player = PlayerManager.get_local_player()
+			if local_player == owner:
+				owner_id = PlayerManager.get_local_player_id()
+				if InventoryManager and owner_id != -1 and not InventoryManager.has_inventory(owner_id):
+					InventoryManager.register_inventory(owner_id, self)
+
+
 ## Helper function to get player node (for backward compatibility)
 func _get_player_node() -> Node:
 	# First try to use owner if it's a player
@@ -381,6 +410,24 @@ func _get_player_node() -> Node:
 		return CogitoSceneManager._current_player_node
 	
 	return null
+
+
+## Emit inventory updated event through both local signal and Event Bus
+func _emit_inventory_updated() -> void:
+	inventory_updated.emit(self)
+	
+	# Try to ensure owner_id is set
+	if owner_id == -1 and owner and owner is CogitoPlayer:
+		var player = owner as CogitoPlayer
+		if player.has_method("get") and player.get("player_id") != null and player.player_id != -1:
+			owner_id = player.player_id
+			# Register in InventoryManager if not already registered
+			if InventoryManager and not InventoryManager.has_inventory(owner_id):
+				InventoryManager.register_inventory(owner_id, self)
+	
+	# Emit through Event Bus if owner_id is set
+	if owner_id != -1 and NetworkEventBus:
+		NetworkEventBus.inventory_changed.emit(owner_id, self)
 
 
 ## Returns whether the given item fits in inventory

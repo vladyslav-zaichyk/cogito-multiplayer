@@ -35,7 +35,7 @@ func _on_player_registered(player_id: int, player_node: Node) -> void:
 	print("Event Bus Test: Player registered - ID: %d, Node: %s" % [player_id, player_node.name])
 
 
-func _on_inventory_changed(player_id: int, inventory: CogitoInventory) -> void:
+func _on_inventory_changed(player_id: int, inventory: Resource) -> void:
 	print("Event Bus Test: Inventory changed - Player ID: %d" % player_id)
 
 

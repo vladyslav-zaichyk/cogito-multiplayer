@@ -28,6 +28,7 @@ CogitoQuestManager="*res://addons/cogito/quest_system/cogito_quest_manager.gd"
 MenuTemplateManager="*res://addons/cogito/easy_menus/Nodes/menu_template_manager.tscn"
 NetworkEventBus="*res://addons/cogito/network/event_bus.gd"
 PlayerManager="*res://addons/cogito/network/player_manager.gd"
+InventoryManager="*res://addons/cogito/network/inventory_manager.gd"
 
 [display]
 
