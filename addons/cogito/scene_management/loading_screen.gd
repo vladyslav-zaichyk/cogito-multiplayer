@@ -58,9 +58,11 @@ func _process(_delta):
 					"Attempting to load scene state: " + next_scene_state_filename
 				)
 				CogitoSceneManager.load_scene_state(next_scene_state_filename, "temp")  # Loading temp scene state
-				CogitoSceneManager.load_player_state(
-					CogitoSceneManager._current_player_node, "temp"
-				)  # Loading temp player state.
+				# Get player from PlayerManager (new system) or fallback to old system
+				var player = PlayerManager.get_current_player() if PlayerManager else null
+				if not player and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+					player = CogitoSceneManager._current_player_node
+				CogitoSceneManager.load_player_state(player, "temp")  # Loading temp player state.
 		else:
 			CogitoGlobals.debug_log(
 				true, "loading_screen.gd", "Load mode 2 (RESET), ignoring scene and player states."

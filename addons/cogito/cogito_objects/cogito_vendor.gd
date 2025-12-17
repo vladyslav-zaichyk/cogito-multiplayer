@@ -42,8 +42,16 @@ func _ready():
 	currency_check.connect("transaction_success", Callable(self, "_on_transaction_success"))
 
 	await get_tree().process_frame
-	var player_node = CogitoSceneManager._current_player_node
-	player_interaction_component = (player_node as CogitoPlayer).player_interaction_component
+	# Get player from PlayerManager (new system) or fallback to old system
+	var player_node = PlayerManager.get_current_player() if PlayerManager else null
+	if not player_node and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+		player_node = CogitoSceneManager._current_player_node
+	
+	if player_node and player_node is CogitoPlayer:
+		player_interaction_component = player_node.player_interaction_component
+	else:
+		push_warning("CogitoVendor: Could not find player node")
+		return
 	for attribute in player_node.find_children("", "CogitoCurrency", false):
 		if attribute is CogitoCurrency and attribute.currency_name == currency_check.currency_name:
 			currency_attribute = attribute

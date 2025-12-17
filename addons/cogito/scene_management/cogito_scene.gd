@@ -18,9 +18,16 @@ func move_player_to_connector(connector_name: String):
 			CogitoGlobals.debug_log(
 				true, "CogitoScene.gd", "Connector found, moving player to " + node.get_name()
 			)
-			CogitoSceneManager._current_player_node.global_position = node.global_position
-			CogitoSceneManager._current_player_node.body.global_rotation = node.global_rotation
-			return
+			# Get player from PlayerManager (new system) or fallback to old system
+			var player = PlayerManager.get_current_player() if PlayerManager else null
+			if not player and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+				player = CogitoSceneManager._current_player_node
+		
+			if player:
+				player.global_position = node.global_position
+				if player.has_method("get") and player.get("body"):
+					player.body.global_rotation = node.global_rotation
+				return
 
 	CogitoGlobals.debug_log(
 		true, "CogitoScene.gd", "No connector with name " + connector_name + " found."
@@ -43,7 +50,11 @@ func _enter_tree() -> void:
 func save_temp() -> void:
 	var current_scene_statename = get_tree().get_current_scene().get_name()
 	CogitoSceneManager.save_scene_state(current_scene_statename, "temp")
-	CogitoSceneManager.save_player_state(CogitoSceneManager._current_player_node, "temp")
+	# Get player from PlayerManager (new system) or fallback to old system
+	var player = PlayerManager.get_current_player() if PlayerManager else null
+	if not player and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+		player = CogitoSceneManager._current_player_node
+	CogitoSceneManager.save_player_state(player, "temp")
 
 
 func setup_bgm() -> void:

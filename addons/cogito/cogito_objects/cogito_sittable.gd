@@ -122,7 +122,10 @@ var interaction_component_state: bool = false
 
 func _ready():
 	#find player node
-	player_node = CogitoSceneManager._current_player_node
+	# Get player from PlayerManager (new system) or fallback to old system
+	player_node = PlayerManager.get_current_player() if PlayerManager else null
+	if not player_node and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+		player_node = CogitoSceneManager._current_player_node
 	self.add_to_group("interactable")
 	add_to_group("save_object_state")
 	interaction_nodes = find_children("", "InteractionComponent", true)  #Grabs all attached interaction components

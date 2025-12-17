@@ -159,9 +159,11 @@ func _on_save_button_pressed() -> void:
 	CogitoSceneManager._current_scene_name = get_tree().get_current_scene().get_name()
 	CogitoSceneManager._current_scene_path = get_tree().current_scene.scene_file_path
 	CogitoSceneManager._screenshot_to_save = temp_screenshot
-	CogitoSceneManager.save_player_state(
-		CogitoSceneManager._current_player_node, CogitoSceneManager._active_slot
-	)
+	# Get player from PlayerManager (new system) or fallback to old system
+	var player = PlayerManager.get_current_player() if PlayerManager else null
+	if not player and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+		player = CogitoSceneManager._current_player_node
+	CogitoSceneManager.save_player_state(player, CogitoSceneManager._active_slot)
 	#CogitoSceneManager.save_scene_state(CogitoSceneManager._current_scene_name,CogitoSceneManager._active_slot)
 	CogitoSceneManager.save_scene_state(CogitoSceneManager._current_scene_name, "temp")
 	CogitoSceneManager.copy_temp_saves_to_slot(CogitoSceneManager._active_slot)

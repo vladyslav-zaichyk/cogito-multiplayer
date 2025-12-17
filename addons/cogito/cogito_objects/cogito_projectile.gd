@@ -51,10 +51,17 @@ func on_timeout():
 ## Checking collision event for property tags.
 func _on_body_entered(collider: Node):
 	var collision_point = global_transform.origin
-	var bullet_direction = (
-		(collision_point - CogitoSceneManager._current_player_node.get_global_transform().origin)
-		. normalized()
-	)  ##This is hacky TODO needs to be fixed for Multiplayer support
+	# Get player from PlayerManager (new system) or fallback to old system
+	var player = PlayerManager.get_current_player() if PlayerManager else null
+	if not player and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+		player = CogitoSceneManager._current_player_node
+	
+	var bullet_direction = Vector3.ZERO
+	if player:
+		bullet_direction = (
+			(collision_point - player.get_global_transform().origin)
+			. normalized()
+		)  ##This is hacky TODO needs to be fixed for Multiplayer support
 
 	if stick_on_impact:
 		self.linear_velocity = Vector3.ZERO

@@ -18,9 +18,15 @@ func _ready() -> void:
 	progress_wheel.current_value = 0.0
 	hold_timer.timeout.connect(_on_hold_complete)
 	await get_tree().process_frame
-	player_interaction_component = (
-		(CogitoSceneManager._current_player_node as CogitoPlayer).player_interaction_component
-	)
+	# Get player from PlayerManager (new system) or fallback to old system
+	var player = PlayerManager.get_current_player() if PlayerManager else null
+	if not player and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+		player = CogitoSceneManager._current_player_node
+	
+	if player and player is CogitoPlayer:
+		player_interaction_component = player.player_interaction_component
+	else:
+		push_warning("UiHoldComponent: Could not find player node to get interaction component")
 
 
 func _process(_delta: float) -> void:

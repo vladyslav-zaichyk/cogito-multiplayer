@@ -193,7 +193,13 @@ func check_for_item() -> bool:
 
 
 func _on_damage_received(_damage, _bullet_direction, _bullet_position):
-	interact(CogitoSceneManager._current_player_node.player_interaction_component)
+	# Get player from PlayerManager (new system) or fallback to old system
+	var player = PlayerManager.get_current_player() if PlayerManager else null
+	if not player and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+		player = CogitoSceneManager._current_player_node
+	
+	if player and player.has_method("player_interaction_component"):
+		interact(player.player_interaction_component)
 
 
 func set_state():

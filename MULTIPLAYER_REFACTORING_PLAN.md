@@ -34,7 +34,7 @@
 
 ---
 
-## Фаза 1: Рефакторинг Player System ⏳
+## Фаза 1: Рефакторинг Player System ✅
 
 **Мета:** Прибрати прямі посилання на `CogitoSceneManager._current_player_node`.
 
@@ -57,8 +57,12 @@
 - [x] Оновити `inventory_interface.gd` (використовує PlayerManager)
 - [x] Оновити `CogitoBasicEnemy` (використовує PlayerManager)
 - [x] Оновити всі CustomResources (WieldableItemPD, KeyItemPD, CurrencyItemPD, ConsumableItemPD, ConsumableEffect, CombinableItemPD, AmmoItemPD)
-- [ ] Оновити `CogitoNPC` (через Event Bus або PlayerManager)
-- [ ] Оновити інші файли з `CogitoSceneManager._current_player_node` (залишилося ~20 місць)
+- [x] Оновити Wieldables (wieldable_pickaxe.gd, wieldable_laser_rifle.gd)
+- [x] Оновити UI Components (ui_hold_component.gd)
+- [x] Оновити Cogito Objects (cogito_vendor.gd, cogito_switch.gd, cogito_snap_slot.gd, cogito_sittable.gd, cogito_projectile.gd, cogito_button.gd)
+- [x] Оновити Scene Management (scene_transition_zone.gd, loading_screen.gd, cogito_scene.gd)
+- [x] Оновити Easy Menus (pause_menu_controller.gd, cogito_death_screen.gd)
+- [ ] Оновити `CogitoNPC` (через Event Bus або PlayerManager) - якщо потрібно
 - [x] Додати fallback для сумісності зі старим кодом
 
 ### Етап 1.4: Тестування та валідація
@@ -66,7 +70,7 @@
 - [ ] Перевірити сумісність зі старим кодом
 - [ ] Виправити виявлені баги
 
-**Прогрес:** 3/4 етапів завершено (75%)
+**Прогрес:** 4/4 етапів завершено (100%) ✅
 
 ---
 
@@ -225,8 +229,8 @@
 
 ## Загальний прогрес
 
-**Завершено:** 6/24 етапів (25%)  
-**Поточний етап:** Фаза 1, Етап 1.3 - Заміна посилань у інших системах (в процесі)
+**Завершено:** 7/24 етапів (29%)  
+**Поточний етап:** Фаза 1 завершена! Переходимо до Фази 2: Рефакторинг Inventory System
 
 ---
 

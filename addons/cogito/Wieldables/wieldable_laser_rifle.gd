@@ -39,7 +39,15 @@ var inventory_item_reference: WieldableItemPD
 func _ready():
 	wieldable_mesh.hide()
 	firing_cooldown = 0
-	player_rid = CogitoSceneManager._current_player_node.get_rid()
+	# Get player from PlayerManager (new system) or fallback to old system
+	var player = PlayerManager.get_current_player() if PlayerManager else null
+	if not player and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+		player = CogitoSceneManager._current_player_node
+	
+	if player:
+		player_rid = player.get_rid()
+	else:
+		push_warning("WieldableLaserRifle: Could not find player node to get RID")
 
 
 func _physics_process(_delta: float) -> void:
