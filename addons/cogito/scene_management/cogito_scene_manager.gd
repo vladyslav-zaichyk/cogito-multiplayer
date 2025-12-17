@@ -51,6 +51,10 @@ func _ready() -> void:
 
 	reset_scene_states()
 	instantiate_fade_panel()
+	
+	# Initialize world state from WorldStateManager if available
+	if WorldStateManager:
+		_current_world_dict = WorldStateManager.get_world_state_dict()
 
 
 func switch_active_slot_to(slot_name: String):
@@ -211,6 +215,10 @@ func load_player_state(player, passed_slot: String):
 		_current_world_dict.clear()
 		for entry in local_dict_copy:
 			_current_world_dict.get_or_add(entry, local_dict_copy[entry])
+		
+		# Sync with WorldStateManager
+		if WorldStateManager:
+			WorldStateManager.set_world_state_dict(_current_world_dict)
 
 		player.global_position = _player_state.player_position
 		player.body.global_rotation = _player_state.player_rotation
@@ -314,11 +322,19 @@ func save_player_state(player, slot: String):
 		_player_state.add_player_currency_to_state_data(currency, currency_data)
 
 	## Saving world dictionary
-	var local_dict_copy: Dictionary = _current_world_dict.duplicate(true)
+	# Get world state from WorldStateManager if available, otherwise use local dict
+	var world_dict_to_save: Dictionary
+	if WorldStateManager:
+		world_dict_to_save = WorldStateManager.get_world_state_dict()
+		# Also update local dict for backward compatibility
+		_current_world_dict = world_dict_to_save.duplicate(true)
+	else:
+		world_dict_to_save = _current_world_dict.duplicate(true)
+	
 	_player_state.clear_world_dictionary()
-	for entry in local_dict_copy:
+	for entry in world_dict_to_save:
 		CogitoGlobals.debug_log(true, "CSM", "World Dict: attemtping to save key: " + str(entry))
-		_player_state.add_to_world_dictionary(entry, local_dict_copy[entry])
+		_player_state.add_to_world_dictionary(entry, world_dict_to_save[entry])
 
 	## Adding a screenshot
 	var screenshot_path: String = str(_player_state.player_state_dir + _active_slot + ".png")

@@ -16,6 +16,7 @@ func _enter_tree():
 	add_autoload_singleton("NetworkEventBus", "/network/event_bus.gd")
 	add_autoload_singleton("PlayerManager", "/network/player_manager.gd")
 	add_autoload_singleton("InventoryManager", "/network/inventory_manager.gd")
+	add_autoload_singleton("WorldStateManager", "/network/world_state_manager.gd")
 
 	# Initialization of the plugin goes here.
 	parser_plugin = load("res://addons/cogito/Localization/scripts/loc_resource_parser.gd").new()
@@ -32,6 +33,7 @@ func _exit_tree():
 	remove_autoload_singleton("NetworkEventBus")
 	remove_autoload_singleton("PlayerManager")
 	remove_autoload_singleton("InventoryManager")
+	remove_autoload_singleton("WorldStateManager")
 
 	remove_translation_parser_plugin(parser_plugin)
 

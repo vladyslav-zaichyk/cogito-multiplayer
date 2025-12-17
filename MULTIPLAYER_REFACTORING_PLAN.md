@@ -132,20 +132,24 @@
 
 ---
 
-## Фаза 4: Рефакторинг World State ⏳
+## Фаза 4: Рефакторинг World State 🟡
 
 **Мета:** Зробити світовий стан спільним для всіх гравців.
 
 ### Етап 4.1: Створення WorldStateManager
-- [ ] Створити `addons/cogito/network/world_state_manager.gd` (автолоад)
-- [ ] Централізувати управління світовим станом
-- [ ] Емітувати події через Event Bus
-- [ ] Зареєструвати як автолоад у плагіні
+- [x] Створити `addons/cogito/network/world_state_manager.gd` (автолоад)
+- [x] Централізувати управління світовим станом
+- [x] Емітувати події через Event Bus
+- [x] Зареєструвати як автолоад у плагіні
 
 ### Етап 4.2: Оновлення CogitoSceneManager
-- [ ] Використовувати `WorldStateManager` замість `_current_world_dict`
-- [ ] Емітувати події через Event Bus
-- [ ] Зберегти сумісність зі старим кодом
+- [x] Використовувати `WorldStateManager` замість `_current_world_dict`
+- [x] Емітувати події через Event Bus (через WorldStateManager)
+- [x] Зберегти сумісність зі старим кодом
+- [x] Оновити world_property_setter.gd
+- [x] Оновити main_menu_saveslot_manager.gd
+- [x] Оновити cogito_death_screen.gd
+- [x] Оновити cogito_rotator_tool.gd
 
 ### Етап 4.3: Тестування
 - [ ] Перевірити роботу світового стану
@@ -234,8 +238,8 @@
 
 ## Загальний прогрес
 
-**Завершено:** 12/24 етапів (50%)  
-**Поточний етап:** Фаза 3, Етап 3.3 - Тестування Quest System
+**Завершено:** 14/24 етапів (58%)  
+**Поточний етап:** Фаза 4, Етап 4.3 - Тестування World State
 
 ---
 
@@ -287,4 +291,8 @@
 - ✅ Додано `player_id` до `CogitoQuest` для підтримки множинних гравців
 - ✅ Оновлено `CogitoQuestManager` для емісії подій через Event Bus
 - ✅ Додано методи для отримання квестів за player_id
+- ✅ Створено `WorldStateManager` для централізованого управління світовим станом
+- ✅ Інтегровано WorldStateManager з Event Bus
+- ✅ Оновлено CogitoSceneManager для використання WorldStateManager
+- ✅ Оновлено всі файли, що використовують _current_world_dict
 
