@@ -4,7 +4,7 @@ extends Node
 ## Note: This is an autoload singleton, not a class_name
 
 ## Enable/disable logging
-var enable_logging: bool = false
+var enable_logging: bool = true  # Enable for debugging
 
 ## Path to the player scene
 const PLAYER_SCENE_PATH = "res://addons/cogito/packed_scenes/cogito_player.tscn"
@@ -56,12 +56,41 @@ func _on_scene_changed(scene_path: String, scene_name: String) -> void:
 	# Wait a bit for scene to be fully ready
 	await get_tree().create_timer(0.5).timeout
 	
+	# Create spawn points if in multiplayer
+	if NetworkManager and NetworkManager.is_multiplayer():
+		var scene_root = get_tree().current_scene
+		if scene_root:
+			_create_spawn_points_for_scene(scene_root)
+	
 	# Spawn players if in multiplayer
 	if NetworkManager and NetworkManager.is_multiplayer():
 		_spawn_all_players()
 	else:
 		# Single-player: spawn local player if not already spawned
 		_spawn_local_player_singleplayer()
+
+
+## Create spawn points for the current scene
+func _create_spawn_points_for_scene(scene_root: Node) -> void:
+	# Check if spawn points already exist
+	var existing_spawn_points = scene_root.get_tree().get_nodes_in_group("SpawnPoint")
+	if existing_spawn_points.size() > 0:
+		CogitoGlobals.debug_log(
+			enable_logging,
+			"PlayerSpawner",
+			"Scene already has %d spawn points" % existing_spawn_points.size()
+		)
+		return
+	
+	# Create spawn points utility
+	var spawn_points_util = preload("res://addons/cogito/network/multiplayer_spawn_points.gd").new()
+	var created_spawn_points = spawn_points_util.create_spawn_points_from_connectors(scene_root)
+	
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"PlayerSpawner",
+		"Created %d spawn points for scene" % created_spawn_points.size()
+	)
 
 
 ## Spawn all players (multiplayer)
@@ -119,10 +148,7 @@ func _spawn_local_player() -> void:
 		push_error("PlayerSpawner: Failed to instantiate player")
 		return
 	
-	# Set spawn position
-	player_instance.global_position = spawn_pos
-	
-	# Add to scene tree
+	# Add to scene tree first
 	var scene_root = get_tree().current_scene
 	if not scene_root:
 		push_error("PlayerSpawner: No current scene found")
@@ -130,22 +156,28 @@ func _spawn_local_player() -> void:
 	
 	scene_root.add_child(player_instance)
 	
+	# Set spawn position after adding to tree
+	player_instance.global_position = spawn_pos
+	
 	# Register player
 	if PlayerManager:
 		var player_id = PlayerManager.register_player(player_instance, true)  # true = is_local
+		# Set peer_id for this player
+		PlayerManager.set_player_peer_id(player_id, local_peer_id)
 		CogitoGlobals.debug_log(
 			enable_logging,
 			"PlayerSpawner",
-			"Local player spawned with ID: %d at position: %s" % [player_id, spawn_pos]
+			"Local player spawned with ID: %d (peer_id: %d) at position: %s" % [player_id, local_peer_id, spawn_pos]
 		)
 		
-		# Notify other peers
-		if NetworkManager.is_host():
+		# Notify other peers about local player spawn (both host and clients)
+		# Host needs to notify clients about himself, clients need to notify host about themselves
+		if NetworkManager.is_multiplayer():
 			_player_spawned.rpc(local_peer_id, spawn_pos)
 	
-	# Set network authority (local player controls their own character)
-	if multiplayer:
-		multiplayer.set_authority(player_instance.get_path(), local_peer_id)
+	# In Godot 4, authority is managed through RPC attributes
+	# Local player will control their own character through RPCs
+	# We don't need to explicitly set authority here
 
 
 ## Spawn remote players (host only)
@@ -155,14 +187,44 @@ func _spawn_remote_players() -> void:
 	
 	var connected_peers = NetworkManager.get_connected_peers()
 	
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"PlayerSpawner",
+		"[HOST] Spawning remote players for %d connected peers" % connected_peers.size()
+	)
+	
 	for peer_id in connected_peers:
 		# Spawn remote player for this peer
 		_spawn_remote_player(peer_id)
+	
+	# After spawning all remote players, notify clients about host (peer_id = 1)
+	# This ensures clients can see the host
+	if PlayerManager and PlayerManager.has_local_player():
+		var local_player = PlayerManager.get_local_player()
+		if local_player:
+			var host_spawn_pos = local_player.global_position
+			CogitoGlobals.debug_log(
+				enable_logging,
+				"PlayerSpawner",
+				"[HOST] Notifying clients about host spawn at position: %s" % host_spawn_pos
+			)
+			_player_spawned.rpc(1, host_spawn_pos)
 
 
 ## Spawn a remote player for a specific peer
 func _spawn_remote_player(peer_id: int) -> void:
+	# This function is only for host to spawn representations of remote players
+	# Clients spawn remote players via _player_spawned RPC
 	if not NetworkManager or not NetworkManager.is_host():
+		return
+	
+	# Check if player already exists
+	if PlayerManager and PlayerManager.has_player_by_peer_id(peer_id):
+		CogitoGlobals.debug_log(
+			enable_logging,
+			"PlayerSpawner",
+			"Remote player for peer %d already exists, skipping spawn" % peer_id
+		)
 		return
 	
 	# Get spawn position
@@ -179,10 +241,7 @@ func _spawn_remote_player(peer_id: int) -> void:
 		push_error("PlayerSpawner: Failed to instantiate remote player")
 		return
 	
-	# Set spawn position
-	player_instance.global_position = spawn_pos
-	
-	# Add to scene tree
+	# Add to scene tree first
 	var scene_root = get_tree().current_scene
 	if not scene_root:
 		push_error("PlayerSpawner: No current scene found")
@@ -190,20 +249,25 @@ func _spawn_remote_player(peer_id: int) -> void:
 	
 	scene_root.add_child(player_instance)
 	
-	# Set network authority (remote player controls their own character)
-	if multiplayer:
-		multiplayer.set_authority(player_instance.get_path(), peer_id)
+	# Set spawn position after adding to tree
+	player_instance.global_position = spawn_pos
+	
+	# In Godot 4, authority is managed through RPC attributes, not set_authority()
+	# The remote player will control their own character through RPCs
+	# We don't need to explicitly set authority here
 	
 	# Register player
 	if PlayerManager:
 		var player_id = PlayerManager.register_player(player_instance, false)  # false = not local
+		# Set peer_id for this player
+		PlayerManager.set_player_peer_id(player_id, peer_id)
 		CogitoGlobals.debug_log(
 			enable_logging,
 			"PlayerSpawner",
 			"Remote player spawned for peer %d with ID: %d at position: %s" % [peer_id, player_id, spawn_pos]
 		)
 	
-	# Notify all clients about this spawn
+	# Notify all clients about this spawn (host spawns representation of remote player)
 	_player_spawned.rpc(peer_id, spawn_pos)
 
 
@@ -220,50 +284,126 @@ func _request_spawn_info() -> void:
 
 
 ## RPC: Notify all clients that a player has spawned
-@rpc("authority", "call_local", "reliable")
+@rpc("any_peer", "call_local", "reliable")
 func _player_spawned(peer_id: int, spawn_position: Vector3) -> void:
-	# Only process on clients (host already spawned)
+	# Get sender peer ID to determine who sent this
+	var sender_id = 0
+	if multiplayer.has_multiplayer_peer():
+		sender_id = multiplayer.get_remote_sender_id()
+		# If sender_id is 0, it means this is a local call (call_local)
+		if sender_id == 0:
+			sender_id = NetworkManager.get_local_peer_id() if NetworkManager else 0
+	
+	var role = "[HOST]" if NetworkManager and NetworkManager.is_host() else "[CLIENT]"
+	
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"PlayerSpawner",
+		"%s Received _player_spawned RPC: peer_id=%d, sender_id=%d, spawn_pos=%s" % [role, peer_id, sender_id, spawn_position]
+	)
+	
+	# If we're the host and this is about a remote player, we already spawned them
+	# But if this is about the sender's own player, we need to spawn them
 	if NetworkManager and NetworkManager.is_host():
-		return
+		# Host already spawned remote players via _spawn_remote_players()
+		# But if a client is notifying about themselves, we need to spawn them
+		if sender_id == peer_id and sender_id != 1:
+			# Client is notifying about themselves, spawn them
+			if not PlayerManager or not PlayerManager.has_player_by_peer_id(peer_id):
+				CogitoGlobals.debug_log(
+					enable_logging,
+					"PlayerSpawner",
+					"[HOST] Client %d notified about their spawn, creating representation" % peer_id
+				)
+				# Spawn representation of this client on host
+				_spawn_remote_player(peer_id)
+		# If this is about the host (peer_id == 1), we already spawned ourselves locally
+		# Don't spawn again, but also don't return - let clients process it
+		# Actually, we should return here because host doesn't need to process RPC about itself
+		if peer_id == 1:
+			CogitoGlobals.debug_log(
+				enable_logging,
+				"PlayerSpawner",
+				"[HOST] Ignoring RPC about ourselves (peer_id=1), already spawned locally"
+			)
+			return
+	
+	# Check if scene is loaded - if not, wait for it
+	var scene_root = get_tree().current_scene
+	if not scene_root:
+		CogitoGlobals.debug_log(
+			enable_logging,
+			"PlayerSpawner",
+			"Scene not loaded yet, waiting for scene to load before spawning player %d" % peer_id
+		)
+		# Wait for scene to be loaded
+		await _wait_for_scene_loaded()
+		scene_root = get_tree().current_scene
+		if not scene_root:
+			push_error("PlayerSpawner: Scene still not loaded after waiting")
+			return
 	
 	# Check if we already have this player
 	if PlayerManager and PlayerManager.has_player_by_peer_id(peer_id):
+		CogitoGlobals.debug_log(
+			enable_logging,
+			"PlayerSpawner",
+			"%s Player for peer %d already exists, skipping spawn" % [role, peer_id]
+		)
 		return
+	
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"PlayerSpawner",
+		"%s Player for peer %d does not exist, proceeding with spawn" % [role, peer_id]
+	)
+	
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"PlayerSpawner",
+		"[CLIENT] Spawning remote player for peer %d at position: %s" % [peer_id, spawn_position]
+	)
 	
 	# Spawn remote player representation
 	var player_scene = load(REMOTE_PLAYER_SCENE_PATH) as PackedScene
 	if not player_scene:
-		push_error("PlayerSpawner: Failed to load remote player scene")
+		push_error("PlayerSpawner: [CLIENT] Failed to load remote player scene")
 		return
 	
 	var player_instance = player_scene.instantiate()
 	if not player_instance:
-		push_error("PlayerSpawner: Failed to instantiate remote player")
+		push_error("PlayerSpawner: [CLIENT] Failed to instantiate remote player")
 		return
 	
-	# Set spawn position
-	player_instance.global_position = spawn_position
-	
-	# Add to scene tree
-	var scene_root = get_tree().current_scene
-	if not scene_root:
-		push_error("PlayerSpawner: No current scene found")
-		return
-	
+	# Add to scene tree first
 	scene_root.add_child(player_instance)
 	
-	# Set network authority (remote player controls their own character)
-	if multiplayer:
-		multiplayer.set_authority(player_instance.get_path(), peer_id)
+	# Set spawn position after adding to tree
+	player_instance.global_position = spawn_position
+	
+	# In Godot 4, authority is managed through RPC attributes
+	# The remote player will control their own character through RPCs
+	# We don't need to explicitly set authority here
 	
 	# Register player
 	if PlayerManager:
 		var player_id = PlayerManager.register_player(player_instance, false)  # false = not local
+		# Set peer_id for this player
+		PlayerManager.set_player_peer_id(player_id, peer_id)
 		CogitoGlobals.debug_log(
 			enable_logging,
 			"PlayerSpawner",
-			"Remote player spawned for peer %d with ID: %d at position: %s" % [peer_id, player_id, spawn_position]
+			"[CLIENT] Remote player spawned for peer %d with ID: %d at position: %s" % [peer_id, player_id, spawn_position]
 		)
+	else:
+		push_error("PlayerSpawner: [CLIENT] PlayerManager not found, cannot register player")
+
+
+## Wait for scene to be loaded
+func _wait_for_scene_loaded() -> void:
+	# Wait until we have a current scene
+	while not get_tree().current_scene:
+		await get_tree().process_frame
 
 
 ## Get spawn position for a peer

@@ -5,6 +5,8 @@ extends Control
 signal connect_pressed(address: String, port: int)
 signal cancel_pressed
 
+const LOBBY_MENU_PATH = "res://addons/cogito/easy_menus/Scenes/lobby_menu.tscn"
+
 @export var sound_hover: AudioStream
 @export var sound_click: AudioStream
 
@@ -125,6 +127,8 @@ func _on_network_connected(peer_id: int) -> void:
 	_set_status("Connected! Peer ID: %d" % peer_id, false)
 	# Emit signal for parent to handle navigation
 	connect_pressed.emit(ip_address_edit.text.strip_edges(), port_edit.text.strip_edges().to_int())
+	# Load lobby menu after successful connection
+	_load_lobby_menu()
 
 
 func _on_network_error(error: String) -> void:
@@ -179,6 +183,25 @@ func _is_valid_hostname(hostname: String) -> bool:
 			return false
 	
 	return true
+
+
+func _load_lobby_menu() -> void:
+	var scene = load(LOBBY_MENU_PATH) as PackedScene
+	if not scene:
+		push_error("JoinGameMenu: Failed to load lobby menu")
+		return
+	
+	var instance = scene.instantiate()
+	if not instance:
+		push_error("JoinGameMenu: Failed to instantiate lobby menu")
+		return
+	
+	# Replace current menu
+	var tree = get_tree()
+	if tree:
+		visible = false
+		get_parent().add_child(instance)
+		call_deferred("queue_free")
 
 
 func _input(event: InputEvent) -> void:

@@ -241,3 +241,27 @@ func _on_server_disconnected() -> void:
 	if NetworkEventBus:
 		NetworkEventBus.network_error.emit("Server disconnected")
 
+
+## RPC: Sync player position (called from NetworkPositionSync)
+@rpc("any_peer", "call_local", "unreliable")
+func sync_player_position(peer_id: int, position: Vector3) -> void:
+	# Route to the correct player's NetworkPositionSync component
+	if PlayerManager:
+		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		if player_node:
+			var position_sync = player_node.get_node_or_null("NetworkPositionSync")
+			if position_sync:
+				position_sync._receive_position_update(position)
+
+
+## RPC: Sync player rotation (called from NetworkRotationSync)
+@rpc("any_peer", "call_local", "unreliable")
+func sync_player_rotation(peer_id: int, body_rotation: float, head_rotation: float) -> void:
+	# Route to the correct player's NetworkRotationSync component
+	if PlayerManager:
+		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		if player_node:
+			var rotation_sync = player_node.get_node_or_null("NetworkRotationSync")
+			if rotation_sync:
+				rotation_sync._receive_rotation_update(body_rotation, head_rotation)
+

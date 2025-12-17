@@ -8,6 +8,8 @@ signal cancel_pressed
 @export var sound_hover: AudioStream
 @export var sound_click: AudioStream
 
+const LOBBY_MENU_PATH = "res://addons/cogito/easy_menus/Scenes/lobby_menu.tscn"
+
 @onready var server_name_edit: LineEdit = $ContentMain/ServerNameContainer/ServerNameLineEdit
 @onready var port_edit: LineEdit = $ContentMain/PortContainer/PortLineEdit
 @onready var max_players_spin: SpinBox = $ContentMain/MaxPlayersContainer/MaxPlayersSpinBox
@@ -110,6 +112,8 @@ func _on_cancel_pressed() -> void:
 
 func _on_network_connected(peer_id: int) -> void:
 	_set_status("Connected! Peer ID: %d" % peer_id, false)
+	# Load lobby menu after successful connection
+	_load_lobby_menu()
 
 
 func _on_network_error(error: String) -> void:
@@ -123,6 +127,25 @@ func _set_status(message: String, is_error: bool) -> void:
 			status_label.modulate = Color.RED
 		else:
 			status_label.modulate = Color.WHITE
+
+
+func _load_lobby_menu() -> void:
+	var scene = load(LOBBY_MENU_PATH) as PackedScene
+	if not scene:
+		push_error("HostGameMenu: Failed to load lobby menu")
+		return
+	
+	var instance = scene.instantiate()
+	if not instance:
+		push_error("HostGameMenu: Failed to instantiate lobby menu")
+		return
+	
+	# Replace current menu
+	var tree = get_tree()
+	if tree:
+		visible = false
+		get_parent().add_child(instance)
+		call_deferred("queue_free")
 
 
 func _input(event: InputEvent) -> void:

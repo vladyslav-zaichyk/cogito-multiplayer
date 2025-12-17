@@ -244,6 +244,11 @@ func _ready():
 		var rotation_sync = preload("res://addons/cogito/network/network_rotation_sync.gd").new()
 		rotation_sync.name = "NetworkRotationSync"
 		add_child(rotation_sync)
+		
+		# Add visual representation for remote players (or all players)
+		var visual_rep = preload("res://addons/cogito/network/player_visual_representation.gd").new()
+		visual_rep.name = "PlayerVisualRepresentation"
+		add_child(visual_rep)
 	
 	# Disable input and physics for remote players
 	if NetworkManager and NetworkManager.is_multiplayer() and not is_local_player:

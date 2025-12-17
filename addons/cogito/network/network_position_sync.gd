@@ -49,9 +49,37 @@ func _ready() -> void:
 	# Determine if this is local player
 	if NetworkManager and NetworkManager.is_multiplayer() and multiplayer:
 		var local_peer_id = NetworkManager.get_local_peer_id()
-		var authority = multiplayer.get_authority(parent_body.get_path())
-		is_local = (authority == local_peer_id)
-		peer_id = authority if authority > 0 else local_peer_id
+		
+		# Check if parent has is_local_player property (CogitoPlayer)
+		if parent_body.has_method("get") and parent_body.get("is_local_player") != null:
+			is_local = parent_body.is_local_player
+		elif PlayerManager:
+			# Check if this player is registered as local player
+			var player_id = PlayerManager.get_player_id(parent_body)
+			is_local = (PlayerManager.has_local_player() and PlayerManager.get_local_player_id() == player_id)
+		else:
+			# Fallback: assume local if we're the host
+			is_local = NetworkManager.is_host()
+		
+		# Get peer_id - use local_peer_id for local player, or get from PlayerManager for remote
+		if is_local:
+			peer_id = local_peer_id
+		else:
+			# For remote players, get peer_id from PlayerManager
+			if PlayerManager:
+				var player_id = PlayerManager.get_player_id(parent_body)
+				if player_id != -1:
+					peer_id = PlayerManager.get_player_peer_id(player_id)
+					if peer_id == -1:
+						# Fallback: try to get from parent if it has peer_id
+						if parent_body.has_method("get") and parent_body.get("peer_id") != null:
+							peer_id = parent_body.peer_id
+						else:
+							peer_id = local_peer_id  # Temporary fallback
+				else:
+					peer_id = local_peer_id  # Temporary fallback
+			else:
+				peer_id = local_peer_id  # Temporary fallback
 	else:
 		# Single-player: always local
 		is_local = true
@@ -94,6 +122,14 @@ func _send_position_update() -> void:
 	if not parent_body:
 		return
 	
+	# Don't send RPC if we're not in the scene tree yet
+	if not is_inside_tree():
+		return
+	
+	# Don't send RPC if multiplayer is not ready
+	if not multiplayer or not multiplayer.has_multiplayer_peer():
+		return
+	
 	var current_position = parent_body.global_position
 	
 	# Only send if position changed significantly
@@ -112,14 +148,13 @@ func _send_position_update() -> void:
 		
 		NetworkEventBus.player_moved.emit(peer_id, current_position, rotation)
 	
-	# Send RPC to all peers
-	if multiplayer:
-		_sync_position_rpc.rpc(current_position)
+	# Send RPC through NetworkManager (autoload singleton, always available)
+	if NetworkManager and NetworkManager.is_multiplayer():
+		NetworkManager.sync_player_position.rpc(peer_id, current_position)
 
 
-## RPC: Sync position to all clients
-@rpc("any_peer", "call_local", "unreliable")
-func _sync_position_rpc(position: Vector3) -> void:
+## Receive position update (called from NetworkManager RPC)
+func _receive_position_update(position: Vector3) -> void:
 	# Only process if this is a remote player
 	if is_local:
 		return
@@ -162,6 +197,5 @@ func force_sync_position(position: Vector3) -> void:
 	last_synced_position = position
 	target_position = position
 	
-	if is_local and multiplayer:
-		_sync_position_rpc.rpc(position)
-
+	if is_local and NetworkManager and NetworkManager.is_multiplayer():
+		NetworkManager.sync_player_position.rpc(peer_id, position)

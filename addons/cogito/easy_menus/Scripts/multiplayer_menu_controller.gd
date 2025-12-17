@@ -10,6 +10,10 @@ signal back_pressed
 @export var sound_hover: AudioStream
 @export var sound_click: AudioStream
 
+## Paths to menu scenes
+const HOST_GAME_MENU_PATH = "res://addons/cogito/easy_menus/Scenes/host_game_menu.tscn"
+const JOIN_GAME_MENU_PATH = "res://addons/cogito/easy_menus/Scenes/join_game_menu.tscn"
+
 var playback: AudioStreamPlaybackPolyphonic
 
 
@@ -56,14 +60,69 @@ func _play_pressed() -> void:
 
 func _on_host_game_pressed() -> void:
 	host_game_pressed.emit()
+	# Load host game menu
+	_load_menu_scene(HOST_GAME_MENU_PATH)
 
 
 func _on_join_game_pressed() -> void:
 	join_game_pressed.emit()
+	# Load join game menu
+	_load_menu_scene(JOIN_GAME_MENU_PATH)
 
 
 func _on_back_pressed() -> void:
 	back_pressed.emit()
+	# Go back to main menu (or close if no parent menu)
+	_go_back()
+
+
+## Load a menu scene and replace current menu
+func _load_menu_scene(scene_path: String) -> void:
+	var scene = load(scene_path) as PackedScene
+	if not scene:
+		push_error("MultiplayerMenu: Failed to load scene: %s" % scene_path)
+		return
+	
+	var instance = scene.instantiate()
+	if not instance:
+		push_error("MultiplayerMenu: Failed to instantiate scene: %s" % scene_path)
+		return
+	
+	# Replace current scene
+	var tree = get_tree()
+	if tree:
+		var parent = get_parent()
+		if not parent:
+			# If no parent, add to root
+			parent = tree.root
+		
+		# Hide current menu
+		visible = false
+		
+		# Add new menu to scene tree
+		parent.add_child(instance)
+		
+		# Remove current menu after a frame
+		call_deferred("queue_free")
+
+
+## Go back to previous menu
+func _go_back() -> void:
+	# If we're in a menu hierarchy, go back
+	# For now, just close this menu
+	var tree = get_tree()
+	if tree:
+		# Try to find main menu or go to scene tree root
+		var root = tree.root
+		if root:
+			# Look for main menu
+			var main_menu = root.find_child("MainMenu", true, false)
+			if main_menu:
+				main_menu.visible = true
+				queue_free()
+			else:
+				# Just remove this menu
+				queue_free()
 
 
 func _input(event: InputEvent) -> void:

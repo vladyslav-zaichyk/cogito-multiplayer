@@ -6,6 +6,9 @@ extends Node
 ## Dictionary of registered players: player_id -> player_node
 var _players: Dictionary = {}
 
+## Dictionary mapping player_id -> peer_id (for multiplayer)
+var _player_peer_ids: Dictionary = {}
+
 ## ID of the local player (the player controlled by this client)
 var _local_player_id: int = -1
 
@@ -35,12 +38,23 @@ func register_player(player_node: Node, is_local: bool = false) -> int:
 	
 	_players[player_id] = player_node
 	
+	# Store peer_id for multiplayer
+	if NetworkManager and NetworkManager.is_multiplayer():
+		var peer_id = NetworkManager.get_local_peer_id() if is_local else -1
+		# For remote players, we'll set peer_id when we receive spawn info
+		# For now, store local peer_id for local player
+		if is_local:
+			_player_peer_ids[player_id] = peer_id
+		else:
+			# Will be set when we receive spawn info via RPC
+			_player_peer_ids[player_id] = -1
+	
 	if is_local:
 		_local_player_id = player_id
 		CogitoGlobals.debug_log(
 			enable_logging,
 			"PlayerManager",
-			"Local player registered with ID: %d" % player_id
+			"Local player registered with ID: %d (peer_id: %d)" % [player_id, _player_peer_ids.get(player_id, -1)]
 		)
 	else:
 		CogitoGlobals.debug_log(
@@ -67,6 +81,7 @@ func unregister_player(player_id: int) -> void:
 	
 	var player_node = _players[player_id]
 	_players.erase(player_id)
+	_player_peer_ids.erase(player_id)
 	
 	if _local_player_id == player_id:
 		_local_player_id = -1
@@ -137,6 +152,7 @@ func clear_all_players() -> void:
 		unregister_player(player_id)
 	
 	_players.clear()
+	_player_peer_ids.clear()
 	_local_player_id = -1
 	_next_player_id = 1
 	
@@ -163,14 +179,58 @@ func get_current_player() -> Node:
 
 ## Get player by peer ID (for multiplayer)
 func get_player_by_peer_id(peer_id: int) -> Node:
-	# Search through all players
+	# Search through all players using stored peer_id mapping
 	for player_id in _players.keys():
-		var player = _players[player_id]
-		if player and multiplayer:
-			var authority = multiplayer.get_authority(player.get_path())
-			if authority == peer_id:
-				return player
+		if _player_peer_ids.has(player_id) and _player_peer_ids[player_id] == peer_id:
+			CogitoGlobals.debug_log(
+				enable_logging,
+				"PlayerManager",
+				"Found player_id %d for peer_id %d via mapping" % [player_id, peer_id]
+			)
+			return _players[player_id]
+	
+	# Fallback: check local player
+	# NOTE: This should only match if peer_id matches the local player's peer_id
+	# NOT if peer_id == 1 on a client (that would be the host)
+	if _local_player_id != -1:
+		var local_peer_id = -1
+		if NetworkManager and NetworkManager.is_multiplayer():
+			local_peer_id = NetworkManager.get_local_peer_id()
+		
+		# Only return local player if peer_id matches local peer_id
+		# This prevents clients from matching peer_id=1 (host) with their local player
+		if local_peer_id == peer_id and local_peer_id != -1:
+			CogitoGlobals.debug_log(
+				enable_logging,
+				"PlayerManager",
+				"Found local player (player_id %d) for peer_id %d" % [_local_player_id, peer_id]
+			)
+			return _players[_local_player_id]
+	
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"PlayerManager",
+		"No player found for peer_id %d (local_player_id=%d, total_players=%d)" % [peer_id, _local_player_id, _players.size()]
+	)
 	return null
+
+
+## Get peer ID for a player ID
+func get_player_peer_id(player_id: int) -> int:
+	if _player_peer_ids.has(player_id):
+		return _player_peer_ids[player_id]
+	return -1
+
+
+## Set peer ID for a player (called when player spawns via RPC)
+func set_player_peer_id(player_id: int, peer_id: int) -> void:
+	if _players.has(player_id):
+		_player_peer_ids[player_id] = peer_id
+		CogitoGlobals.debug_log(
+			enable_logging,
+			"PlayerManager",
+			"Set peer_id %d for player_id %d" % [peer_id, player_id]
+		)
 
 
 ## Check if player exists by peer ID
@@ -184,4 +244,3 @@ func get_player_id(player_node: Node) -> int:
 		if _players[player_id] == player_node:
 			return player_id
 	return -1
-

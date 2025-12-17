@@ -30,8 +30,10 @@ func _process(_delta):
 		set_process(false)
 		await get_tree().create_timer(forced_delay).timeout
 		var current_scene = get_tree().current_scene  # Stores currently active scene so it can be set later
-		var current_scene_name = current_scene.get_name()
-		current_scene.free()  # Removing previous scene.
+		var current_scene_name = ""
+		if current_scene:
+			current_scene_name = current_scene.get_name()
+			current_scene.free()  # Removing previous scene.
 		var loaded_resource = ResourceLoader.load_threaded_get(next_scene_path)
 		if not loaded_resource is PackedScene:
 			push_error("Failed to load scene: " + next_scene_path)

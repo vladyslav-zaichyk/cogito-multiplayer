@@ -13,9 +13,15 @@ signal leave_lobby_pressed
 @onready var start_game_button: Button = $ContentMain/ButtonContainer/StartGameButton
 @onready var leave_lobby_button: Button = $ContentMain/ButtonContainer/LeaveLobbyButton
 @onready var status_label: Label = $ContentMain/StatusLabel
+@onready var scene_selection_container: VBoxContainer = $ContentMain/SceneSelectionContainer
+@onready var scene_option_button: OptionButton = $ContentMain/SceneSelectionContainer/SceneOptionButton
+@onready var scene_description_label: Label = $ContentMain/SceneSelectionContainer/SceneDescriptionLabel
 
 var playback: AudioStreamPlaybackPolyphonic
 var player_labels: Dictionary = {}  # player_id -> Label node
+
+## Selected scene path (for host)
+var selected_scene_path: String = "res://addons/cogito/demo_scenes/cogito_1_legacy_demo.tscn"
 
 
 func _ready() -> void:
@@ -44,10 +50,26 @@ func _ready() -> void:
 		NetworkEventBus.network_connected.connect(_on_network_connected)
 		NetworkEventBus.network_disconnected.connect(_on_network_disconnected)
 	
+	# Connect to WorldLoadingManager for scene loading completion
+	if WorldLoadingManager:
+		CogitoGlobals.debug_log(
+			true,
+			"LobbyMenu",
+			"Connecting to WorldLoadingManager.all_peers_loaded signal"
+		)
+		WorldLoadingManager.all_peers_loaded.connect(_on_all_peers_loaded)
+	else:
+		CogitoGlobals.debug_log(
+			true,
+			"LobbyMenu",
+			"WARNING: WorldLoadingManager not found!"
+		)
+	
 	# Update UI
 	_update_server_info()
 	_update_start_button_visibility()
 	_refresh_players_list()
+	_setup_scene_selection()
 	
 	# Start update timer
 	var timer = Timer.new()
@@ -106,7 +128,18 @@ func _refresh_players_list() -> void:
 	if not PlayerManager:
 		return
 	
+	# Also show connected peers (even if not spawned yet)
+	# This helps show who's in the lobby before game starts
 	var all_player_ids = PlayerManager.get_all_player_ids()
+	var connected_peers = []
+	if NetworkManager and NetworkManager.is_multiplayer():
+		connected_peers = NetworkManager.get_connected_peers()
+		if NetworkManager.is_host():
+			connected_peers.append(1)  # Add host (peer ID 1)
+		else:
+			# Add local peer ID
+			connected_peers.append(NetworkManager.get_local_peer_id())
+	
 	var current_label_ids = player_labels.keys()
 	
 	# Remove labels for players that no longer exist
@@ -126,7 +159,7 @@ func _refresh_players_list() -> void:
 		# Check if we need to create a new label
 		if not player_labels.has(player_id):
 			var label = Label.new()
-			label.theme_override_font_sizes["font_size"] = 18
+			label.add_theme_font_size_override("font_size", 18)
 			players_list.add_child(label)
 			player_labels[player_id] = label
 		
@@ -140,6 +173,22 @@ func _refresh_players_list() -> void:
 			var is_local = PlayerManager.has_local_player() and PlayerManager.get_local_player_id() == player_id
 			var prefix = "[YOU] " if is_local else ""
 			label.text = prefix + player_name + " (ID: %d)" % player_id
+	
+	# Show connected peers count if no players spawned yet
+	if all_player_ids.size() == 0 and connected_peers.size() > 0:
+		# Show "Waiting for players..." or peer count
+		var info_label = null
+		if not player_labels.has(-1):  # Use -1 as special ID for info label
+			info_label = Label.new()
+			info_label.add_theme_font_size_override("font_size", 16)
+			info_label.modulate = Color.GRAY
+			players_list.add_child(info_label)
+			player_labels[-1] = info_label
+		else:
+			info_label = player_labels[-1]
+		
+		if info_label:
+			info_label.text = "Connected: %d peer(s) (players spawn after game starts)" % connected_peers.size()
 
 
 func _on_player_registered(player_id: int, player_node: Node) -> void:
@@ -156,6 +205,7 @@ func _on_network_connected(peer_id: int) -> void:
 	_update_server_info()
 	_update_start_button_visibility()
 	_refresh_players_list()
+	_setup_scene_selection()
 
 
 func _on_network_disconnected(peer_id: int) -> void:
@@ -171,21 +221,18 @@ func _on_start_game_pressed() -> void:
 		_set_status("Only the host can start the game!", true)
 		return
 	
-	# Check if there are enough players
-	if not PlayerManager:
-		_set_status("PlayerManager not available!", true)
-		return
-	
-	var player_count = PlayerManager.get_player_count()
-	if player_count < 1:
-		_set_status("Need at least 1 player to start!", true)
-		return
+	# In multiplayer, players are spawned after scene loads, not in lobby
+	# So we don't need to check player count here - host can always start
+	# Players will be registered when they spawn in the game scene
 	
 	# Load the game scene using WorldLoadingManager
 	_set_status("Starting game...", false)
 	
-	# Use demo scene for now (can be made configurable later)
-	var demo_scene_path = "res://addons/cogito/demo_scenes/cogito_3_lobby.tscn"
+	# Use selected scene
+	var demo_scene_path = selected_scene_path
+	if demo_scene_path.is_empty():
+		# Fallback to Legacy Demo
+		demo_scene_path = "res://addons/cogito/demo_scenes/cogito_1_legacy_demo.tscn"
 	
 	if WorldLoadingManager:
 		# Start loading scene and wait for all peers
@@ -208,13 +255,49 @@ func _on_start_game_pressed() -> void:
 
 ## Callback when all peers have loaded the scene
 func _on_all_peers_loaded() -> void:
+	var is_client = NetworkManager and NetworkManager.is_connected_client()
+	var role = "[HOST]" if NetworkManager and NetworkManager.is_host() else "[CLIENT]"
+	
 	CogitoGlobals.debug_log(
 		true,
 		"LobbyMenu",
-		"All peers loaded scene - ready to spawn players"
+		"%s All peers loaded scene - ready to spawn players" % role
 	)
+	
+	# Check if we're still in the tree
+	if not is_inside_tree():
+		CogitoGlobals.debug_log(
+			true,
+			"LobbyMenu",
+			"%s Lobby menu not in tree (scene already changed)" % role
+		)
+		return
+	
+	# Check current scene
+	var current_scene = get_tree().current_scene
+	CogitoGlobals.debug_log(
+		true,
+		"LobbyMenu",
+		"%s Current scene: %s" % [role, current_scene.get_name() if current_scene else "null"]
+	)
+	
 	# Hide lobby menu
+	CogitoGlobals.debug_log(
+		true,
+		"LobbyMenu",
+		"%s Hiding lobby menu (visible=%s)" % [role, visible]
+	)
 	visible = false
+	
+	# Disable processing to prevent input handling
+	set_process(false)
+	set_process_input(false)
+	
+	CogitoGlobals.debug_log(
+		true,
+		"LobbyMenu",
+		"%s Lobby menu hidden and processing disabled" % role
+	)
 	# Player spawning will be handled in Phase 1.1
 
 
@@ -235,8 +318,73 @@ func _set_status(message: String, is_error: bool) -> void:
 			status_label.modulate = Color.WHITE
 
 
+## Setup scene selection UI (host only)
+func _setup_scene_selection() -> void:
+	if not scene_selection_container or not scene_option_button:
+		return
+	
+	# Only show scene selection for host
+	var is_host = NetworkManager and NetworkManager.is_multiplayer() and NetworkManager.is_host()
+	scene_selection_container.visible = is_host
+	
+	if not is_host:
+		return
+	
+	# Populate scene options
+	scene_option_button.clear()
+	var scene_config_script = load("res://addons/cogito/network/multiplayer_scene_config.gd")
+	var scene_names = scene_config_script.get_scene_names()
+	
+	for scene_name in scene_names:
+		scene_option_button.add_item(scene_name)
+	
+	# Set default selection (Legacy Demo)
+	var default_index = 0
+	for i in range(scene_names.size()):
+		if scene_names[i] == "Legacy Demo":
+			default_index = i
+			break
+	
+	scene_option_button.selected = default_index
+	selected_scene_path = scene_config_script.get_scene_path(scene_names[default_index])
+	_update_scene_description()
+	
+	# Connect signal
+	if not scene_option_button.item_selected.is_connected(_on_scene_selected):
+		scene_option_button.item_selected.connect(_on_scene_selected)
+
+
+## Update scene description label
+func _update_scene_description() -> void:
+	if not scene_description_label or not scene_option_button:
+		return
+	
+	var scene_config_script = load("res://addons/cogito/network/multiplayer_scene_config.gd")
+	var scene_names = scene_config_script.get_scene_names()
+	var selected_index = scene_option_button.selected
+	
+	if selected_index >= 0 and selected_index < scene_names.size():
+		var scene_name = scene_names[selected_index]
+		var description = scene_config_script.get_scene_description(scene_name)
+		scene_description_label.text = description
+		
+		# Update selected scene path
+		selected_scene_path = scene_config_script.get_scene_path(scene_name)
+
+
+## Callback when scene is selected
+func _on_scene_selected(index: int) -> void:
+	_update_scene_description()
+	
+	# Notify other players about scene change (optional, for future)
+	# For now, just update locally
+
+
 func _input(event: InputEvent) -> void:
+	# Only process input if menu is visible
+	if not visible:
+		return
+	
 	if event.is_action_pressed("ui_cancel") or event.is_action_pressed("menu"):
 		accept_event()
 		_on_leave_lobby_pressed()
-
