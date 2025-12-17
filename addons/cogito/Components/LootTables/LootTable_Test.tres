@@ -2,9 +2,9 @@
 
 [ext_resource type="Script" uid="uid://dj1uuvia16dhm" path="res://addons/cogito/Components/LootTables/BaseLootTable.gd" id="1_mbp3h"]
 [ext_resource type="Script" uid="uid://bw38ep6ean3wy" path="res://addons/cogito/Components/LootTables/LootDropEntry.gd" id="1_rso8h"]
-[ext_resource type="Resource" uid="uid://d7r4y7pbhify" path="res://addons/cogito/InventoryPD/Items/Cogito_Coins.tres" id="2_kbdxw"]
-[ext_resource type="Resource" uid="uid://cpqxudfjtjw66" path="res://addons/cogito/InventoryPD/Items/Cogito_HealthPotion.tres" id="3_jutca"]
-[ext_resource type="Resource" uid="uid://c6rpnmo1y1cw5" path="res://addons/cogito/InventoryPD/Items/Cogito_Dart.tres" id="4_4kscn"]
+[ext_resource type="Resource" uid="uid://d7r4y7pbhify" path="res://addons/cogito/inventory_pd/Items/Cogito_Coins.tres" id="2_kbdxw"]
+[ext_resource type="Resource" uid="uid://cpqxudfjtjw66" path="res://addons/cogito/inventory_pd/Items/Cogito_HealthPotion.tres" id="3_jutca"]
+[ext_resource type="Resource" uid="uid://c6rpnmo1y1cw5" path="res://addons/cogito/inventory_pd/Items/Cogito_Dart.tres" id="4_4kscn"]
 
 [sub_resource type="Resource" id="Resource_w7j6f"]
 script = ExtResource("1_rso8h")

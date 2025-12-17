@@ -1,6 +1,6 @@
 [gd_resource type="Resource" script_class="LootDropEntry" load_steps=3 format=3 uid="uid://dbyaddb6mpg2l"]
 
-[ext_resource type="Resource" uid="uid://d7r4y7pbhify" path="res://addons/cogito/InventoryPD/Items/Cogito_Coins.tres" id="1_woh64"]
+[ext_resource type="Resource" uid="uid://d7r4y7pbhify" path="res://addons/cogito/inventory_pd/Items/Cogito_Coins.tres" id="1_woh64"]
 [ext_resource type="Script" uid="uid://bw38ep6ean3wy" path="res://addons/cogito/Components/LootTables/LootDropEntry.gd" id="2_woh64"]
 
 [resource]

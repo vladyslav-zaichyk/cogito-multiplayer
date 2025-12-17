@@ -2,8 +2,8 @@
 
 [ext_resource type="Script" uid="uid://dvqmxegk58dhe" path="res://addons/cogito/Wieldables/wieldable_laser_rifle.gd" id="1_2rut3"]
 [ext_resource type="AudioStream" uid="uid://clsajk36s7luk" path="res://addons/cogito/Assets/Audio/Kenney/error_004.ogg" id="2_f7ale"]
-[ext_resource type="PackedScene" uid="uid://dnauxhdncgngx" path="res://addons/cogito/PackedScenes/laser_ray.tscn" id="2_ic084"]
-[ext_resource type="PackedScene" uid="uid://bc2hryr610vgo" path="res://addons/cogito/PackedScenes/simple_particle_puff.tscn" id="3_aueyu"]
+[ext_resource type="PackedScene" uid="uid://dnauxhdncgngx" path="res://addons/cogito/packed_scenes/laser_ray.tscn" id="2_ic084"]
+[ext_resource type="PackedScene" uid="uid://bc2hryr610vgo" path="res://addons/cogito/packed_scenes/simple_particle_puff.tscn" id="3_aueyu"]
 [ext_resource type="AnimationLibrary" uid="uid://c1du0rcgmr542" path="res://addons/cogito/Wieldables/Animations/Wieldable_LaserRifle.res" id="3_fjq23"]
 [ext_resource type="Script" uid="uid://b361n7ae3ixmn" path="res://addons/cogito/Assets/Shader/ViewmodelSpace.gd" id="5_fa3wp"]
 
