@@ -51,7 +51,7 @@ func _physics_process(_delta: float) -> void:
 			if animation_player.is_playing():
 				return
 			# Gettting camera_collision pos from player interaction component:
-			var _camera_collision = player_interaction_component.Get_Camera_Collision()
+			var _camera_collision = player_interaction_component.get_camera_collision()
 			hit_scan_collision(_camera_collision) #Do the hitscan
 		
 			animation_player.play(anim_action_primary)

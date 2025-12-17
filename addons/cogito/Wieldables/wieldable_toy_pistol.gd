@@ -59,18 +59,18 @@ func action_primary(_passed_item_reference : InventoryItemPD, _is_released: bool
 	_passed_item_reference.subtract(1) #Reducing ammo count
 	
 	# Gettting camera_collision pos from player interaction component:
-	var _camera_collision = player_interaction_component.Get_Camera_Collision()
-	var Direction = (_camera_collision - bullet_point.get_global_transform().origin).normalized()
+	var _camera_collision = player_interaction_component.get_camera_collision()
+	var direction = (_camera_collision - bullet_point.get_global_transform().origin).normalized()
 	
 	# Spawning projectile
-	var Projectile = get_projectile()
-	bullet_point.add_child(Projectile)
-	Projectile.set_global_position(Vector3(bullet_point.global_position.x,bullet_point.global_position.y,bullet_point.global_position.z))
-	Projectile.global_transform.basis = bullet_point.global_transform.basis
-	Projectile.damage_amount = _passed_item_reference.wieldable_damage
-	Projectile.set_linear_velocity(Direction * projectile_velocity)
-	Projectile.Direction = Direction
-	Projectile.reparent(get_tree().get_current_scene())
+	var projectile = get_projectile()
+	bullet_point.add_child(projectile)
+	projectile.set_global_position(Vector3(bullet_point.global_position.x,bullet_point.global_position.y,bullet_point.global_position.z))
+	projectile.global_transform.basis = bullet_point.global_transform.basis
+	projectile.damage_amount = _passed_item_reference.wieldable_damage
+	projectile.set_linear_velocity(direction * projectile_velocity)
+	projectile.direction = direction
+	projectile.reparent(get_tree().get_current_scene())
 
 
 func action_secondary(is_released:bool):

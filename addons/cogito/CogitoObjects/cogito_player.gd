@@ -341,16 +341,16 @@ func _on_resume_movement():
 
 # reload options user may have changed while paused.
 func _reload_options():
-	var err = config.load(OptionsConstants.config_file_name)
+	var err = config.load(OptionsConstants.CONFIG_FILE_NAME)
 	if err == 0:
 		CogitoGlobals.debug_log(is_logging, "cogito_player.gd", "Options reloaded.")
 		
-		HEADBOBBLE = config.get_value(OptionsConstants.section_name, OptionsConstants.head_bobble_key, 1)
-		MOUSE_SENS = config.get_value(OptionsConstants.section_name, OptionsConstants.mouse_sens_key, 0.25)
-		INVERT_Y_AXIS = config.get_value(OptionsConstants.section_name, OptionsConstants.invert_vertical_axis_key, true)
-		TOGGLE_CROUCH = config.get_value(OptionsConstants.section_name, OptionsConstants.toggle_crouching_key, true)
-		JOY_H_SENS = config.get_value(OptionsConstants.section_name, OptionsConstants.gp_looksens_key, 2)
-		JOY_V_SENS = config.get_value(OptionsConstants.section_name, OptionsConstants.gp_looksens_key, 2)
+		HEADBOBBLE = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.HEAD_BOBBLE_KEY, 1)
+		MOUSE_SENS = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.MOUSE_SENS_KEY, 0.25)
+		INVERT_Y_AXIS = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.INVERT_VERTICAL_AXIS_KEY, true)
+		TOGGLE_CROUCH = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.TOGGLE_CROUCHING_KEY, true)
+		JOY_H_SENS = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.GP_LOOKSENS_KEY, 2)
+		JOY_V_SENS = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.GP_LOOKSENS_KEY, 2)
 
 
 # Signal from Pause Menu

@@ -64,14 +64,14 @@ func action_primary(_passed_item_reference : InventoryItemPD, _is_released: bool
 	player_inventory.inventory_updated.emit(player_inventory)
 	
 	# Gettting camera_collision pos from player interaction component:
-	var _camera_collision = player_interaction_component.Get_Camera_Collision()
-	var Direction = (_camera_collision - bullet_point.get_global_transform().origin).normalized()
+	var _camera_collision = player_interaction_component.get_camera_collision()
+	var direction = (_camera_collision - bullet_point.get_global_transform().origin).normalized()
 	
 	# Spawning projectile
 	var projectile = instantiate_projectile()
 	bullet_point.add_child(projectile)
 	projectile.damage_amount = _passed_item_reference.wieldable_damage
-	projectile.set_linear_velocity(Direction * projectile_velocity)
+	projectile.set_linear_velocity(direction * projectile_velocity)
 	projectile.reparent(get_tree().get_current_scene())
 
 

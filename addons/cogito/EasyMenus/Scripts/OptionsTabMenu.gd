@@ -133,8 +133,8 @@ func _ready() -> void:
 	refresh_resolution_controls()
 	
 	# AUDIO
-	sfx_bus_index = AudioServer.get_bus_index(OptionsConstants.sfx_bus_name)
-	music_bus_index = AudioServer.get_bus_index(OptionsConstants.music_bus_name)
+	sfx_bus_index = AudioServer.get_bus_index(OptionsConstants.SFX_BUS_NAME)
+	music_bus_index = AudioServer.get_bus_index(OptionsConstants.MUSIC_BUS_NAME)
 	sfx_volume_slider.hslider.value_changed.connect(_on_sfx_volume_slider_value_changed)
 	music_volume_slider.hslider.value_changed.connect(_on_music_volume_slider_value_changed)
 	
@@ -214,8 +214,8 @@ func refresh_render():
 		window.content_scale_size = Vector2i.ZERO
 		window.scaling_3d_scale = 1.0
 	
-	var msaa_2d = config.get_value(OptionsConstants.section_name, OptionsConstants.msaa_2d_key, 0)
-	var msaa_3d = config.get_value(OptionsConstants.section_name, OptionsConstants.msaa_3d_key, 0)
+	var msaa_2d = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.MSAA_2D_KEY, 0)
+	var msaa_3d = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.MSAA_3D_KEY, 0)
 	set_msaa("msaa_2d", msaa_2d)
 	set_msaa("msaa_3d", msaa_3d)
 
@@ -249,31 +249,31 @@ func set_volume(bus_index, value):
 
 # Saves the options
 func save_options():
-	config.set_value(OptionsConstants.section_name, OptionsConstants.invert_vertical_axis_key, invert_y_check_button.button_pressed)
-	config.set_value(OptionsConstants.section_name, OptionsConstants.toggle_crouching_key, toggle_crouching_check_button.button_pressed)
-	config.set_value(OptionsConstants.section_name, OptionsConstants.head_bobble_key, headbob_strength)
-	config.set_value(OptionsConstants.section_name, OptionsConstants.mouse_sens_key, mouse_sens)
-	config.set_value(OptionsConstants.section_name, OptionsConstants.gp_looksens_key, gp_looksens)
-	config.set_value(OptionsConstants.section_name, OptionsConstants.fullscreen_mode_key_name, is_fullscreen())
-	config.set_value(OptionsConstants.section_name, OptionsConstants.resolution_index_key_name, windowed_resolution_option_button.selected)
-	config.set_value(OptionsConstants.section_name, OptionsConstants.fullscreen_resolution_scale_key, fullscreen_resolution_slider.value / 100.0)
-	config.set_value(OptionsConstants.section_name, OptionsConstants.gui_scale_key, gui_scale_slider.value);
-	config.set_value(OptionsConstants.section_name, OptionsConstants.vsync_key, vsync_check_button.button_pressed)
-	config.set_value(OptionsConstants.section_name, OptionsConstants.msaa_2d_key, anti_aliasing_2d_option_button.get_selected_id())
-	config.set_value(OptionsConstants.section_name, OptionsConstants.msaa_3d_key, anti_aliasing_3d_option_button.get_selected_id())
+	config.set_value(OptionsConstants.SECTION_NAME, OptionsConstants.INVERT_VERTICAL_AXIS_KEY, invert_y_check_button.button_pressed)
+	config.set_value(OptionsConstants.SECTION_NAME, OptionsConstants.TOGGLE_CROUCHING_KEY, toggle_crouching_check_button.button_pressed)
+	config.set_value(OptionsConstants.SECTION_NAME, OptionsConstants.HEAD_BOBBLE_KEY, headbob_strength)
+	config.set_value(OptionsConstants.SECTION_NAME, OptionsConstants.MOUSE_SENS_KEY, mouse_sens)
+	config.set_value(OptionsConstants.SECTION_NAME, OptionsConstants.GP_LOOKSENS_KEY, gp_looksens)
+	config.set_value(OptionsConstants.SECTION_NAME, OptionsConstants.FULLSCREEN_MODE_KEY_NAME, is_fullscreen())
+	config.set_value(OptionsConstants.SECTION_NAME, OptionsConstants.RESOLUTION_INDEX_KEY_NAME, windowed_resolution_option_button.selected)
+	config.set_value(OptionsConstants.SECTION_NAME, OptionsConstants.FULLSCREEN_RESOLUTION_SCALE_KEY, fullscreen_resolution_slider.value / 100.0)
+	config.set_value(OptionsConstants.SECTION_NAME, OptionsConstants.GUI_SCALE_KEY, gui_scale_slider.value);
+	config.set_value(OptionsConstants.SECTION_NAME, OptionsConstants.VSYNC_KEY, vsync_check_button.button_pressed)
+	config.set_value(OptionsConstants.SECTION_NAME, OptionsConstants.MSAA_2D_KEY, anti_aliasing_2d_option_button.get_selected_id())
+	config.set_value(OptionsConstants.SECTION_NAME, OptionsConstants.MSAA_3D_KEY, anti_aliasing_3d_option_button.get_selected_id())
 
 	# We previously removed the legacy `render_scale` key – clean it if present
-	if config.has_section_key(OptionsConstants.section_name, "render_scale"):
-		config.erase_section_key(OptionsConstants.section_name, "render_scale")
+	if config.has_section_key(OptionsConstants.SECTION_NAME, "render_scale"):
+		config.erase_section_key(OptionsConstants.SECTION_NAME, "render_scale")
 
-	config.set_value(OptionsConstants.section_name, OptionsConstants.sfx_volume_key_name, sfx_volume_slider.hslider.value)
-	config.set_value(OptionsConstants.section_name, OptionsConstants.music_volume_key_name, music_volume_slider.hslider.value)
+	config.set_value(OptionsConstants.SECTION_NAME, OptionsConstants.SFX_VOLUME_KEY_NAME, sfx_volume_slider.hslider.value)
+	config.set_value(OptionsConstants.SECTION_NAME, OptionsConstants.MUSIC_VOLUME_KEY_NAME, music_volume_slider.hslider.value)
 	
 	# SAVING INPUT MAP
 	var serialized_inputs = InputHelper.serialize_inputs_for_actions()
-	config.set_value(OptionsConstants.key_binds, OptionsConstants.input_helper_string, serialized_inputs)
+	config.set_value(OptionsConstants.KEY_BINDS, OptionsConstants.INPUT_HELPER_STRING, serialized_inputs)
 	
-	if config.save(OptionsConstants.config_file_name) != OK:
+	if config.save(OptionsConstants.CONFIG_FILE_NAME) != OK:
 		CogitoGlobals.debug_log(true, "OptionsTabMenu.gd", "Saving config file failed.")
 	else:
 		CogitoGlobals.debug_log(true, "OptionsTabMenu.gd", "Saving config file OK")
@@ -281,7 +281,7 @@ func save_options():
 
 # Loads options and sets the controls values to loaded values. Uses default values if config file does not exist
 func load_options(skip_applying: bool = false):
-	var err = config.load(OptionsConstants.config_file_name)
+	var err = config.load(OptionsConstants.CONFIG_FILE_NAME)
 	# If the config file does not yet exist, we will NOT immediately
 	# apply (emit) resolution/window size changes. This prevents the first launch
 	# from overriding the ProjectSettings default resolution (e.g. 1920x1080) with
@@ -293,23 +293,23 @@ func load_options(skip_applying: bool = false):
 	if !have_cfg:
 		CogitoGlobals.debug_log(true, "OptionsTabMenu.gd", "Loading options config failed (likely first run). Using project defaults until user applies settings.")
 	
-	var invert_y = config.get_value(OptionsConstants.section_name, OptionsConstants.invert_vertical_axis_key, true)
-	var toggle_crouching = config.get_value(OptionsConstants.section_name, OptionsConstants.toggle_crouching_key, true)
-	mouse_sens = config.get_value(OptionsConstants.section_name, OptionsConstants.mouse_sens_key, 0.25)
-	gp_looksens = config.get_value(OptionsConstants.section_name, OptionsConstants.gp_looksens_key, 2)
-	headbob_strength = config.get_value(OptionsConstants.section_name, OptionsConstants.head_bobble_key, 2)
-	var fullscreen_mode = config.get_value(OptionsConstants.section_name, OptionsConstants.fullscreen_mode_key_name, is_fullscreen())
+	var invert_y = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.INVERT_VERTICAL_AXIS_KEY, true)
+	var toggle_crouching = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.TOGGLE_CROUCHING_KEY, true)
+	mouse_sens = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.MOUSE_SENS_KEY, 0.25)
+	gp_looksens = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.GP_LOOKSENS_KEY, 2)
+	headbob_strength = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.HEAD_BOBBLE_KEY, 2)
+	var fullscreen_mode = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.FULLSCREEN_MODE_KEY_NAME, is_fullscreen())
 	var current_resolution_index := windowed_resolution_option_button.selected
-	var resolution_index = config.get_value(OptionsConstants.section_name, OptionsConstants.resolution_index_key_name, current_resolution_index)
-	var fullscreen_resolution_scale = config.get_value(OptionsConstants.section_name, OptionsConstants.fullscreen_resolution_scale_key, 1.0)
-	var gui_scale = config.get_value(OptionsConstants.section_name, OptionsConstants.gui_scale_key, 1)
-	var vsync = config.get_value(OptionsConstants.section_name, OptionsConstants.vsync_key, true)
+	var resolution_index = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.RESOLUTION_INDEX_KEY_NAME, current_resolution_index)
+	var fullscreen_resolution_scale = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.FULLSCREEN_RESOLUTION_SCALE_KEY, 1.0)
+	var gui_scale = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.GUI_SCALE_KEY, 1)
+	var vsync = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.VSYNC_KEY, true)
 
-	var msaa_2d = config.get_value(OptionsConstants.section_name, OptionsConstants.msaa_2d_key, 0)
-	var msaa_3d = config.get_value(OptionsConstants.section_name, OptionsConstants.msaa_3d_key, 0)
+	var msaa_2d = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.MSAA_2D_KEY, 0)
+	var msaa_3d = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.MSAA_3D_KEY, 0)
 
-	var sfx_volume = config.get_value(OptionsConstants.section_name, OptionsConstants.sfx_volume_key_name, 1)
-	var music_volume = config.get_value(OptionsConstants.section_name, OptionsConstants.music_volume_key_name, 1)
+	var sfx_volume = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.SFX_VOLUME_KEY_NAME, 1)
+	var music_volume = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.MUSIC_VOLUME_KEY_NAME, 1)
 
 	# LOADING GAMEPLAY CFG
 	invert_y_check_button.set_pressed_no_signal(invert_y)
@@ -444,12 +444,12 @@ func set_msaa(mode, index):
 
 
 func load_keybindings_from_config():
-	var err = config.load(OptionsConstants.config_file_name)
+	var err = config.load(OptionsConstants.CONFIG_FILE_NAME)
 	if err != 0:
 		CogitoGlobals.debug_log(true, "OptionsTabMenu.gd", "Keybindings: Loading options config failed.")
 		#save_keybindings_to_config()
 		
-	var serialized_inputs = config.get_value(OptionsConstants.key_binds, OptionsConstants.input_helper_string, serialized_default_inputs)
+	var serialized_inputs = config.get_value(OptionsConstants.KEY_BINDS, OptionsConstants.INPUT_HELPER_STRING, serialized_default_inputs)
 	if serialized_inputs:
 		InputHelper.deserialize_inputs_for_actions(serialized_inputs)
 	else:
@@ -458,8 +458,8 @@ func load_keybindings_from_config():
 
 func save_keybindings_to_config():
 	var serialized_inputs = InputHelper.serialize_inputs_for_actions()
-	config.set_value(OptionsConstants.key_binds, OptionsConstants.input_helper_string, serialized_inputs)
-	config.save(OptionsConstants.config_file_name)
+	config.set_value(OptionsConstants.KEY_BINDS, OptionsConstants.INPUT_HELPER_STRING, serialized_inputs)
+	config.save(OptionsConstants.CONFIG_FILE_NAME)
 
 	
 func create_action_remap_items() -> void:

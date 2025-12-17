@@ -1,7 +1,7 @@
 @tool
 extends EditorPlugin
-const cogito_plugin_icon : Texture2D = preload("./Cogito.svg")
-const cogito_default_settings = preload("./CogitoSettings.tres")
+const COGITO_PLUGIN_ICON : Texture2D = preload("./Cogito.svg")
+const COGITO_DEFAULT_SETTINGS = preload("./CogitoSettings.tres")
 
 var cog_settings : CogitoSettings
 
@@ -17,7 +17,7 @@ func _enter_tree():
 	parser_plugin = load("res://addons/cogito/Localization/scripts/loc_resource_parser.gd").new()
 	add_translation_parser_plugin(parser_plugin)
 	
-	cog_settings = cogito_default_settings
+	cog_settings = COGITO_DEFAULT_SETTINGS
 	
 
 func _exit_tree():
@@ -35,4 +35,4 @@ func _get_plugin_name():
 
 
 func _get_plugin_icon():
-	return cogito_plugin_icon
+	return COGITO_PLUGIN_ICON

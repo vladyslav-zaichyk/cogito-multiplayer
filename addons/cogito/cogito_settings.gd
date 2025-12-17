@@ -1,8 +1,8 @@
 @tool
 class_name CogitoSettings extends Resource
 
-const settings_path := "res://addons/cogito/"
-const settings_filename := "CogitoSettings"
+const SETTINGS_PATH := "res://addons/cogito/"
+const SETTINGS_FILENAME := "CogitoSettings"
 
 ## When this is checked, most Cogito scripts and objects will print messages in the output. Turn this on if you want to track and understand certain behaviors or have issues.
 @export var is_logging: bool = false

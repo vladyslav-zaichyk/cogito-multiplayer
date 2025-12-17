@@ -326,29 +326,29 @@ func send_hint(hint_icon: Texture2D, hint_text: String):
 
 
 # Function to get a normalised vector3 in direction the player is looking.
-func Get_Look_Direction() -> Vector3:
+func get_look_direction() -> Vector3:
 	var viewport = get_viewport().get_visible_rect().size
 	var camera = get_viewport().get_camera_3d()
 	return camera.project_ray_normal(viewport/2)
 	
 
 # This gets a world space collision point of whatever the camera is pointed at, depending on the equipped wieldable range.
-func Get_Camera_Collision() -> Vector3:
+func get_camera_collision() -> Vector3:
 	var viewport = get_viewport().get_visible_rect().size
 	var camera = get_viewport().get_camera_3d()
 	
-	var Ray_Origin = camera.project_ray_origin(viewport/2)
-	var Ray_End = Ray_Origin + camera.project_ray_normal(viewport/2)*equipped_wieldable_item.wieldable_range
+	var ray_origin = camera.project_ray_origin(viewport/2)
+	var ray_end = ray_origin + camera.project_ray_normal(viewport/2)*equipped_wieldable_item.wieldable_range
 	
-	var New_Intersection = PhysicsRayQueryParameters3D.create(Ray_Origin, Ray_End)
-	New_Intersection.exclude = [player_rid]
-	var Intersection = get_world_3d().direct_space_state.intersect_ray(New_Intersection)
+	var new_intersection = PhysicsRayQueryParameters3D.create(ray_origin, ray_end)
+	new_intersection.exclude = [player_rid]
+	var intersection = get_world_3d().direct_space_state.intersect_ray(new_intersection)
 	
-	if not Intersection.is_empty():
-		var Col_Point = Intersection.position
-		return Col_Point
+	if not intersection.is_empty():
+		var col_point = intersection.position
+		return col_point
 	else:
-		return Ray_End
+		return ray_end
 
 
 func save():

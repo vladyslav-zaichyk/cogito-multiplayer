@@ -3,27 +3,27 @@ extends Node
 
 var config = ConfigFile.new()
 
-@onready var sfx_bus_index = AudioServer.get_bus_index(OptionsConstants.sfx_bus_name)
-@onready var music_bus_index = AudioServer.get_bus_index(OptionsConstants.music_bus_name)
+@onready var sfx_bus_index = AudioServer.get_bus_index(OptionsConstants.SFX_BUS_NAME)
+@onready var music_bus_index = AudioServer.get_bus_index(OptionsConstants.MUSIC_BUS_NAME)
 
 # Loads settings from config file. Loads with standard values if settings not 
 # existing
 func load_settings():
-	var err = config.load(OptionsConstants.config_file_name)
+	var err = config.load(OptionsConstants.CONFIG_FILE_NAME)
 	
 	if err != OK:
 		return
 	
-	var sfx_volume = config.get_value(OptionsConstants.section_name, OptionsConstants.sfx_volume_key_name, 1)
-	var music_volume = config.get_value(OptionsConstants.section_name, OptionsConstants.music_volume_key_name, 1)
-	var is_fullscreen = config.get_value(OptionsConstants.section_name, OptionsConstants.fullscreen_mode_key_name, DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN)
-	var resolution_index = config.get_value(OptionsConstants.section_name, OptionsConstants.resolution_index_key_name, 0)
-	var fullscreen_resolution_scale = config.get_value(OptionsConstants.section_name, OptionsConstants.fullscreen_resolution_scale_key, 1.0)
-	var gui_scale = config.get_value(OptionsConstants.section_name, OptionsConstants.gui_scale_key, 1)
-	var vsync = config.get_value(OptionsConstants.section_name, OptionsConstants.vsync_key, true)
-	var invert_y = config.get_value(OptionsConstants.section_name, OptionsConstants.invert_vertical_axis_key, true)
-	var msaa_2d = config.get_value(OptionsConstants.section_name, OptionsConstants.msaa_2d_key, 0)
-	var msaa_3d = config.get_value(OptionsConstants.section_name, OptionsConstants.msaa_3d_key, 0)
+	var sfx_volume = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.SFX_VOLUME_KEY_NAME, 1)
+	var music_volume = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.MUSIC_VOLUME_KEY_NAME, 1)
+	var is_fullscreen = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.FULLSCREEN_MODE_KEY_NAME, DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN)
+	var resolution_index = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.RESOLUTION_INDEX_KEY_NAME, 0)
+	var fullscreen_resolution_scale = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.FULLSCREEN_RESOLUTION_SCALE_KEY, 1.0)
+	var gui_scale = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.GUI_SCALE_KEY, 1)
+	var vsync = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.VSYNC_KEY, true)
+	var invert_y = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.INVERT_VERTICAL_AXIS_KEY, true)
+	var msaa_2d = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.MSAA_2D_KEY, 0)
+	var msaa_3d = config.get_value(OptionsConstants.SECTION_NAME, OptionsConstants.MSAA_3D_KEY, 0)
 	
 	AudioServer.set_bus_volume_db(sfx_bus_index, sfx_volume)
 	AudioServer.set_bus_volume_db(music_bus_index, music_volume)

@@ -141,6 +141,6 @@ func throw(power):
 	if drop_sound:
 		audio_stream_player_3d.stream = drop_sound
 		audio_stream_player_3d.play()
-	var impulse = player_interaction_component.Get_Look_Direction() * power
+	var impulse = player_interaction_component.get_look_direction() * power
 	parent_object.apply_central_impulse(impulse)
 	thrown.emit(impulse)
