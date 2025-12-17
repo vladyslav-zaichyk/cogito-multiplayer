@@ -1,0 +1,46 @@
+[gd_scene load_steps=3 format=3 uid="uid://multiplayer_hud_component"]
+
+[ext_resource type="Theme" uid="uid://by44nnjeu6u4n" path="res://addons/cogito/Theme/Cogito_Theme_A.tres" id="1_theme"]
+[ext_resource type="Script" path="res://addons/cogito/easy_menus/Scripts/multiplayer_hud_component.gd" id="2_script"]
+
+[node name="MultiplayerHUD" type="Control"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_top = 0.0
+anchor_right = 1.0
+anchor_bottom = 0.0
+offset_left = -200.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = 100.0
+grow_horizontal = 0
+grow_vertical = 0
+theme = ExtResource("1_theme")
+script = ExtResource("2_script")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 5
+
+[node name="PlayersLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Players: 1/4"
+
+[node name="PingLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "Ping: -- ms"
+
+[node name="ConnectionStatusLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "Connected"
+modulate = Color(0, 1, 0, 1)
+
