@@ -95,7 +95,14 @@ func get_local_player() -> Node:
 
 ## Get the local player ID
 func get_local_player_id() -> int:
-	return _local_player_id
+	if _local_player_id != -1:
+		return _local_player_id
+	
+	# Try to get from NetworkManager if available
+	if NetworkManager and NetworkManager.is_multiplayer():
+		return NetworkManager.get_local_peer_id()
+	
+	return -1
 
 
 ## Check if a player is registered

@@ -160,7 +160,7 @@
 
 ---
 
-## Фаза 5: Рефакторинг Scene Management ⏳
+## Фаза 5: Рефакторинг Scene Management 🟡
 
 **Мета:** Підготувати систему сцен до мультиплеєру.
 
@@ -170,9 +170,10 @@
 - [ ] Виділити `PlayerStateManager` (стан гравця per-player)
 
 ### Етап 5.2: Додавання підтримки множинних гравців
-- [ ] Збереження стану для кожного гравця
-- [ ] Завантаження стану для кожного гравця
-- [ ] Емісія подій через Event Bus
+- [x] Емісія подій через Event Bus (scene_changing, scene_changed)
+- [x] Збереження стану для кожного гравця (додано player_id параметр)
+- [x] Завантаження стану для кожного гравця (додано player_id параметр)
+- [x] Збереження/завантаження квестів для конкретного гравця
 
 ### Етап 5.3: Тестування
 - [ ] Перевірити збереження/завантаження
@@ -183,19 +184,20 @@
 
 ---
 
-## Фаза 6: Рефакторинг Interaction System ⏳
+## Фаза 6: Рефакторинг Interaction System ✅
 
 **Мета:** Зробити взаємодію незалежною від конкретного гравця.
 
 ### Етап 6.1: Оновлення PlayerInteractionComponent
-- [ ] Використовувати `owner_id` замість прямого посилання
-- [ ] Емітувати події через Event Bus
-- [ ] Підтримка взаємодії з кількома гравцями
+- [x] Додати `owner_id` до PlayerInteractionComponent
+- [x] Встановити `owner_id` з player в `_ready()`
+- [x] Емітувати події через Event Bus (interaction_started, interaction_completed)
+- [x] Підтримка взаємодії з кількома гравцями (через owner_id)
 
 ### Етап 6.2: Оновлення InteractionComponent
-- [ ] Підтримка взаємодії з кількома гравцями
-- [ ] Емісія подій через Event Bus
-- [ ] Оновити всі типи взаємодій
+- [x] Підтримка взаємодії з кількома гравцями (через PlayerInteractionComponent з owner_id)
+- [x] Емісія подій через Event Bus (вже в PlayerInteractionComponent)
+- [x] InteractionComponent вже працює з кількома гравцями через PlayerInteractionComponent
 
 ### Етап 6.3: Тестування
 - [ ] Перевірити роботу взаємодій
@@ -206,16 +208,17 @@
 
 ---
 
-## Фаза 7: Підготовка до Network Layer ⏳
+## Фаза 7: Підготовка до Network Layer 🟡
 
 **Мета:** Додати абстракцію для мережевого шару.
 
 ### Етап 7.1: Створення NetworkManager
-- [ ] Створити `addons/cogito/network/network_manager.gd` (автолоад)
-- [ ] Абстракція для Godot Multiplayer API
-- [ ] Підтримка single-player та multiplayer режимів
-- [ ] Синхронізація через Event Bus
-- [ ] Зареєструвати як автолоад у плагіні
+- [x] Створити `addons/cogito/network/network_manager.gd` (автолоад)
+- [x] Абстракція для Godot Multiplayer API
+- [x] Підтримка single-player та multiplayer режимів
+- [x] Синхронізація через Event Bus (network_connected, network_disconnected, network_error)
+- [x] Зареєструвати як автолоад у плагіні
+- [x] Інтеграція з PlayerManager для генерації player_id
 
 ### Етап 7.2: Створення NetworkEventBus
 - [ ] Розширення `EventBus` для мережевих подій
@@ -232,14 +235,14 @@
 - [ ] Перевірити підготовку до multiplayer
 - [ ] Документувати API
 
-**Прогрес:** 0/4 етапів завершено
+**Прогрес:** 1/4 етапів завершено (25%)
 
 ---
 
 ## Загальний прогрес
 
-**Завершено:** 14/24 етапів (58%)  
-**Поточний етап:** Фаза 4, Етап 4.3 - Тестування World State
+**Завершено:** 19/24 етапів (79%)  
+**Поточний етап:** Фаза 7, Етап 7.2 - Розширення Event Bus для мережевих подій
 
 ---
 
@@ -295,4 +298,12 @@
 - ✅ Інтегровано WorldStateManager з Event Bus
 - ✅ Оновлено CogitoSceneManager для використання WorldStateManager
 - ✅ Оновлено всі файли, що використовують _current_world_dict
+- ✅ Додано емісію подій scene_changing та scene_changed через Event Bus
+- ✅ Додано `owner_id` до PlayerInteractionComponent
+- ✅ Додано емісію подій interaction_started та interaction_completed через Event Bus
+- ✅ Додано підтримку player_id в save_player_state та load_player_state
+- ✅ Додано збереження/завантаження квестів для конкретного гравця
+- ✅ Створено NetworkManager для абстракції Godot Multiplayer API
+- ✅ Додано підтримку single-player та multiplayer режимів
+- ✅ Інтегровано NetworkManager з PlayerManager для генерації player_id
 

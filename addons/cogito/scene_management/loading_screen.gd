@@ -32,7 +32,11 @@ func _process(_delta):
 		var current_scene = get_tree().current_scene  # Stores currently active scene so it can be set later
 		var current_scene_name = current_scene.get_name()
 		current_scene.free()  # Removing previous scene.
-		var new_scene_packed: PackedScene = ResourceLoader.load_threaded_get(next_scene_path)
+		var loaded_resource = ResourceLoader.load_threaded_get(next_scene_path)
+		if not loaded_resource is PackedScene:
+			push_error("Failed to load scene: " + next_scene_path)
+			return
+		var new_scene_packed: PackedScene = loaded_resource as PackedScene
 		var new_scene_node = new_scene_packed.instantiate()
 		get_tree().get_root().add_child(new_scene_node)  # Adds the instatiated new scene as a node.
 
@@ -69,6 +73,14 @@ func _process(_delta):
 			)
 
 		get_tree().current_scene = new_scene_node  # Assigns new scene as current scene
+		
+		# Update scene info in CogitoSceneManager
+		CogitoSceneManager._current_scene_name = new_scene_node.name
+		CogitoSceneManager._current_scene_path = new_scene_node.scene_file_path
+		
+		# Emit scene_changed event through Event Bus
+		if NetworkEventBus:
+			NetworkEventBus.scene_changed.emit(new_scene_node.scene_file_path, new_scene_node.name)
 
 		if connector_name != "":  #If a connector name has been passed, move the player to it. This requires the target scene to have a cogito scene script attached to it's root scene node.
 			new_scene_node.move_player_to_connector(connector_name)

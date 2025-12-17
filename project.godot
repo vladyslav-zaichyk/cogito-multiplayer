@@ -30,6 +30,7 @@ NetworkEventBus="*res://addons/cogito/network/event_bus.gd"
 PlayerManager="*res://addons/cogito/network/player_manager.gd"
 InventoryManager="*res://addons/cogito/network/inventory_manager.gd"
 WorldStateManager="*res://addons/cogito/network/world_state_manager.gd"
+NetworkManager="*res://addons/cogito/network/network_manager.gd"
 
 [display]
 

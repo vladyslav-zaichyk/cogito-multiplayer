@@ -45,6 +45,8 @@ var is_carrying: bool:
 ## Leave empty to ignore stamina cost evaluation when throwing
 @export var stamina_attribute: CogitoAttribute
 var player: CogitoPlayer
+## Owner ID for multiplayer support (player_id)
+var owner_id: int = -1
 
 @export_group("Drop Settings")
 ## The maximum power you can use when dropping objects
@@ -73,6 +75,14 @@ var can_cycle_quickslots: bool = true
 
 func _ready():
 	player = get_parent() as CogitoPlayer
+	# Set owner_id from player if available
+	if player and player.has_method("get") and player.get("player_id") != null:
+		owner_id = player.player_id
+	elif PlayerManager and PlayerManager.has_local_player():
+		var local_player = PlayerManager.get_local_player()
+		if local_player == player:
+			owner_id = PlayerManager.get_local_player_id()
+	
 	cycle_quickslots_interrupt_timer.connect(
 		"timeout", Callable(self, "_on_can_cycle_quickslots_timeout")
 	)
@@ -136,6 +146,12 @@ func _handle_interaction(action: String) -> void:
 							):
 								if !node.ignore_open_gui and get_parent().is_showing_ui:
 									return
+								
+								# Emit interaction_started event through Event Bus
+								if NetworkEventBus and owner_id != -1:
+									var interaction_type = node.get_script().get_path().get_file().get_basename() if node.get_script() else "unknown"
+									NetworkEventBus.interaction_started.emit(owner_id, carry_parent, interaction_type)
+								
 								node.interact(self)
 
 								#Dual interaction components need to await signal to update correctly
@@ -145,6 +161,11 @@ func _handle_interaction(action: String) -> void:
 								else:
 									# Update the prompts after an interaction. This is especially crucial for doors and switches.
 									_rebuild_interaction_prompts()
+								
+								# Emit interaction_completed event through Event Bus
+								if NetworkEventBus and owner_id != -1:
+									var interaction_type = node.get_script().get_path().get_file().get_basename() if node.get_script() else "unknown"
+									NetworkEventBus.interaction_completed.emit(owner_id, carry_parent, interaction_type)
 								break
 		else:
 			stop_carrying()
@@ -156,6 +177,12 @@ func _handle_interaction(action: String) -> void:
 			if node.input_map_action == action and not node.is_disabled:
 				if !node.ignore_open_gui and get_parent().is_showing_ui:
 					return
+				
+				# Emit interaction_started event through Event Bus
+				if NetworkEventBus and owner_id != -1:
+					var interaction_type = node.get_script().get_path().get_file().get_basename() if node.get_script() else "unknown"
+					NetworkEventBus.interaction_started.emit(owner_id, interactable, interaction_type)
+				
 				node.interact(self)
 
 				#Dual interaction components need to await signal to update correctly
@@ -166,6 +193,11 @@ func _handle_interaction(action: String) -> void:
 				else:
 					# Update the prompts after an interaction. This is especially crucial for doors and switches.
 					_rebuild_interaction_prompts()
+				
+				# Emit interaction_completed event through Event Bus
+				if NetworkEventBus and owner_id != -1:
+					var interaction_type = node.get_script().get_path().get_file().get_basename() if node.get_script() else "unknown"
+					NetworkEventBus.interaction_completed.emit(owner_id, interactable, interaction_type)
 				break
 
 
