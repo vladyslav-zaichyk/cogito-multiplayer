@@ -444,6 +444,92 @@ func _wait_for_scene_loaded() -> void:
 		await get_tree().process_frame
 
 
+## Respawn a player at a spawn point
+func respawn_player(peer_id: int) -> void:
+	if not NetworkManager or not NetworkManager.is_multiplayer():
+		return
+	
+	# Get player node
+	if not PlayerManager:
+		return
+	
+	var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+	if not player_node:
+		CogitoGlobals.debug_log(
+			enable_logging,
+			"PlayerSpawner",
+			"Respawn: Player not found for peer_id %d" % peer_id
+		)
+		return
+	
+	# Get spawn position
+	var spawn_pos = _get_spawn_position(peer_id)
+	
+	# Respawn player
+	if player_node is CogitoPlayer:
+		# Reset player state
+		player_node.is_dead = false
+		player_node.global_position = spawn_pos
+		
+		# Restore health to max (using setter which will emit signal)
+		if player_node.has_method("get") and player_node.get("player_attributes"):
+			var player_attributes = player_node.player_attributes
+			if player_attributes is Dictionary:
+				var health_attribute = player_attributes.get("health")
+				if health_attribute:
+					# Set health to max - setter will automatically emit signal
+					health_attribute.value_current = health_attribute.value_max
+		
+		# Resume movement
+		if player_node.has_method("_on_resume_movement"):
+			player_node._on_resume_movement()
+		
+		CogitoGlobals.debug_log(
+			enable_logging,
+			"PlayerSpawner",
+			"Respawned player for peer_id %d at position: %s" % [peer_id, spawn_pos]
+		)
+		
+		# Sync respawn to all clients
+		if NetworkManager.is_multiplayer():
+			_respawn_player.rpc(peer_id, spawn_pos)
+
+
+## RPC: Sync player respawn
+@rpc("any_peer", "call_local", "reliable")
+func _respawn_player(peer_id: int, spawn_position: Vector3) -> void:
+	if not PlayerManager:
+		return
+	
+	var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+	if not player_node:
+		return
+	
+	if player_node is CogitoPlayer:
+		# Reset player state
+		player_node.is_dead = false
+		player_node.global_position = spawn_position
+		
+		# Restore health to max (using setter which will emit signal)
+		if player_node.has_method("get") and player_node.get("player_attributes"):
+			var player_attributes = player_node.player_attributes
+			if player_attributes is Dictionary:
+				var health_attribute = player_attributes.get("health")
+				if health_attribute:
+					# Set health to max - setter will automatically emit signal
+					health_attribute.value_current = health_attribute.value_max
+		
+		# Resume movement
+		if player_node.has_method("_on_resume_movement"):
+			player_node._on_resume_movement()
+		
+		CogitoGlobals.debug_log(
+			enable_logging,
+			"PlayerSpawner",
+			"Received respawn sync for peer_id %d at position: %s" % [peer_id, spawn_position]
+		)
+
+
 ## Get spawn position for a peer
 func _get_spawn_position(peer_id: int) -> Vector3:
 	# Check if we have a cached spawn point

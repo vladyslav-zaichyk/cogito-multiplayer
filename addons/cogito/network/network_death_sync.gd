@@ -95,6 +95,46 @@ func _on_local_death() -> void:
 	NetworkManager.sync_player_death.rpc(peer_id)
 
 
+## Request respawn (called from death screen)
+func request_respawn() -> void:
+	if not is_local:
+		return
+	
+	if not NetworkManager or not NetworkManager.is_multiplayer():
+		return
+	
+	# Request respawn from host (or respawn locally if we're the host)
+	if NetworkManager.is_host():
+		# We're the host, respawn directly
+		if PlayerSpawner:
+			PlayerSpawner.respawn_player(peer_id)
+	else:
+		# Request respawn from host
+		_request_respawn.rpc_id(1, peer_id)
+
+
+## RPC: Request respawn from host (client only)
+@rpc("any_peer", "call_local", "reliable")
+func _request_respawn(requesting_peer_id: int) -> void:
+	# Only host processes this
+	if not NetworkManager or not NetworkManager.is_host():
+		return
+	
+	# Verify the requester
+	var sender_id = multiplayer.get_remote_sender_id()
+	if sender_id != requesting_peer_id:
+		CogitoGlobals.debug_log(
+			enable_logging,
+			"NetworkDeathSync",
+			"Respawn request rejected: sender_id (%d) != requesting_peer_id (%d)" % [sender_id, requesting_peer_id]
+		)
+		return
+	
+	# Respawn the player
+	if PlayerSpawner:
+		PlayerSpawner.respawn_player(requesting_peer_id)
+
+
 ## Called by RPC when a player dies
 func _receive_death(dead_peer_id: int) -> void:
 	if not parent_body:
