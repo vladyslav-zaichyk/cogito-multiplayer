@@ -103,14 +103,15 @@ func request_respawn() -> void:
 	if not NetworkManager or not NetworkManager.is_multiplayer():
 		return
 	
-	# Request respawn from host (or respawn locally if we're the host)
-	if NetworkManager.is_host():
-		# We're the host, respawn directly
-		if PlayerSpawner:
-			PlayerSpawner.respawn_player(peer_id)
-	else:
-		# Request respawn from host
-		_request_respawn.rpc_id(1, peer_id)
+	# Always request respawn from host (even if we're the host, use RPC for consistency)
+	# This ensures server authorization
+	_request_respawn.rpc_id(1, peer_id)
+	
+	CogitoGlobals.debug_log(
+		true,  # Always log this
+		"NetworkDeathSync",
+		"Requesting respawn from host for peer_id %d" % peer_id
+	)
 
 
 ## RPC: Request respawn from host (client only)
@@ -124,13 +125,32 @@ func _request_respawn(requesting_peer_id: int) -> void:
 	var sender_id = multiplayer.get_remote_sender_id()
 	if sender_id != requesting_peer_id:
 		CogitoGlobals.debug_log(
-			enable_logging,
+			true,  # Always log security issues
 			"NetworkDeathSync",
-			"Respawn request rejected: sender_id (%d) != requesting_peer_id (%d)" % [sender_id, requesting_peer_id]
+			"[HOST] Respawn request rejected: sender_id (%d) != requesting_peer_id (%d)" % [sender_id, requesting_peer_id]
 		)
 		return
 	
-	# Respawn the player
+	# Verify that the player is actually dead before allowing respawn
+	if PlayerManager:
+		var player_node = PlayerManager.get_player_by_peer_id(requesting_peer_id)
+		if player_node and player_node is CogitoPlayer:
+			if not player_node.is_dead:
+				CogitoGlobals.debug_log(
+					true,  # Always log security issues
+					"NetworkDeathSync",
+					"[HOST] Respawn request rejected: player %d is not dead" % requesting_peer_id
+				)
+				return
+	
+	# Authorize respawn - host controls respawn timing and position
+	CogitoGlobals.debug_log(
+		true,  # Always log this
+		"NetworkDeathSync",
+		"[HOST] Respawn authorized for peer %d" % requesting_peer_id
+	)
+	
+	# Respawn the player (host controls spawn position)
 	if PlayerSpawner:
 		PlayerSpawner.respawn_player(requesting_peer_id)
 

@@ -612,6 +612,23 @@ func save_scene_state(_scene_name_to_save, slot: String):
 func load_next_scene(
 	target: String, connector_name: String, passed_slot: String, load_mode: CogitoSceneLoadMode
 ) -> void:
+	# In multiplayer, RESET mode requires server authorization
+	if NetworkManager and NetworkManager.is_multiplayer() and load_mode == CogitoSceneLoadMode.RESET:
+		# Check if we're the host
+		if not NetworkManager.is_host():
+			CogitoGlobals.debug_log(
+				true,
+				"CSM",
+				"[CLIENT] Scene reset blocked: only host can reset scenes in multiplayer"
+			)
+			return
+		
+		CogitoGlobals.debug_log(
+			true,
+			"CSM",
+			"[HOST] Authorizing scene reset to: %s" % target
+		)
+	
 	# Emit scene_changing event through Event Bus
 	if NetworkEventBus:
 		var from_scene = _current_scene_path if _current_scene_path else ""

@@ -310,6 +310,66 @@ func sync_player_data(peer_id: int, data_dict: Dictionary) -> void:
 		PlayerManager.update_player_data(peer_id, data_dict)
 
 
+## RPC: Request pause (client requests pause from host)
+@rpc("any_peer", "call_local", "reliable")
+func request_pause(requester_peer_id: int) -> void:
+	# Only host can authorize pause
+	if not is_host():
+		return
+	
+	# Host authorizes pause and notifies all clients
+	if NetworkEventBus:
+		NetworkEventBus.game_paused.emit()
+	
+	# Notify all clients about pause
+	set_game_paused.rpc(true)
+	
+	CogitoGlobals.debug_log(
+		true,
+		"NetworkManager",
+		"[HOST] Pause requested by peer %d, pausing game for all players" % requester_peer_id
+	)
+
+
+## RPC: Request resume (client requests resume from host)
+@rpc("any_peer", "call_local", "reliable")
+func request_resume(requester_peer_id: int) -> void:
+	# Only host can authorize resume
+	if not is_host():
+		return
+	
+	# Host authorizes resume and notifies all clients
+	if NetworkEventBus:
+		NetworkEventBus.game_resumed.emit()
+	
+	# Notify all clients about resume
+	set_game_paused.rpc(false)
+	
+	CogitoGlobals.debug_log(
+		true,
+		"NetworkManager",
+		"[HOST] Resume requested by peer %d, resuming game for all players" % requester_peer_id
+	)
+
+
+## RPC: Set game paused state (host notifies clients)
+@rpc("any_peer", "call_local", "reliable")
+func set_game_paused(paused: bool) -> void:
+	# Update local pause state
+	if paused:
+		if NetworkEventBus:
+			NetworkEventBus.game_paused.emit()
+	else:
+		if NetworkEventBus:
+			NetworkEventBus.game_resumed.emit()
+	
+	CogitoGlobals.debug_log(
+		true,
+		"NetworkManager",
+		"Game pause state changed: %s" % ("paused" if paused else "resumed")
+	)
+
+
 ## RPC: Sync player death (called from NetworkDeathSync)
 @rpc("any_peer", "call_local", "reliable")
 func sync_player_death(peer_id: int) -> void:

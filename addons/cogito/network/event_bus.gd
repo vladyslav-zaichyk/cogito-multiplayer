@@ -88,6 +88,10 @@ signal network_connected(peer_id: int)
 signal network_disconnected(peer_id: int)
 ## Emitted when network error occurs
 signal network_error(error: String)
+## Emitted when game is paused (server authorized)
+signal game_paused
+## Emitted when game is resumed (server authorized)
+signal game_resumed
 #endregion
 
 

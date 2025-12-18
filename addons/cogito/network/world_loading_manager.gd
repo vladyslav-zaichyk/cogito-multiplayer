@@ -36,7 +36,18 @@ func _ready() -> void:
 ## Start loading a scene and wait for all peers to load it
 ## scene_path: Path to the scene to load
 ## on_all_loaded: Callback to call when all peers have loaded
-func start_loading_scene(scene_path: String, on_all_loaded: Callable = Callable()) -> void:
+## allow_client: If true, allows clients to call this directly (used when called from RPC)
+func start_loading_scene(scene_path: String, on_all_loaded: Callable = Callable(), allow_client: bool = false) -> void:
+	# In multiplayer, only host can initiate scene loading (unless called from RPC)
+	if NetworkManager and NetworkManager.is_multiplayer():
+		if not NetworkManager.is_host() and not allow_client:
+			CogitoGlobals.debug_log(
+				true,
+				"WorldLoadingManager",
+				"[CLIENT] Scene load blocked: only host can initiate scene loading"
+			)
+			return
+	
 	if _is_loading:
 		CogitoGlobals.debug_log(
 			true, "WorldLoadingManager", "Scene loading already in progress!"
@@ -53,10 +64,11 @@ func start_loading_scene(scene_path: String, on_all_loaded: Callable = Callable(
 		var local_peer_id = NetworkManager.get_local_peer_id()
 		_peers_loaded[local_peer_id] = false  # Will be set to true after actual load
 	
+	var role = "[HOST]" if NetworkManager and NetworkManager.is_host() else "[CLIENT]"
 	CogitoGlobals.debug_log(
-		enable_logging,
+		true,
 		"WorldLoadingManager",
-		"Starting scene load: %s" % scene_path
+		"%s Starting scene load: %s" % [role, scene_path]
 	)
 	
 	# If we're the host, notify all clients to load the scene
@@ -474,8 +486,8 @@ func _request_scene_load(scene_path: String) -> void:
 		"[CLIENT] Received scene load request from host: %s" % scene_path
 	)
 	
-	# Start loading the scene
-	start_loading_scene(scene_path)
+	# Start loading the scene (allow_client=true because this is called from authorized RPC)
+	start_loading_scene(scene_path, Callable(), true)
 
 
 ## Callback when a peer disconnects

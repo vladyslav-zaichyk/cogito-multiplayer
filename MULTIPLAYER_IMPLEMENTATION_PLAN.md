@@ -431,13 +431,142 @@
 
 ### Рекомендоване рішення:
 
-**Комбінація Варіанту 1 та Варіанту 2:**
-1. Встановлювати `peer_id` через `set_meta()` ДО додавання в scene tree (Варіант 1)
-2. Додати сигнал `player_peer_id_set` для додаткової синхронізації (Варіант 2)
-3. `PlayerVisualRepresentation` використовує обидва методи:
-   - Спочатку перевіряє `get_meta("peer_id")`
-   - Якщо не знайдено, підписується на сигнал
-   - Коли сигнал отримано, оновлює ім'я
+**Комбінація всіх трьох варіантів для максимальної надійності:**
+
+#### Етап 1: Встановлення peer_id через meta (Варіант 1)
+**Мета:** Забезпечити, щоб peer_id був доступний під час ініціалізації PlayerVisualRepresentation
+
+**Реалізація:**
+1. В `PlayerSpawner._spawn_remote_player()` та `PlayerSpawner._spawn_remote_player_for_client()`:
+   - ДО додавання player_instance в scene tree:
+     ```gdscript
+     if player_instance.has_method("set_meta"):
+         player_instance.set_meta("peer_id", peer_id)
+     elif player_instance.has_method("set") and player_instance.get("peer_id") != null:
+         player_instance.peer_id = peer_id
+     ```
+   - Це гарантує, що peer_id доступний одразу після додавання в scene tree
+
+2. В `PlayerVisualRepresentation._ready()`:
+   - Спочатку перевіряти `get_meta("peer_id")`:
+     ```gdscript
+     if parent_body.has_method("get_meta") and parent_body.has_meta("peer_id"):
+         peer_id = parent_body.get_meta("peer_id")
+     ```
+
+**Переваги:**
+- Найпростіше рішення
+- Вирішує race condition для більшості випадків
+- Мінімальні зміни в коді
+
+#### Етап 2: Сигнали для синхронізації (Варіант 2)
+**Мета:** Забезпечити надійну синхронізацію peer_id навіть якщо meta не працює
+
+**Реалізація:**
+1. В `PlayerManager`:
+   - Додати сигнал:
+     ```gdscript
+     signal player_peer_id_set(player_id: int, peer_id: int)
+     ```
+   - В `set_player_peer_id()`:
+     ```gdscript
+     func set_player_peer_id(player_id: int, peer_id: int) -> void:
+         if _players.has(player_id):
+             _player_peer_ids[player_id] = peer_id
+             player_peer_id_set.emit(player_id, peer_id)
+     ```
+
+2. В `PlayerVisualRepresentation._ready()`:
+   - Підписатися на сигнал:
+     ```gdscript
+     if PlayerManager:
+         PlayerManager.player_peer_id_set.connect(_on_player_peer_id_set)
+     ```
+   - Обробник сигналу:
+     ```gdscript
+     func _on_player_peer_id_set(set_player_id: int, set_peer_id: int) -> void:
+         if set_player_id == player_id and peer_id == -1:
+             peer_id = set_peer_id
+             # Оновити ім'я з новим peer_id
+             _update_name_from_peer_id()
+     ```
+
+**Переваги:**
+- Надійне рішення навіть якщо meta не працює
+- Чиста архітектура з подіями
+- Легко розширювати для інших компонентів
+
+#### Етап 3: Централізована система ініціалізації (Варіант 3 - частково)
+**Мета:** Створити чіткий порядок ініціалізації для всіх компонентів гравця
+
+**Реалізація:**
+1. Створити метод `PlayerSpawner._initialize_player_components()`:
+   ```gdscript
+   func _initialize_player_components(player_instance: Node, peer_id: int, player_id: int) -> void:
+       # 1. Встановити peer_id через meta
+       if player_instance.has_method("set_meta"):
+           player_instance.set_meta("peer_id", peer_id)
+       
+       # 2. Зареєструвати в PlayerManager
+       PlayerManager.register_player(player_instance, false)
+       PlayerManager.set_player_peer_id(player_id, peer_id)
+       
+       # 3. Додати в scene tree (викличе _ready() для всіх компонентів)
+       scene_root.add_child(player_instance)
+       
+       # 4. Після додавання, переконатися що peer_id встановлено
+       await get_tree().process_frame
+       if PlayerManager.get_player_peer_id(player_id) == -1:
+           PlayerManager.set_player_peer_id(player_id, peer_id)
+   ```
+
+2. Використовувати цей метод в обох місцях спавну:
+   - `_spawn_remote_player()` (host spawning remote players)
+   - `_spawn_remote_player_for_client()` (client spawning remote players)
+
+**Переваги:**
+- Чіткий порядок ініціалізації
+- Легко додавати нові кроки
+- Централізована логіка
+
+**Недоліки:**
+- Потрібно рефакторити існуючий код
+- Може бути надлишковим, якщо перші два варіанти працюють
+
+#### Етап 4: Інтеграція всіх трьох варіантів
+**Мета:** Об'єднати всі три підходи для максимальної надійності
+
+**Послідовність виконання:**
+1. **Встановлення peer_id через meta** (Етап 1) - найпростіше, працює в 90% випадків
+2. **Сигнали для синхронізації** (Етап 2) - fallback, якщо meta не працює
+3. **Централізована ініціалізація** (Етап 3) - структурує код, робить його більш підтримуваним
+
+**В PlayerVisualRepresentation._ready():**
+```gdscript
+func _ready() -> void:
+    # ... (існуючий код) ...
+    
+    # Метод 1: Спробувати отримати peer_id з meta (найшвидше)
+    if parent_body.has_method("get_meta") and parent_body.has_meta("peer_id"):
+        peer_id = parent_body.get_meta("peer_id")
+    
+    # Метод 2: Спробувати отримати з PlayerManager
+    if peer_id == -1 and PlayerManager and player_id != -1:
+        peer_id = PlayerManager.get_player_peer_id(player_id)
+    
+    # Метод 3: Підписатися на сигнал (fallback)
+    if peer_id == -1 and PlayerManager:
+        PlayerManager.player_peer_id_set.connect(_on_player_peer_id_set)
+        # Також чекати трохи і повторно спробувати
+        await get_tree().create_timer(0.1).timeout
+        if player_id != -1:
+            peer_id = PlayerManager.get_player_peer_id(player_id)
+    
+    # Якщо peer_id все ще -1, використати локальний peer_id як fallback
+    if peer_id == -1 and NetworkManager and NetworkManager.is_multiplayer():
+        if PlayerManager.has_local_player() and PlayerManager.get_local_player_id() == player_id:
+            peer_id = NetworkManager.get_local_peer_id()
+```
 
 ### Додаткові виправлення:
 
@@ -453,15 +582,70 @@
    - Додати детальне логування всіх операцій з іменами
    - Логувати, коли ім'я встановлюється, коли воно змінюється, коли воно ресетиться
 
-### Завдання для виправлення:
+### Завдання для виправлення (детальний план реалізації):
 
-- [ ] Встановлювати `peer_id` через `set_meta()` ДО додавання player instance в scene tree
-- [ ] Додати сигнал `player_peer_id_set(player_id, peer_id)` в `PlayerManager`
-- [ ] Оновити `PlayerVisualRepresentation._ready()` для використання обох методів отримання `peer_id`
-- [ ] Додати захист від перезапису правильного імені в `update_player_data()`
-- [ ] Синхронізувати `_player_names` з PlayerData при отриманні імені
-- [ ] Додати детальне логування для діагностики
-- [ ] Протестувати в Godot з кількома гравцями
+#### Етап 1: Встановлення peer_id через meta (Варіант 1)
+- [ ] В `PlayerSpawner._spawn_remote_player()`:
+  - [ ] Додати встановлення `peer_id` через `set_meta()` ДО додавання в scene tree
+  - [ ] Додати fallback через `player_instance.peer_id = peer_id` якщо meta не підтримується
+- [ ] В `PlayerSpawner._spawn_remote_player_for_client()`:
+  - [ ] Додати встановлення `peer_id` через `set_meta()` ДО додавання в scene tree
+  - [ ] Додати fallback через `player_instance.peer_id = peer_id` якщо meta не підтримується
+- [ ] В `PlayerVisualRepresentation._ready()`:
+  - [ ] Додати перевірку `get_meta("peer_id")` як перший метод отримання peer_id
+  - [ ] Додати fallback через `parent_body.peer_id` якщо meta не підтримується
+
+#### Етап 2: Сигнали для синхронізації (Варіант 2)
+- [ ] В `PlayerManager`:
+  - [ ] Додати сигнал `player_peer_id_set(player_id: int, peer_id: int)`
+  - [ ] Оновити `set_player_peer_id()` для емісії сигналу після встановлення
+- [ ] В `PlayerVisualRepresentation`:
+  - [ ] Додати метод `_on_player_peer_id_set(player_id: int, peer_id: int)`
+  - [ ] Підписатися на сигнал в `_ready()` якщо peer_id все ще -1
+  - [ ] В обробнику сигналу оновлювати peer_id та викликати `_update_name_from_peer_id()`
+
+#### Етап 3: Централізована система ініціалізації (Варіант 3 - частково)
+- [ ] В `PlayerSpawner`:
+  - [ ] Створити метод `_initialize_player_components(player_instance, peer_id, player_id)`
+  - [ ] Метод має виконувати послідовність:
+    1. Встановити peer_id через meta
+    2. Зареєструвати в PlayerManager
+    3. Встановити peer_id в PlayerManager
+    4. Додати в scene tree
+    5. Переконатися що peer_id встановлено після додавання
+  - [ ] Замінити існуючий код в `_spawn_remote_player()` на виклик нового методу
+  - [ ] Замінити існуючий код в `_spawn_remote_player_for_client()` на виклик нового методу
+
+#### Етап 4: Інтеграція всіх трьох варіантів
+- [ ] В `PlayerVisualRepresentation._ready()`:
+  - [ ] Реалізувати багаторівневу систему отримання peer_id:
+    1. Метод 1: `get_meta("peer_id")` (найшвидше)
+    2. Метод 2: `PlayerManager.get_player_peer_id(player_id)` (fallback)
+    3. Метод 3: Підписка на сигнал `player_peer_id_set` (якщо все ще -1)
+    4. Метод 4: Очікування 0.1 секунди та повторна спроба
+    5. Метод 5: Використання локального peer_id якщо це локальний гравець
+  - [ ] Додати метод `_update_name_from_peer_id()` для оновлення імені після отримання peer_id
+
+#### Додаткові виправлення:
+- [ ] В `PlayerManager.update_player_data()`:
+  - [ ] Додати перевірку: не перезаписувати ім'я якщо нове ім'я дефолтне ("Player X" або "You")
+  - [ ] Зберігати існуюче правильне ім'я якщо нове дефолтне
+- [ ] В `PlayerManager.get_player_name()`:
+  - [ ] Автоматично синхронізувати `_player_names` з PlayerData при отриманні імені
+  - [ ] Кешувати ім'я в `_player_names` після отримання з PlayerData
+- [ ] В `PlayerManager.set_player_name()`:
+  - [ ] Автоматично оновлювати PlayerData при встановленні імені в `_player_names`
+- [ ] Додати детальне логування:
+  - [ ] Логувати всі операції з peer_id (встановлення, отримання)
+  - [ ] Логувати всі операції з іменами (встановлення, отримання, зміна)
+  - [ ] Логувати коли ім'я ресетиться на дефолтне значення
+
+#### Тестування:
+- [ ] Протестувати в Godot з 2 гравцями (хост + клієнт)
+- [ ] Переконатися що імена відображаються правильно над усіма гравцями
+- [ ] Переконатися що імена не ресетяться на "Player 2" після встановлення
+- [ ] Переконатися що peer_id правильно встановлюється для всіх гравців
+- [ ] Перевірити логи для діагностики проблем
 
 ### Пріоритет: Середній
 - Проблема не критична для функціональності (гравці все одно видно)
@@ -482,33 +666,43 @@
 - Інші критичні дії можуть виконуватись локально
 
 ### Рішення:
-- [ ] **Серверна авторизація паузи**
-  - [ ] Пауза має синхронізуватись з сервером
-  - [ ] Тільки хост може паузити гру (або за запитом клієнта через RPC)
-  - [ ] Клієнти отримують сигнал про паузу/відновлення
-  - [ ] PauseMenu має працювати тільки для локального гравця, але пауза синхронізується
+- [x] **Серверна авторизація паузи** ✅
+  - [x] Пауза має синхронізуватись з сервером
+  - [x] Тільки хост може паузити гру (або за запитом клієнта через RPC)
+  - [x] Клієнти отримують сигнал про паузу/відновлення
+  - [x] PauseMenu має працювати тільки для локального гравця, але пауза синхронізується
+  - [x] Додано RPC `request_pause` та `request_resume` в NetworkManager
+  - [x] Додано RPC `set_game_paused` для синхронізації стану паузи
+  - [x] Додано сигнали `game_paused` та `game_resumed` в NetworkEventBus
+  - [x] Оновлено `pause_menu_controller.gd` для використання серверної авторизації
   
-- [ ] **Серверна авторизація смерті/респавну**
-  - [ ] Смерть гравця має бути підтверджена сервером
-  - [ ] Респавн має ініціюватись через сервер (RPC від клієнта до хоста)
-  - [ ] Хост контролює час респавну та позицію респавну
-  - [ ] CogitoDeathScreen має працювати тільки для локального гравця, але респавн через сервер
+- [x] **Серверна авторизація смерті/респавну** ✅
+  - [x] Смерть гравця має бути підтверджена сервером (синхронізується через RPC)
+  - [x] Респавн має ініціюватись через сервер (RPC від клієнта до хоста)
+  - [x] Хост контролює час респавну та позицію респавну (хост визначає spawn position)
+  - [x] CogitoDeathScreen має працювати тільки для локального гравця, але респавн через сервер
+  - [x] Додано перевірку, що гравець дійсно мертвий перед авторизацією респавну
+  - [x] Хост завжди використовує RPC для респавну (навіть для себе) для консистентності
   
-- [ ] **Серверна авторизація ресету сцени**
-  - [ ] Ресет сцени (reload_current_scene) має бути підтверджений сервером
-  - [ ] Тільки хост може ресетити сцену
-  - [ ] Клієнти отримують сигнал про ресет
-  - [ ] WorldLoadingManager має обробляти ресет через сервер
+- [x] **Серверна авторизація ресету сцени** ✅
+  - [x] Ресет сцени (reload_current_scene) має бути підтверджений сервером
+  - [x] Тільки хост може ресетити сцену (перевірка в CogitoSceneManager.load_next_scene)
+  - [x] Клієнти отримують сигнал про ресет (через WorldLoadingManager._request_scene_load)
+  - [x] WorldLoadingManager має обробляти ресет через сервер (вже реалізовано)
+  - [x] Додано перевірку в CogitoSceneManager, щоб клієнти не могли ресетити сцену напряму
   
-- [ ] **Серверна авторизація завантаження сцени**
-  - [ ] Завантаження нової сцени має бути підтверджено сервером
-  - [ ] Тільки хост може ініціювати завантаження нової сцени
-  - [ ] Клієнти отримують сигнал про завантаження нової сцени
+- [x] **Серверна авторизація завантаження сцени** ✅
+  - [x] Завантаження нової сцени має бути підтверджено сервером
+  - [x] Тільки хост може ініціювати завантаження нової сцени (перевірка в WorldLoadingManager.start_loading_scene)
+  - [x] Клієнти отримують сигнал про завантаження нової сцени (через RPC _request_scene_load)
+  - [x] Додано параметр allow_client для дозволу виклику з RPC
+  - [x] RPC _request_scene_load має атрибут "authority", що гарантує тільки хост може викликати
   
-- [ ] **Серверна авторизація виходу з гри**
-  - [ ] Вихід з гри (quit) має бути оброблений правильно
-  - [ ] Клієнт може вийти, але це не має впливати на інших гравців
-  - [ ] Хост може вийти, але це має правильно оброблятись
+- [x] **Серверна авторизація виходу з гри** ✅
+  - [x] Вихід з гри (quit) має бути оброблений правильно (через disconnect_from_game)
+  - [x] Клієнт може вийти, але це не має впливати на інших гравців (хост отримує _on_peer_disconnected)
+  - [x] Хост може вийти, але це має правильно оброблятись (клієнти отримують _on_server_disconnected)
+  - [x] PlayerManager та PlayerSpawner правильно обробляють відключення гравців
 
 - [ ] **Тестування:**
   - [ ] Пауза синхронізується між гравцями
@@ -517,9 +711,12 @@
   - [ ] Завантаження нової сцени працює через сервер
   - [ ] Вихід з гри працює правильно
 
-**Прогрес:** 0/5 завдань завершено
+**Прогрес:** 5/5 завдань завершено ✅ (Серверна авторизація паузи ✅, Серверна авторизація смерті/респавну ✅, Серверна авторизація ресету сцени ✅, Серверна авторизація завантаження сцени ✅, Серверна авторизація виходу з гри ✅)
 
 **Примітка:** Це критично важливо для стабільності мультиплеєру. Без серверної авторизації можливі десинхронізації та чити.
+
+**Майбутні імпрувменти (QoL):**
+- [ ] Додати логіку, щоб паузу міг зняти тільки той гравець, який її ввімкнув (замість того, щоб будь-хто міг зняти паузу)
 
 ---
 

@@ -40,6 +40,11 @@ func _enter_tree() -> void:
 	playback = player.get_stream_playback()
 
 	get_tree().node_added.connect(_on_node_added)
+	
+	# Connect to network events for pause/resume synchronization
+	if NetworkEventBus:
+		NetworkEventBus.game_paused.connect(_on_game_paused)
+		NetworkEventBus.game_resumed.connect(_on_game_resumed)
 
 
 func _on_node_added(node: Node) -> void:
@@ -60,8 +65,25 @@ func _play_pressed() -> void:
 
 
 func open_pause_menu():
-	#Stops game and shows pause menu
+	# In multiplayer, request pause from host instead of pausing locally
+	if NetworkManager and NetworkManager.is_multiplayer():
+		# Request pause from host (even if we're the host, use RPC for consistency)
+		var local_peer_id = NetworkManager.get_local_peer_id()
+		NetworkManager.request_pause.rpc(local_peer_id)
+		# Show menu immediately (will be paused when host authorizes)
+		_show_pause_menu_ui()
+	else:
+		# Single-player: pause directly
+		_apply_pause()
+		_show_pause_menu_ui()
+
+
+func _apply_pause() -> void:
+	# Pause the game
 	get_tree().paused = true
+
+
+func _show_pause_menu_ui() -> void:
 	label_active_slot.text = "Current Slot: " + CogitoSceneManager._active_slot
 	temp_screenshot = grab_temp_screenshot()
 	show()
@@ -119,9 +141,24 @@ func load_current_slot_data() -> bool:
 
 
 func close_pause_menu():
+	# In multiplayer, request resume from host instead of resuming locally
+	if NetworkManager and NetworkManager.is_multiplayer():
+		# Request resume from host (even if we're the host, use RPC for consistency)
+		var local_peer_id = NetworkManager.get_local_peer_id()
+		NetworkManager.request_resume.rpc(local_peer_id)
+		# Hide menu immediately (will be resumed when host authorizes)
+		hide()
+		emit_signal("resume")
+	else:
+		# Single-player: resume directly
+		_apply_resume()
+		hide()
+		emit_signal("resume")
+
+
+func _apply_resume() -> void:
+	# Resume the game
 	get_tree().paused = false
-	hide()
-	emit_signal("resume")
 
 
 func _on_resume_game_button_pressed():
@@ -180,3 +217,26 @@ func _on_load_button_pressed() -> void:
 	#CogitoSceneManager.loading_saved_game(CogitoSceneManager._active_slot)
 
 	_on_resume_game_button_pressed()
+
+
+## Callback when game is paused (via network event)
+func _on_game_paused() -> void:
+	# Apply pause if not already paused
+	if not get_tree().paused:
+		_apply_pause()
+	
+	# Show menu if not already shown
+	if not visible:
+		_show_pause_menu_ui()
+
+
+## Callback when game is resumed (via network event)
+func _on_game_resumed() -> void:
+	# Apply resume if paused
+	if get_tree().paused:
+		_apply_resume()
+	
+	# Hide menu if shown
+	if visible:
+		hide()
+		emit_signal("resume")
