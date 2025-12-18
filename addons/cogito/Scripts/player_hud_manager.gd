@@ -93,7 +93,29 @@ func setup_player(new_player: Node):
 
 
 func _setup_player():
-	#prevent stuck prompts when changing players
+	# Check if this is a remote player in multiplayer - if so, don't set up HUD
+	if NetworkManager and NetworkManager.is_multiplayer() and player:
+		var is_local = false
+		if PlayerManager:
+			var player_id = PlayerManager.get_player_id(player)
+			if player_id != -1:
+				var peer_id = PlayerManager.get_player_peer_id(player_id)
+				var local_peer_id = NetworkManager.get_local_peer_id()
+				is_local = (peer_id == local_peer_id)
+		
+		if not is_local:
+			# This is a remote player - hide the entire HUD
+			visible = false
+			set_process(false)
+			set_physics_process(false)
+			CogitoGlobals.debug_log(
+				true,
+				"player_hud_manager",
+				"Hiding HUD for remote player"
+			)
+			return
+	
+#prevent stuck prompts when changing players
 	delete_interaction_prompts()
 
 	connect_to_player_signals()
@@ -348,6 +370,20 @@ func _on_set_hint_prompt(passed_int_icon, passed_hint_text):
 
 # Function that controls damage vignette when damage taken.
 func _on_player_damage_taken():
+	# Only show damage overlay for local player
+	if NetworkManager and NetworkManager.is_multiplayer() and player:
+		var is_local = false
+		if PlayerManager:
+			var player_id = PlayerManager.get_player_id(player)
+			if player_id != -1:
+				var peer_id = PlayerManager.get_player_peer_id(player_id)
+				var local_peer_id = NetworkManager.get_local_peer_id()
+				is_local = (peer_id == local_peer_id)
+		
+		if not is_local:
+			# This is a remote player - don't show damage overlay
+			return
+	
 	damage_overlay.modulate = Color.WHITE
 	if hurt_tween:
 		hurt_tween.kill()

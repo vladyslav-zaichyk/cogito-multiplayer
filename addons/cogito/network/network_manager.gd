@@ -301,3 +301,15 @@ func sync_player_name(peer_id: int, player_name: String) -> void:
 			if player_id != -1:
 				PlayerManager.set_player_name(player_id, player_name)
 
+
+## RPC: Sync player death (called from NetworkDeathSync)
+@rpc("any_peer", "call_local", "reliable")
+func sync_player_death(peer_id: int) -> void:
+	# Route to the correct player's NetworkDeathSync component
+	if PlayerManager:
+		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		if player_node:
+			var death_sync = player_node.get_node_or_null("NetworkDeathSync")
+			if death_sync and death_sync.has_method("_receive_death"):
+				death_sync._receive_death(peer_id)
+

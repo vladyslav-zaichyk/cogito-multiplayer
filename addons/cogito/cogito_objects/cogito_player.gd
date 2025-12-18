@@ -257,11 +257,25 @@ func _ready():
 		var visual_rep = preload("res://addons/cogito/network/player_visual_representation.gd").new()
 		visual_rep.name = "PlayerVisualRepresentation"
 		add_child(visual_rep)
+		
+		var death_sync = preload("res://addons/cogito/network/network_death_sync.gd").new()
+		death_sync.name = "NetworkDeathSync"
+		add_child(death_sync)
 	
 	# Disable input and physics for remote players
 	if NetworkManager and NetworkManager.is_multiplayer() and not is_local_player:
 		is_movement_paused = true
 		set_physics_process(false)
+		
+		# Hide GUI/HUD for remote players (only local player should see UI)
+		var gui_node = get_node_or_null("GUI")
+		if gui_node:
+			gui_node.visible = false
+			CogitoGlobals.debug_log(
+				is_logging,
+				"cogito_player.gd",
+				"Hiding GUI for remote player (player_id: %d)" % player_id
+			)
 	
 	player_interaction_component.exclude_player(get_rid())
 
