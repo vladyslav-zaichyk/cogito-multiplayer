@@ -261,6 +261,10 @@ func _ready():
 		var death_sync = preload("res://addons/cogito/network/network_death_sync.gd").new()
 		death_sync.name = "NetworkDeathSync"
 		add_child(death_sync)
+		
+		var inventory_sync = preload("res://addons/cogito/network/network_inventory_sync.gd").new()
+		inventory_sync.name = "NetworkInventorySync"
+		add_child(inventory_sync)
 	
 	# Disable input and physics for remote players
 	if NetworkManager and NetworkManager.is_multiplayer() and not is_local_player:

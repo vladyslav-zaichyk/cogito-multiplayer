@@ -313,3 +313,119 @@ func sync_player_death(peer_id: int) -> void:
 			if death_sync and death_sync.has_method("_receive_death"):
 				death_sync._receive_death(peer_id)
 
+
+## RPC: Sync inventory item picked (called from NetworkInventorySync)
+@rpc("any_peer", "call_local", "reliable")
+func sync_inventory_item_picked(peer_id: int, item_data: Dictionary, slot_index: int) -> void:
+	# Route to the correct player's NetworkInventorySync component
+	if PlayerManager:
+		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		if player_node:
+			var inventory_sync = player_node.get_node_or_null("NetworkInventorySync")
+			if inventory_sync and inventory_sync.has_method("_receive_item_picked"):
+				inventory_sync._receive_item_picked(peer_id, item_data, slot_index)
+
+
+## RPC: Sync inventory item dropped (called from NetworkInventorySync)
+@rpc("any_peer", "call_local", "reliable")
+func sync_inventory_item_dropped(peer_id: int, item_data: Dictionary, position: Vector3) -> void:
+	# Route to the correct player's NetworkInventorySync component
+	if PlayerManager:
+		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		if player_node:
+			var inventory_sync = player_node.get_node_or_null("NetworkInventorySync")
+			if inventory_sync and inventory_sync.has_method("_receive_item_dropped"):
+				inventory_sync._receive_item_dropped(peer_id, item_data, position)
+
+
+## RPC: Sync pickup network_id (called from NetworkPickupID on host)
+@rpc("any_peer", "call_local", "reliable")
+func sync_pickup_network_id(scene_path_str: String, network_id: int, position: Vector3, item_name: String = "") -> void:
+	# Find the pickup item by scene path and set its network_id
+	var scene_root = get_tree().current_scene
+	if not scene_root:
+		return
+	
+	# Try to parse scene_path_str as NodePath
+	var scene_path = NodePath(scene_path_str)
+	var target_node = scene_root.get_node_or_null(scene_path)
+	
+	if target_node:
+		# Find NetworkPickupID component
+		for child in target_node.get_children():
+			if child.has_method("set_network_id"):
+				child.set_network_id(network_id)
+				CogitoGlobals.debug_log(
+					false,
+					"NetworkManager",
+					"Set network_id %d for pickup at path %s" % [network_id, scene_path_str]
+				)
+				return
+		
+		# If not found, add NetworkPickupID component
+		var network_id_component = preload("res://addons/cogito/network/network_pickup_id.gd").new()
+		network_id_component.name = "NetworkPickupID"
+		target_node.add_child(network_id_component)
+		network_id_component.set_network_id(network_id)
+		return
+	
+	# If path doesn't work, try to find by position and item name (for dynamically spawned items)
+	_find_pickup_by_position_and_set_id(position, network_id, item_name)
+
+
+## Helper: Find pickup by position and set network_id
+func _find_pickup_by_position_and_set_id(position: Vector3, network_id: int, item_name: String = "") -> void:
+	var scene_root = get_tree().current_scene
+	if not scene_root:
+		return
+	
+	var all_nodes = scene_root.get_children()
+	var nodes_to_check = []
+	nodes_to_check.append_array(all_nodes)
+	
+	var closest_match = null
+	var closest_distance = 0.5  # Max distance to consider a match
+	
+	# Recursively find all nodes
+	while nodes_to_check.size() > 0:
+		var node = nodes_to_check.pop_front()
+		if not is_instance_valid(node):
+			continue
+		
+		# Check if this node has a PickupComponent but no NetworkPickupID yet
+		var has_pickup = false
+		var has_network_id = false
+		var matches_item_name = false
+		
+		for child in node.get_children():
+			if child is PickupComponent:
+				has_pickup = true
+				# Check if item name matches (if provided)
+				var pickup = child as PickupComponent
+				if pickup.slot_data and pickup.slot_data.inventory_item:
+					var item = pickup.slot_data.inventory_item
+					var item_n = item.get("name") if item.get("name") else ""
+					if item_name.is_empty() or item_n == item_name:
+						matches_item_name = true
+			if child.has_method("set_network_id") or child.has_method("get_network_id"):
+				has_network_id = true
+		
+		if has_pickup and not has_network_id and matches_item_name:
+			# Check distance
+			if node is Node3D:
+				var distance = (node as Node3D).global_position.distance_to(position)
+				if distance < closest_distance:
+					closest_match = node
+					closest_distance = distance
+		
+		# Add children to check
+		for child in node.get_children():
+			nodes_to_check.append(child)
+	
+	if closest_match:
+		# Add NetworkPickupID component if it doesn't exist
+		var network_id_component = preload("res://addons/cogito/network/network_pickup_id.gd").new()
+		network_id_component.name = "NetworkPickupID"
+		closest_match.add_child(network_id_component)
+		network_id_component.set_network_id(network_id)
+

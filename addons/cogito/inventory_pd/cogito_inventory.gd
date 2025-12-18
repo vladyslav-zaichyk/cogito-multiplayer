@@ -277,6 +277,9 @@ func pick_up_slot_data(slot_data: InventorySlotPD) -> bool:
 			slot_data.origin_index = index
 			inventory_slots[index].fully_merge_with(slot_data)
 			_emit_inventory_updated()
+			# Emit through Event Bus for merged items (so network sync can track them)
+			if owner_id != -1 and NetworkEventBus:
+				NetworkEventBus.inventory_item_picked.emit(owner_id, slot_data.inventory_item, slot_data)
 			return true
 
 	for index in inventory_slots.size():

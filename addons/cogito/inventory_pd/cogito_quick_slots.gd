@@ -119,12 +119,15 @@ func _unhandled_input(event):
 	if !self.visible:
 		return
 
+	if not inventory_reference:
+		return
+
 	if inventory_is_open:
 		CogitoGlobals.debug_log(true, "CogitoQuickSlots.gd", "Inventory is open, no item used.")
 		return
 
 	if event.is_action_released("quickslot_1"):
-		if inventory_reference.assigned_quickslots[0]:
+		if inventory_reference.assigned_quickslots.size() > 0 and inventory_reference.assigned_quickslots[0]:
 			CogitoGlobals.debug_log(true, "CogitoQuickSlots.gd", "Using quickslot 1...")
 			inventory_reference.use_slot_data(
 				inventory_reference.assigned_quickslots[0].origin_index
@@ -136,7 +139,7 @@ func _unhandled_input(event):
 			return
 
 	if event.is_action_released("quickslot_2"):
-		if inventory_reference.assigned_quickslots[1]:
+		if inventory_reference.assigned_quickslots.size() > 1 and inventory_reference.assigned_quickslots[1]:
 			CogitoGlobals.debug_log(true, "CogitoQuickSlots.gd", "Using quickslot 2...")
 			inventory_reference.use_slot_data(
 				inventory_reference.assigned_quickslots[1].origin_index
@@ -148,7 +151,7 @@ func _unhandled_input(event):
 			return
 
 	if event.is_action_released("quickslot_3"):
-		if inventory_reference.assigned_quickslots[2]:
+		if inventory_reference.assigned_quickslots.size() > 2 and inventory_reference.assigned_quickslots[2]:
 			CogitoGlobals.debug_log(true, "CogitoQuickSlots.gd", "Using quickslot 3...")
 			inventory_reference.use_slot_data(
 				inventory_reference.assigned_quickslots[2].origin_index
@@ -160,7 +163,7 @@ func _unhandled_input(event):
 			return
 
 	if event.is_action_released("quickslot_4"):
-		if inventory_reference.assigned_quickslots[3]:
+		if inventory_reference.assigned_quickslots.size() > 3 and inventory_reference.assigned_quickslots[3]:
 			CogitoGlobals.debug_log(true, "CogitoQuickSlots.gd", "Using quickslot 4...")
 			inventory_reference.use_slot_data(
 				inventory_reference.assigned_quickslots[3].origin_index

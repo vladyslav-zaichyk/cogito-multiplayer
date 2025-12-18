@@ -11,6 +11,28 @@ func _enter_tree() -> void:
 	if display_item_name:
 		var owner_object: CogitoObject = get_parent()
 		owner_object.display_name = slot_data.inventory_item.name
+	
+	# Add NetworkPickupID component for multiplayer synchronization (deferred to avoid blocking)
+	if NetworkManager and NetworkManager.is_multiplayer():
+		call_deferred("_add_network_pickup_id")
+
+
+func _add_network_pickup_id() -> void:
+	var parent_obj = get_parent()
+	if not parent_obj:
+		return
+	
+	# Check if NetworkPickupID already exists
+	var has_network_id = false
+	for child in parent_obj.get_children():
+		if child.has_method("get_network_id"):
+			has_network_id = true
+			break
+	
+	if not has_network_id:
+		var network_id_component = preload("res://addons/cogito/network/network_pickup_id.gd").new()
+		network_id_component.name = "NetworkPickupID"
+		parent_obj.add_child(network_id_component)
 
 
 func interact(_player_interaction_component: PlayerInteractionComponent):

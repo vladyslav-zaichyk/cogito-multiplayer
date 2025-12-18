@@ -160,7 +160,7 @@ func _refresh_players_list() -> void:
 	# Add/update labels for existing players
 	for player_id in all_player_ids:
 		var player_node = PlayerManager.get_player(player_id)
-		if not player_node:
+		if not player_node or not is_instance_valid(player_node):
 			continue
 		
 		# Check if we need to create a new label

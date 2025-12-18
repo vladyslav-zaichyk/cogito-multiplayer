@@ -1,0 +1,654 @@
+extends Node
+## Network Inventory Sync Component
+## Synchronizes player inventory in multiplayer
+## Attach this to a CogitoPlayer
+
+## Enable/disable logging
+var enable_logging: bool = true  # Enable by default for debugging
+
+## Reference to the parent CogitoPlayer
+var parent_body: CogitoPlayer = null
+
+## Is this the local player?
+var is_local: bool = false
+
+## Peer ID of this player
+var peer_id: int = 0
+
+## Reference to player inventory
+var player_inventory: CogitoInventory = null
+
+
+func _ready() -> void:
+	parent_body = get_parent() as CogitoPlayer
+	if not parent_body:
+		push_error("NetworkInventorySync: Parent must be a CogitoPlayer")
+		return
+	
+	# Wait a frame for player to be initialized
+	await get_tree().process_frame
+	
+	# Determine if this is local player
+	if NetworkManager and NetworkManager.is_multiplayer():
+		# Get peer_id from PlayerManager
+		if PlayerManager:
+			var player_id = PlayerManager.get_player_id(parent_body)
+			if player_id != -1:
+				peer_id = PlayerManager.get_player_peer_id(player_id)
+				var local_peer_id = NetworkManager.get_local_peer_id()
+				is_local = (peer_id == local_peer_id)
+			else:
+				# Player not registered yet, wait a bit
+				await get_tree().process_frame
+				player_id = PlayerManager.get_player_id(parent_body)
+				if player_id != -1:
+					peer_id = PlayerManager.get_player_peer_id(player_id)
+					var local_peer_id = NetworkManager.get_local_peer_id()
+					is_local = (peer_id == local_peer_id)
+	else:
+		is_local = false
+		peer_id = 0
+	
+	# Get player inventory
+	if parent_body.has_method("get") and parent_body.get("inventory_data"):
+		player_inventory = parent_body.inventory_data
+		if player_inventory:
+			# Connect to inventory signals
+			_setup_inventory_tracking()
+	
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"NetworkInventorySync",
+		"Initialized for %s player (peer_id: %d)" % ["local" if is_local else "remote", peer_id]
+	)
+
+
+## Setup tracking for inventory changes
+func _setup_inventory_tracking() -> void:
+	if not player_inventory:
+		return
+	
+	# Only track local player's inventory
+	if not is_local:
+		return
+	
+	# Connect to inventory signals
+	if not player_inventory.picked_up_new_inventory_item.is_connected(_on_item_picked):
+		player_inventory.picked_up_new_inventory_item.connect(_on_item_picked)
+	
+	if not player_inventory.inventory_updated.is_connected(_on_inventory_updated):
+		player_inventory.inventory_updated.connect(_on_inventory_updated)
+	
+	# Also connect to NetworkEventBus for merged items (when quantity increases)
+	if NetworkEventBus and not NetworkEventBus.inventory_item_picked.is_connected(_on_event_bus_item_picked):
+		NetworkEventBus.inventory_item_picked.connect(_on_event_bus_item_picked)
+	
+	# Connect to NetworkEventBus for dropped items
+	if NetworkEventBus and not NetworkEventBus.inventory_item_dropped.is_connected(_on_item_dropped):
+		NetworkEventBus.inventory_item_dropped.connect(_on_item_dropped)
+	
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"NetworkInventorySync",
+		"Connected to inventory signals"
+	)
+
+
+## Called when NetworkEventBus emits inventory_item_picked (for merged items too)
+func _on_event_bus_item_picked(player_id: int, item: InventoryItemPD, slot_data: InventorySlotPD) -> void:
+	# Only process if this is about the local player
+	if not is_local:
+		return
+	
+	# Check if this is about us
+	var local_player_id = PlayerManager.get_local_player_id() if PlayerManager else -1
+	if player_id != local_player_id:
+		return
+	
+	# Call the same handler as _on_item_picked
+	_on_item_picked(slot_data)
+
+
+## Called when local player picks up an item
+func _on_item_picked(slot_data: InventorySlotPD) -> void:
+	CogitoGlobals.debug_log(
+		true,
+		"NetworkInventorySync",
+		"[_on_item_picked] Called with slot_data: %s, is_local: %s" % [slot_data.inventory_item.name if slot_data and slot_data.inventory_item else "null", is_local]
+	)
+	
+	if not is_local:
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkInventorySync",
+			"[_on_item_picked] Not local player, returning"
+		)
+		return
+	
+	if not NetworkManager or not NetworkManager.is_multiplayer():
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkInventorySync",
+			"[_on_item_picked] Not multiplayer, returning"
+		)
+		return
+	
+	if not slot_data or not slot_data.inventory_item:
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkInventorySync",
+			"[_on_item_picked] Invalid slot_data or inventory_item, returning"
+		)
+		return
+	
+	# Sync item pickup to all clients
+	# Note: We'll need to serialize the item data for RPC
+	var item_data = _serialize_item(slot_data.inventory_item)
+	var slot_index = slot_data.origin_index
+	# Also include quantity from slot_data
+	item_data["quantity"] = slot_data.quantity
+	
+	# Find the picked up item in the world to get its position, network_id, and scene path
+	# Note: instance_id is not used anymore (not reliable in multiplayer, local to each client)
+	var pickup_position = Vector3.ZERO
+	var pickup_network_id = 0
+	var pickup_scene_path = ""
+	
+	# Try to find the item that was just picked up
+	# The item should be in the interaction component's interactable
+	if parent_body and parent_body.has_method("get") and parent_body.get("player_interaction_component"):
+		var interaction_component = parent_body.player_interaction_component
+		if interaction_component and interaction_component.interactable:
+			var interactable = interaction_component.interactable
+			# Check if this interactable has a PickupComponent
+			for child in interactable.get_children():
+				if child is PickupComponent:
+					var pickup = child as PickupComponent
+					if pickup.slot_data and pickup.slot_data.inventory_item == slot_data.inventory_item:
+						# Found the item that was picked up
+						pickup_position = interactable.global_position
+						
+						# Get scene path (most reliable for static items)
+						if interactable.is_inside_tree():
+							pickup_scene_path = str(interactable.get_path())
+						
+						# Try to get network_id from NetworkPickupID component
+						for child2 in interactable.get_children():
+							if child2.has_method("get_network_id"):
+								pickup_network_id = child2.get_network_id()
+								break
+						
+						# If network_id is 0, try to find NetworkPickupID by name
+						if pickup_network_id == 0:
+							var network_id_node = interactable.get_node_or_null("NetworkPickupID")
+							if network_id_node and network_id_node.has_method("get_network_id"):
+								pickup_network_id = network_id_node.get_network_id()
+						
+						break
+	
+	# Add position, network_id, and scene path to item_data for precise identification
+	# Note: instance_id removed (not reliable in multiplayer)
+	item_data["pickup_position"] = pickup_position
+	item_data["pickup_network_id"] = pickup_network_id
+	item_data["pickup_scene_path"] = pickup_scene_path
+	
+	CogitoGlobals.debug_log(
+		true,  # Always log for debugging
+		"NetworkInventorySync",
+		"[LOCAL PICKUP] Item: %s | Position: %s | Network ID: %d | Scene Path: %s" % [
+			slot_data.inventory_item.name,
+			pickup_position,
+			pickup_network_id,
+			pickup_scene_path
+		]
+	)
+	
+	# Only sync if we're in multiplayer and have a valid peer_id
+	if NetworkManager.is_multiplayer() and peer_id > 0:
+		NetworkManager.sync_inventory_item_picked.rpc(peer_id, item_data, slot_index)
+
+
+## Called when local player drops an item
+func _on_item_dropped(player_id: int, item: InventoryItemPD, position: Vector3) -> void:
+	# Only process if this is about the local player
+	if not is_local or player_id != PlayerManager.get_player_id(parent_body) if PlayerManager else -1:
+		return
+	
+	if not NetworkManager or not NetworkManager.is_multiplayer():
+		return
+	
+	if not item:
+		return
+	
+	# Sync item drop to all clients
+	var item_data = _serialize_item(item)
+	
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"NetworkInventorySync",
+		"Local player dropped item: %s, syncing to all clients" % item.name
+	)
+	
+	# Only sync if we're in multiplayer and have a valid peer_id
+	if NetworkManager.is_multiplayer() and peer_id > 0:
+		NetworkManager.sync_inventory_item_dropped.rpc(peer_id, item_data, position)
+
+
+## Called when local player's inventory changes (items moved, used, etc.)
+func _on_inventory_updated(inventory: CogitoInventory) -> void:
+	if not is_local:
+		return
+	
+	if not NetworkManager or not NetworkManager.is_multiplayer():
+		return
+	
+	# For now, we'll sync individual item changes
+	# Full inventory sync can be added later if needed
+	# This is called for moves, merges, etc.
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"NetworkInventorySync",
+		"Inventory updated (items may have been moved or merged)"
+	)
+
+
+## Serialize item data for RPC (simplified - just item resource path)
+func _serialize_item(item: InventoryItemPD) -> Dictionary:
+	if not item:
+		return {}
+	
+	# Get resource path if it's a resource
+	var item_path = ""
+	if item.resource_path != "":
+		item_path = item.resource_path
+	else:
+		# Try to find the resource path from the item
+		# This is a simplified approach - may need improvement
+		item_path = "unknown"
+	
+	# Get item name and quantity safely
+	var item_name = ""
+	var item_quantity = 1
+	
+	# Try to get name property (most items have this)
+	# InventoryItemPD has name as @export var, so we can access it directly
+	if item.get("name") != null:
+		item_name = item.get("name")
+	
+	# Note: quantity is in InventorySlotPD, not InventoryItemPD
+	# So we don't need to serialize quantity here (it's handled separately)
+	
+	return {
+		"resource_path": item_path,
+		"name": item_name,
+		"quantity": item_quantity
+	}
+
+
+## Called by RPC when a player picks up an item
+func _receive_item_picked(picking_peer_id: int, item_data: Dictionary, slot_index: int) -> void:
+	# Only process if this is about a remote player
+	if is_local and picking_peer_id == peer_id:
+		# This is about ourselves, but we already handled it locally
+		return
+	
+	var item_name = item_data.get("name", "unknown")
+	var pickup_position = item_data.get("pickup_position", Vector3.ZERO)
+	var pickup_network_id = item_data.get("pickup_network_id", 0)
+	var pickup_scene_path = item_data.get("pickup_scene_path", "")
+	# Note: instance_id removed (not reliable in multiplayer)
+	
+	CogitoGlobals.debug_log(
+		true,  # Always log for debugging
+		"NetworkInventorySync",
+		"[REMOTE PICKUP RECEIVED] Peer %d picked up: %s | Position: %s | Network ID: %d | Scene Path: %s" % [
+			picking_peer_id,
+			item_name,
+			pickup_position,
+			pickup_network_id,
+			pickup_scene_path
+		]
+	)
+	
+	# Find and remove the item from the world scene
+	# We need to find the CogitoObject with PickupComponent that matches this item
+	_remove_pickup_from_world(item_data)
+
+
+## Called by RPC when a player drops an item
+func _receive_item_dropped(dropping_peer_id: int, item_data: Dictionary, position: Vector3) -> void:
+	# Only process if this is about a remote player
+	if is_local and dropping_peer_id == peer_id:
+		# This is about ourselves, but we already handled it locally
+		return
+	
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"NetworkInventorySync",
+		"Received item drop sync for peer %d: %s at position %s" % [dropping_peer_id, item_data.get("name", "unknown"), position]
+	)
+	
+	# Spawn the dropped item in the world
+	_spawn_pickup_in_world(item_data, position)
+
+
+## Remove pickup item from world (called when remote player picks it up)
+func _remove_pickup_from_world(item_data: Dictionary) -> void:
+	var item_name = item_data.get("name", "")
+	var item_path = item_data.get("resource_path", "")
+	var pickup_position = item_data.get("pickup_position", Vector3.ZERO)
+	var pickup_network_id = item_data.get("pickup_network_id", 0)
+	var pickup_scene_path = item_data.get("pickup_scene_path", "")
+	# Note: instance_id removed (not reliable in multiplayer)
+	
+	if item_name.is_empty() and item_path.is_empty():
+		return
+	
+	# Get current scene root
+	var scene_root = get_tree().current_scene
+	if not scene_root:
+		return
+	
+	# Priority 1: Try to find by scene path (most reliable for static items)
+	if not pickup_scene_path.is_empty():
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkInventorySync",
+			"[REMOVE ATTEMPT] Trying to find by scene_path: %s" % pickup_scene_path
+		)
+		var target_node = scene_root.get_node_or_null(NodePath(pickup_scene_path))
+		if target_node and is_instance_valid(target_node):
+			CogitoGlobals.debug_log(
+				true,
+				"NetworkInventorySync",
+				"[REMOVE ATTEMPT] Found node by scene_path, verifying..."
+			)
+			# Verify it has PickupComponent and matches the item
+			for child in target_node.get_children():
+				if child is PickupComponent:
+					var pickup = child as PickupComponent
+					if pickup.slot_data and pickup.slot_data.inventory_item:
+						var item = pickup.slot_data.inventory_item
+						var item_n = item.get("name") if item.get("name") else ""
+						# Verify it matches the item we're looking for
+						if item_n == item_name or (item_path != "" and item.resource_path == item_path):
+							CogitoGlobals.debug_log(
+								true,
+								"NetworkInventorySync",
+								"[REMOVE SUCCESS] Removing pickup item by scene_path: %s (path: %s, item name: %s)" % [item_name, pickup_scene_path, item_n]
+							)
+							target_node.queue_free()
+							return
+						else:
+							CogitoGlobals.debug_log(
+								true,
+								"NetworkInventorySync",
+								"[REMOVE FAIL] Item name mismatch: expected '%s', found '%s'" % [item_name, item_n]
+							)
+		else:
+			CogitoGlobals.debug_log(
+				true,
+				"NetworkInventorySync",
+				"[REMOVE FAIL] Could not find node by scene_path: %s" % pickup_scene_path
+			)
+	
+	# Priority 2: Try to find by network_id (works across clients for dynamic items)
+	if pickup_network_id > 0:
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkInventorySync",
+			"[REMOVE ATTEMPT] Trying to find by network_id: %d" % pickup_network_id
+		)
+		var all_nodes = scene_root.get_children()
+		var nodes_to_check = []
+		nodes_to_check.append_array(all_nodes)
+		var found_count = 0
+		
+		# Recursively find all nodes
+		while nodes_to_check.size() > 0:
+			var node = nodes_to_check.pop_front()
+			if not is_instance_valid(node):
+				continue
+			
+			# Check if this node has a NetworkPickupID component with matching network_id
+			for child in node.get_children():
+				if child.has_method("get_network_id"):
+					var child_network_id = child.get_network_id()
+					if child_network_id == pickup_network_id:
+						found_count += 1
+						CogitoGlobals.debug_log(
+							true,
+							"NetworkInventorySync",
+							"[REMOVE ATTEMPT] Found node with matching network_id %d (node: %s)" % [pickup_network_id, node.name]
+						)
+						# Found matching network_id, verify it has PickupComponent
+						for child2 in node.get_children():
+							if child2 is PickupComponent:
+								var pickup = child2 as PickupComponent
+								if pickup.slot_data and pickup.slot_data.inventory_item:
+									var item = pickup.slot_data.inventory_item
+									var item_n = item.get("name") if item.get("name") else ""
+									# Verify it matches the item we're looking for
+									if item_n == item_name or (item_path != "" and item.resource_path == item_path):
+										CogitoGlobals.debug_log(
+											true,
+											"NetworkInventorySync",
+											"[REMOVE SUCCESS] Removing pickup item by network_id: %s (network_id: %d, item name: %s)" % [item_name, pickup_network_id, item_n]
+										)
+										node.queue_free()
+										return
+									else:
+										CogitoGlobals.debug_log(
+											true,
+											"NetworkInventorySync",
+											"[REMOVE FAIL] Item name mismatch: expected '%s', found '%s' (network_id: %d)" % [item_name, item_n, pickup_network_id]
+										)
+						break
+			
+			# Add children to check
+			for child in node.get_children():
+				nodes_to_check.append(child)
+		
+		if found_count == 0:
+			CogitoGlobals.debug_log(
+				true,
+				"NetworkInventorySync",
+				"[REMOVE FAIL] No nodes found with network_id: %d" % pickup_network_id
+			)
+	
+	# Priority 3: Try to find by position (if position is provided and valid)
+	# Note: instance_id method removed (not reliable in multiplayer, local to each client)
+	if pickup_position != Vector3.ZERO:
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkInventorySync",
+			"[REMOVE ATTEMPT] Trying to find by position: %s" % pickup_position
+		)
+		var closest_match = null
+		var closest_distance = 0.5  # Max distance to consider a match (0.5 units)
+		
+		var all_nodes = scene_root.get_children()
+		var nodes_to_check = []
+		nodes_to_check.append_array(all_nodes)
+		
+		# Recursively find all nodes
+		while nodes_to_check.size() > 0:
+			var node = nodes_to_check.pop_front()
+			if not is_instance_valid(node):
+				continue
+			
+			# Check if this node has a PickupComponent
+			for child in node.get_children():
+				if child is PickupComponent:
+					var pickup = child as PickupComponent
+					if pickup.slot_data and pickup.slot_data.inventory_item:
+						var item = pickup.slot_data.inventory_item
+						# Match by name or resource path
+						if item.get("name") == item_name or (item_path != "" and item.resource_path == item_path):
+							# Check distance to pickup position
+							var distance = node.global_position.distance_to(pickup_position)
+							if distance < closest_distance:
+								closest_match = node
+								closest_distance = distance
+			
+			# Add children to check
+			for child in node.get_children():
+				nodes_to_check.append(child)
+		
+		if closest_match and is_instance_valid(closest_match):
+			CogitoGlobals.debug_log(
+				true,
+				"NetworkInventorySync",
+				"[REMOVE SUCCESS] Removing pickup item by position: %s at distance %f" % [item_name, closest_distance]
+			)
+			closest_match.queue_free()
+			return
+		else:
+			CogitoGlobals.debug_log(
+				true,
+				"NetworkInventorySync",
+				"[REMOVE FAIL] No matching item found by position (searched within 0.5 units of %s)" % pickup_position
+			)
+	
+	# Priority 4: Fallback to first matching item (less precise, but better than nothing)
+	CogitoGlobals.debug_log(
+		true,
+		"NetworkInventorySync",
+		"[REMOVE ATTEMPT] Fallback: searching for any matching item: %s" % item_name
+	)
+	var all_nodes = scene_root.get_children()
+	var nodes_to_check = []
+	nodes_to_check.append_array(all_nodes)
+	var matches_found = 0
+	
+	# Recursively find all nodes
+	while nodes_to_check.size() > 0:
+		var node = nodes_to_check.pop_front()
+		if not is_instance_valid(node):
+			continue
+		
+		# Check if this node has a PickupComponent
+		for child in node.get_children():
+			if child is PickupComponent:
+				var pickup = child as PickupComponent
+				if pickup.slot_data and pickup.slot_data.inventory_item:
+					var item = pickup.slot_data.inventory_item
+					var item_n = item.get("name") if item.get("name") else ""
+					# Match by name or resource path
+					if item_n == item_name or (item_path != "" and item.resource_path == item_path):
+						matches_found += 1
+						# Found matching item, remove it
+						var parent_obj = pickup.get_parent()
+						if parent_obj and is_instance_valid(parent_obj):
+							var pos_str = ""
+							if parent_obj is Node3D:
+								pos_str = str((parent_obj as Node3D).global_position)
+							CogitoGlobals.debug_log(
+								true,
+								"NetworkInventorySync",
+								"[REMOVE SUCCESS] Removing pickup item (fallback, match #%d): %s at %s" % [matches_found, item_name, pos_str]
+							)
+							parent_obj.queue_free()
+							return
+		
+		# Add children to check
+		for child in node.get_children():
+			nodes_to_check.append(child)
+	
+	CogitoGlobals.debug_log(
+		true,
+		"NetworkInventorySync",
+		"[REMOVE FAIL] Fallback search found %d matching items, but none were removed" % matches_found
+	)
+	
+	# Final log if item was not found at all
+	CogitoGlobals.debug_log(
+		true,
+		"NetworkInventorySync",
+		"[REMOVE FAIL] Could not remove item '%s' from world. All search methods failed. Scene path: %s, Network ID: %d, Position: %s" % [
+			item_name,
+			pickup_scene_path if not pickup_scene_path.is_empty() else "N/A",
+			pickup_network_id,
+			pickup_position if pickup_position != Vector3.ZERO else "N/A"
+		]
+	)
+
+
+## Spawn pickup item in world (called when remote player drops it)
+func _spawn_pickup_in_world(item_data: Dictionary, position: Vector3) -> void:
+	var item_path = item_data.get("resource_path", "")
+	
+	if item_path.is_empty():
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkInventorySync",
+			"Cannot spawn item: no resource path provided"
+		)
+		return
+	
+	# Try to load the item resource
+	var item_resource = load(item_path) as InventoryItemPD
+	if not item_resource:
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkInventorySync",
+			"Cannot spawn item: failed to load resource at %s" % item_path
+		)
+		return
+	
+	# Check if item has a drop_scene
+	if not item_resource.drop_scene or item_resource.drop_scene.is_empty():
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkInventorySync",
+			"Cannot spawn item: no drop_scene defined for %s" % item_resource.get("name")
+		)
+		return
+	
+	# Load and instantiate the drop scene
+	var drop_scene = load(item_resource.drop_scene) as PackedScene
+	if not drop_scene:
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkInventorySync",
+			"Cannot spawn item: failed to load drop_scene at %s" % item_resource.drop_scene
+		)
+		return
+	
+	var dropped_item = drop_scene.instantiate()
+	if not dropped_item:
+		return
+	
+	# Get scene root
+	var scene_root = CogitoSceneManager._current_scene_root_node if CogitoSceneManager else get_tree().current_scene
+	if not scene_root:
+		scene_root = get_tree().current_scene
+	
+	if not scene_root:
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkInventorySync",
+			"Cannot spawn item: no scene root found"
+		)
+		return
+	
+	# Add to scene and set position
+	scene_root.add_child(dropped_item)
+	dropped_item.global_position = position
+	
+	# Find PickupComponent and set slot_data if needed
+	for child in dropped_item.get_children():
+		if child is PickupComponent:
+			var pickup = child as PickupComponent
+			if pickup.slot_data and pickup.slot_data.inventory_item:
+				# Update quantity if provided
+				var quantity = item_data.get("quantity", 1)
+				if quantity > 1:
+					pickup.slot_data.quantity = quantity
+			break
+	
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"NetworkInventorySync",
+		"Spawned pickup item in world: %s at %s" % [item_resource.get("name"), position]
+	)

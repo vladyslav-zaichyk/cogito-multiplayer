@@ -109,7 +109,15 @@ func unregister_player(player_id: int) -> void:
 
 ## Get a player by ID
 func get_player(player_id: int) -> Node:
-	return _players.get(player_id)
+	if not _players.has(player_id):
+		return null
+	var player = _players[player_id]
+	# Check if player is still valid (not freed)
+	if not is_instance_valid(player):
+		# Player was freed, remove from registry
+		_players.erase(player_id)
+		return null
+	return player
 
 
 ## Get the local player node

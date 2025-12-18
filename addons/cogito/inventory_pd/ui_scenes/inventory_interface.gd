@@ -511,5 +511,13 @@ func _drop_item(slot_data: InventorySlotPD) -> bool:
 	for node in dropped_item.interaction_nodes:
 		if node.has_method("get_item_type"):
 			node.slot_data = slot_data
+	
+	# Emit inventory_item_dropped signal through NetworkEventBus
+	if NetworkEventBus and player:
+		var player_id = -1
+		if PlayerManager:
+			player_id = PlayerManager.get_player_id(player)
+		if player_id != -1:
+			NetworkEventBus.inventory_item_dropped.emit(player_id, slot_data.inventory_item, dropped_item.global_position)
 
 	return true
