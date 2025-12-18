@@ -4,7 +4,7 @@ extends Node
 ## Attach this to a CharacterBody3D (like CogitoPlayer)
 
 ## Enable/disable logging
-var enable_logging: bool = false
+var enable_logging: bool = false  # Disabled by default
 
 ## Sync frequency (how often to send rotation updates)
 @export var sync_rate: float = 20.0  # Updates per second
@@ -24,6 +24,9 @@ var peer_id: int = -1
 ## Last synced body rotation
 var last_synced_body_rotation: float = 0.0
 
+## Last synced neck rotation
+var last_synced_neck_rotation: float = 0.0
+
 ## Last synced head rotation
 var last_synced_head_rotation: float = 0.0
 
@@ -32,13 +35,15 @@ var sync_timer: float = 0.0
 
 ## Target rotations for interpolation (remote players)
 var target_body_rotation: float = 0.0
+var target_neck_rotation: float = 0.0
 var target_head_rotation: float = 0.0
 
 ## Reference to the parent CharacterBody3D
 var parent_body: CharacterBody3D = null
 
-## References to body and head nodes
+## References to body, neck, and head nodes
 var body_node: Node3D = null
+var neck_node: Node3D = null
 var head_node: Node3D = null
 
 
@@ -51,14 +56,38 @@ func _ready() -> void:
 	# Wait a frame for nodes to be ready
 	await get_tree().process_frame
 	
-	# Find body and head nodes
-	if parent_body.has_method("get") and parent_body.get("body"):
+	# Find body, neck, and head nodes
+	# body, neck, head are @onready vars in CogitoPlayer
+	# Try to get body node - first try direct property access, then get_node
+	if "body" in parent_body and parent_body.body != null:
 		body_node = parent_body.body
-	if body_node and body_node.has_method("get"):
-		if body_node.get("neck"):
-			var neck = body_node.neck
-			if neck and neck.has_method("get") and neck.get("head"):
-				head_node = neck.head
+	else:
+		body_node = parent_body.get_node_or_null("Body")
+	
+	if body_node:
+		# Try to get neck node
+		if "neck" in body_node and body_node.neck != null:
+			neck_node = body_node.neck
+		else:
+			neck_node = body_node.get_node_or_null("Neck")
+		
+		# Try to get head node
+		if neck_node:
+			if "head" in neck_node and neck_node.head != null:
+				head_node = neck_node.head
+			else:
+				head_node = neck_node.get_node_or_null("Head")
+		
+		# Debug: log what we found
+		CogitoGlobals.debug_log(
+			enable_logging,
+			"NetworkRotationSync",
+			"Found nodes: body=%s, neck=%s, head=%s" % [
+				"found" if body_node else "null",
+				"found" if neck_node else "null",
+				"found" if head_node else "null"
+			]
+		)
 	
 	if not body_node:
 		push_error("NetworkRotationSync: Could not find body node")
@@ -118,6 +147,9 @@ func _ready() -> void:
 	if body_node:
 		last_synced_body_rotation = rad_to_deg(body_node.rotation.y)
 		target_body_rotation = last_synced_body_rotation
+	if neck_node:
+		last_synced_neck_rotation = rad_to_deg(neck_node.rotation.y)
+		target_neck_rotation = last_synced_neck_rotation
 	if head_node:
 		last_synced_head_rotation = rad_to_deg(head_node.rotation.x)
 		target_head_rotation = last_synced_head_rotation
@@ -164,12 +196,18 @@ func _send_rotation_update() -> void:
 		return
 	
 	var current_body_rotation = rad_to_deg(body_node.rotation.y)
+	var current_neck_rotation = 0.0
+	if neck_node:
+		current_neck_rotation = rad_to_deg(neck_node.rotation.y)
 	var current_head_rotation = 0.0
 	if head_node:
 		current_head_rotation = rad_to_deg(head_node.rotation.x)
 	
 	# Only send if rotation changed significantly
 	var body_diff = abs(current_body_rotation - last_synced_body_rotation)
+	var neck_diff = 0.0
+	if neck_node:
+		neck_diff = abs(current_neck_rotation - last_synced_neck_rotation)
 	var head_diff = 0.0
 	if head_node:
 		head_diff = abs(current_head_rotation - last_synced_head_rotation)
@@ -177,13 +215,26 @@ func _send_rotation_update() -> void:
 	# Normalize angles for comparison (handle wrap-around)
 	if body_diff > 180:
 		body_diff = 360 - body_diff
+	if neck_node and neck_diff > 180:
+		neck_diff = 360 - neck_diff
 	if head_node and head_diff > 180:
 		head_diff = 360 - head_diff
 	
-	if body_diff < rotation_threshold and (not head_node or head_diff < rotation_threshold):
+	# Send if ANY rotation changed significantly (use OR, not AND)
+	var should_send = false
+	if body_diff >= rotation_threshold:
+		should_send = true
+	if neck_node and neck_diff >= rotation_threshold:
+		should_send = true
+	if head_node and head_diff >= rotation_threshold:
+		should_send = true
+	
+	if not should_send:
 		return
 	
 	last_synced_body_rotation = current_body_rotation
+	if neck_node:
+		last_synced_neck_rotation = current_neck_rotation
 	if head_node:
 		last_synced_head_rotation = current_head_rotation
 	
@@ -195,23 +246,38 @@ func _send_rotation_update() -> void:
 	
 	# Send RPC through NetworkManager (autoload singleton, always available)
 	if NetworkManager and NetworkManager.is_multiplayer():
-		NetworkManager.sync_player_rotation.rpc(peer_id, current_body_rotation, current_head_rotation)
+		CogitoGlobals.debug_log(
+			enable_logging,
+			"NetworkRotationSync",
+			"[LOCAL] Sending rotation: body=%.2f, neck=%.2f, head=%.2f" % [
+				current_body_rotation,
+				current_neck_rotation,
+				current_head_rotation
+			]
+		)
+		NetworkManager.sync_player_rotation.rpc(peer_id, current_body_rotation, current_neck_rotation, current_head_rotation)
 
 
 ## Receive rotation update (called from NetworkManager RPC)
-func _receive_rotation_update(body_rotation: float, head_rotation: float) -> void:
+func _receive_rotation_update(body_rotation: float, neck_rotation: float, head_rotation: float) -> void:
 	# Only process if this is a remote player
 	if is_local:
 		return
 	
 	# Update target rotations for interpolation
 	target_body_rotation = body_rotation
+	target_neck_rotation = neck_rotation
 	target_head_rotation = head_rotation
 	
 	CogitoGlobals.debug_log(
 		enable_logging,
 		"NetworkRotationSync",
-		"Received rotation update for peer %d: body=%.2f, head=%.2f" % [peer_id, body_rotation, head_rotation]
+		"Received rotation update for peer %d: body=%.2f, neck=%.2f, head=%.2f" % [
+			peer_id, 
+			body_rotation, 
+			neck_rotation, 
+			head_rotation
+		]
 	)
 
 
@@ -221,6 +287,9 @@ func _interpolate_rotation(delta: float) -> void:
 		return
 	
 	var current_body_rotation = rad_to_deg(body_node.rotation.y)
+	var current_neck_rotation = 0.0
+	if neck_node:
+		current_neck_rotation = rad_to_deg(neck_node.rotation.y)
 	var current_head_rotation = 0.0
 	if head_node:
 		current_head_rotation = rad_to_deg(head_node.rotation.x)
@@ -239,6 +308,20 @@ func _interpolate_rotation(delta: float) -> void:
 	else:
 		body_node.rotation.y = deg_to_rad(target_body_rotation)
 	
+	# Interpolate neck rotation (Y-axis) - if neck node exists
+	if neck_node:
+		var neck_diff = target_neck_rotation - current_neck_rotation
+		if neck_diff > 180:
+			neck_diff -= 360
+		elif neck_diff < -180:
+			neck_diff += 360
+		
+		if abs(neck_diff) > rotation_threshold:
+			var new_neck_rotation = current_neck_rotation + neck_diff * interpolation_speed * delta
+			neck_node.rotation.y = deg_to_rad(new_neck_rotation)
+		else:
+			neck_node.rotation.y = deg_to_rad(target_neck_rotation)
+	
 	# Interpolate head rotation (X-axis) - if head node exists
 	if head_node:
 		var head_diff = target_head_rotation - current_head_rotation
@@ -255,20 +338,26 @@ func _interpolate_rotation(delta: float) -> void:
 
 
 ## Force immediate rotation sync (useful for respawn, etc.)
-func force_sync_rotation(body_rotation: float, head_rotation: float) -> void:
+func force_sync_rotation(body_rotation: float, neck_rotation: float, head_rotation: float) -> void:
 	if not body_node:
 		return
 	
 	body_node.rotation.y = deg_to_rad(body_rotation)
+	if neck_node:
+		neck_node.rotation.y = deg_to_rad(neck_rotation)
 	if head_node:
 		head_node.rotation.x = deg_to_rad(head_rotation)
 	
 	last_synced_body_rotation = body_rotation
+	if neck_node:
+		last_synced_neck_rotation = neck_rotation
 	if head_node:
 		last_synced_head_rotation = head_rotation
 	target_body_rotation = body_rotation
+	if neck_node:
+		target_neck_rotation = neck_rotation
 	if head_node:
 		target_head_rotation = head_rotation
 	
 	if is_local and NetworkManager and NetworkManager.is_multiplayer():
-		NetworkManager.sync_player_rotation.rpc(peer_id, body_rotation, head_rotation)
+		NetworkManager.sync_player_rotation.rpc(peer_id, body_rotation, neck_rotation, head_rotation)

@@ -261,8 +261,12 @@ func _mark_local_peer_loaded() -> void:
 	
 	# Initialize pickup items on host (add NetworkPickupID to pre-placed items)
 	# Do this asynchronously after notifying peers, so it doesn't block
-	if NetworkManager.is_host() and current_scene:
-		_initialize_pickup_items_async(current_scene)
+	if current_scene:
+		if NetworkManager.is_host():
+			_initialize_pickup_items_async(current_scene)
+		# Initialize interactables on both host and clients
+		# Host needs it to send state updates, clients need it to receive them
+		_initialize_interactables_async(current_scene)
 	
 	# Check if all peers have loaded
 	_check_all_peers_loaded()
@@ -507,6 +511,81 @@ func _initialize_pickup_items_async(scene_root: Node) -> void:
 		true,
 		"WorldLoadingManager",
 		"[HOST] Pickup items initialization complete: found %d items, initialized %d new NetworkPickupID components" % [items_found, items_initialized]
+	)
+
+
+## Initialize interactables on scene asynchronously (add NetworkInteractable to doors and switches)
+## Called on both host and clients - host needs it to send state, clients need it to receive state
+func _initialize_interactables_async(scene_root: Node) -> void:
+	if not NetworkManager or not NetworkManager.is_multiplayer():
+		return
+	
+	if not scene_root:
+		return
+	
+	var role = "[HOST]" if NetworkManager.is_host() else "[CLIENT]"
+	
+	# Wait a frame to ensure scene is fully ready
+	await get_tree().process_frame
+	
+	CogitoGlobals.debug_log(
+		true,
+		"WorldLoadingManager",
+		"%s Initializing interactables on scene..." % role
+	)
+	
+	var interactables_found = 0
+	var interactables_initialized = 0
+	
+	# Recursively find all CogitoDoor and CogitoSwitch nodes
+	var nodes_to_check = []
+	nodes_to_check.append_array(scene_root.get_children())
+	
+	while nodes_to_check.size() > 0:
+		var node = nodes_to_check.pop_front()
+		if not is_instance_valid(node):
+			continue
+		
+		# Check if this node is a CogitoDoor or CogitoSwitch
+		var is_interactable = false
+		var has_network_sync = false
+		
+		if node is CogitoDoor or node is CogitoSwitch:
+			is_interactable = true
+			# Check if it already has NetworkInteractable
+			for child in node.get_children():
+				if child.has_method("_receive_state_update"):
+					has_network_sync = true
+					break
+		
+		# If node is interactable but has no NetworkInteractable, add it
+		if is_interactable and not has_network_sync:
+			interactables_found += 1
+			var network_interactable_script = preload("res://addons/cogito/network/network_interactable.gd")
+			var network_interactable = Node.new()
+			network_interactable.set_script(network_interactable_script)
+			network_interactable.name = "NetworkInteractable"
+			node.add_child(network_interactable)
+			interactables_initialized += 1
+			
+			CogitoGlobals.debug_log(
+				true,
+				"WorldLoadingManager",
+				"%s Added NetworkInteractable to %s at path: %s" % [role, node.get_class(), node.get_path()]
+			)
+		
+		# Add children to check
+		for child in node.get_children():
+			nodes_to_check.append(child)
+		
+		# Yield every 10 items to avoid blocking
+		if interactables_found % 10 == 0:
+			await get_tree().process_frame
+	
+	CogitoGlobals.debug_log(
+		true,
+		"WorldLoadingManager",
+		"%s Interactables initialization complete: found %d interactables, initialized %d new NetworkInteractable components" % [role, interactables_found, interactables_initialized]
 	)
 
 

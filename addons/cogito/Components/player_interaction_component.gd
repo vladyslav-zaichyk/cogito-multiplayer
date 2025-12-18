@@ -280,6 +280,14 @@ func equip_wieldable(wieldable_item: WieldableItemPD):
 			. timeout
 		)
 		is_changing_wieldables = false
+		
+		# Sync wieldable after it's fully equipped (for multiplayer)
+		# This ensures the wieldable is visible on remote clients immediately
+		if NetworkManager and NetworkManager.is_multiplayer():
+			# Trigger sync via updated_wieldable_data signal
+			# This will be picked up by NetworkWieldableSync
+			if equipped_wieldable_item:
+				equipped_wieldable_item.update_wieldable_data(self)
 	else:
 		is_changing_wieldables = false
 

@@ -256,14 +256,14 @@ func sync_player_position(peer_id: int, position: Vector3) -> void:
 
 ## RPC: Sync player rotation (called from NetworkRotationSync)
 @rpc("any_peer", "call_local", "unreliable")
-func sync_player_rotation(peer_id: int, body_rotation: float, head_rotation: float) -> void:
+func sync_player_rotation(peer_id: int, body_rotation: float, neck_rotation: float, head_rotation: float) -> void:
 	# Route to the correct player's NetworkRotationSync component
 	if PlayerManager:
 		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
 		if player_node:
 			var rotation_sync = player_node.get_node_or_null("NetworkRotationSync")
 			if rotation_sync:
-				rotation_sync._receive_rotation_update(body_rotation, head_rotation)
+				rotation_sync._receive_rotation_update(body_rotation, neck_rotation, head_rotation)
 
 
 ## RPC: Sync player attribute (called from NetworkAttributeSync)
@@ -418,6 +418,18 @@ func sync_inventory_item_used(peer_id: int, item_data: Dictionary) -> void:
 				inventory_sync._receive_item_used(peer_id, item_data)
 
 
+## RPC: Sync wieldable change (called from NetworkWieldableSync)
+@rpc("any_peer", "call_local", "reliable")
+func sync_wieldable_change(peer_id: int, wieldable_data: Dictionary) -> void:
+	# Route to the correct player's NetworkWieldableSync component
+	if PlayerManager:
+		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		if player_node:
+			var wieldable_sync = player_node.get_node_or_null("NetworkWieldableSync")
+			if wieldable_sync and wieldable_sync.has_method("_receive_wieldable_change"):
+				wieldable_sync._receive_wieldable_change(peer_id, wieldable_data)
+
+
 ## RPC: Sync pickup network_id (called from NetworkPickupID on host)
 @rpc("any_peer", "call_local", "reliable")
 func sync_pickup_network_id(scene_path_str: String, network_id: int, position: Vector3, item_name: String = "") -> void:
@@ -508,4 +520,54 @@ func _find_pickup_by_position_and_set_id(position: Vector3, network_id: int, ite
 		network_id_component.name = "NetworkPickupID"
 		closest_match.add_child(network_id_component)
 		network_id_component.set_network_id(network_id)
+
+
+## RPC: Sync interactable state (called from NetworkInteractable on host)
+@rpc("any_peer", "call_local", "reliable")
+func sync_interactable_state(interactable_data: Dictionary) -> void:
+	# Route to all NetworkInteractable components in the scene
+	# They will check if the network_id matches
+	var scene_root = get_tree().current_scene
+	if not scene_root:
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkManager",
+			"[sync_interactable_state] No current scene"
+		)
+		return
+	
+	# Find all NetworkInteractable components
+	var interactables = []
+	_find_network_interactables(scene_root, interactables)
+	
+	var network_id = interactable_data.get("network_id", "")
+	var type_str = interactable_data.get("type", "")
+	var state = interactable_data.get("state", {})
+	
+	CogitoGlobals.debug_log(
+		true,
+		"NetworkManager",
+		"[sync_interactable_state] RPC received: network_id=%s, type=%s, state=%s, found %d interactables" % [
+			network_id, type_str, state, interactables.size()
+		]
+	)
+	
+	# Send state update to matching interactable
+	for interactable in interactables:
+		if interactable.has_method("_receive_state_update"):
+			interactable._receive_state_update(interactable_data)
+		else:
+			CogitoGlobals.debug_log(
+				true,
+				"NetworkManager",
+				"[sync_interactable_state] Component %s missing _receive_state_update method" % interactable.name
+			)
+
+
+## Helper: Recursively find all NetworkInteractable components
+func _find_network_interactables(node: Node, result: Array) -> void:
+	for child in node.get_children():
+		if child.has_method("_receive_state_update"):
+			result.append(child)
+		_find_network_interactables(child, result)
 

@@ -265,6 +265,10 @@ func _ready():
 		var inventory_sync = preload("res://addons/cogito/network/network_inventory_sync.gd").new()
 		inventory_sync.name = "NetworkInventorySync"
 		add_child(inventory_sync)
+		
+		var wieldable_sync = preload("res://addons/cogito/network/network_wieldable_sync.gd").new()
+		wieldable_sync.name = "NetworkWieldableSync"
+		add_child(wieldable_sync)
 	
 	# Disable input and physics for remote players
 	if NetworkManager and NetworkManager.is_multiplayer() and not is_local_player:
