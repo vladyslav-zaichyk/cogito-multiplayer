@@ -338,6 +338,18 @@ func sync_inventory_item_dropped(peer_id: int, item_data: Dictionary, position: 
 				inventory_sync._receive_item_dropped(peer_id, item_data, position)
 
 
+## RPC: Sync inventory item used (called from NetworkInventorySync)
+@rpc("any_peer", "call_local", "reliable")
+func sync_inventory_item_used(peer_id: int, item_data: Dictionary) -> void:
+	# Route to the correct player's NetworkInventorySync component
+	if PlayerManager:
+		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		if player_node:
+			var inventory_sync = player_node.get_node_or_null("NetworkInventorySync")
+			if inventory_sync and inventory_sync.has_method("_receive_item_used"):
+				inventory_sync._receive_item_used(peer_id, item_data)
+
+
 ## RPC: Sync pickup network_id (called from NetworkPickupID on host)
 @rpc("any_peer", "call_local", "reliable")
 func sync_pickup_network_id(scene_path_str: String, network_id: int, position: Vector3, item_name: String = "") -> void:

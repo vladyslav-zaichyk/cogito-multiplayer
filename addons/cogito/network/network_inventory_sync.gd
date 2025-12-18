@@ -86,6 +86,10 @@ func _setup_inventory_tracking() -> void:
 	# Connect to NetworkEventBus for dropped items
 	if NetworkEventBus and not NetworkEventBus.inventory_item_dropped.is_connected(_on_item_dropped):
 		NetworkEventBus.inventory_item_dropped.connect(_on_item_dropped)
+
+	# Connect to NetworkEventBus for item usage (consumables, wieldables, etc.)
+	if NetworkEventBus and not NetworkEventBus.inventory_item_used.is_connected(_on_event_bus_item_used):
+		NetworkEventBus.inventory_item_used.connect(_on_event_bus_item_used)
 	
 	CogitoGlobals.debug_log(
 		enable_logging,
@@ -107,6 +111,49 @@ func _on_event_bus_item_picked(player_id: int, item: InventoryItemPD, slot_data:
 	
 	# Call the same handler as _on_item_picked
 	_on_item_picked(slot_data)
+
+
+## Called when NetworkEventBus emits inventory_item_used (локальний гравець використав предмет)
+func _on_event_bus_item_used(player_id: int, item: InventoryItemPD) -> void:
+	# Only process if this is about the local player
+	if not is_local:
+		return
+	
+	if not NetworkManager or not NetworkManager.is_multiplayer():
+		return
+	
+	# Check if this is about us
+	var local_player_id = PlayerManager.get_local_player_id() if PlayerManager else -1
+	if player_id != local_player_id:
+		return
+	
+	# Serialize item and send RPC so інші клієнти знали, що предмет використано
+	var item_data = _serialize_item(item)
+	
+	CogitoGlobals.debug_log(
+		true,
+		"NetworkInventorySync",
+		"[LOCAL USE] Player %d used item: %s (resource_path=%s)" % [
+			player_id,
+			item_data.get("name", "unknown"),
+			item_data.get("resource_path", "unknown")
+		]
+	)
+	
+	if NetworkManager.is_multiplayer() and peer_id > 0:
+		NetworkManager.sync_inventory_item_used.rpc(peer_id, item_data)
+
+
+## Called by RPC when a remote player uses an item
+func _receive_item_used(using_peer_id: int, item_data: Dictionary) -> void:
+	# For now ми не дублюємо геймплей-ефект (атрибути вже синхронізуються окремо),
+	# але можемо використовувати цей хук для візуалів/логів
+	var item_name = item_data.get("name", "unknown")
+	CogitoGlobals.debug_log(
+		true,
+		"NetworkInventorySync",
+		"[REMOTE USE RECEIVED] Peer %d used item: %s" % [using_peer_id, item_name]
+	)
 
 
 ## Called when local player picks up an item
@@ -220,13 +267,44 @@ func _on_item_dropped(player_id: int, item: InventoryItemPD, position: Vector3) 
 	if not item:
 		return
 	
+	# Try to get the original resource path before serializing
+	# When item is used, resource_path might be lost, so we need to find it from the inventory
+	var original_resource_path = item.resource_path
+	if original_resource_path.is_empty() or original_resource_path == "unknown":
+		# Try to find the item in inventory to get its original resource_path
+		if player_inventory:
+			for slot_data in player_inventory.inventory_slots:
+				if slot_data and slot_data.inventory_item == item:
+					# Found the slot, try to get resource_path from the slot's item
+					if slot_data.inventory_item.resource_path != "":
+						original_resource_path = slot_data.inventory_item.resource_path
+						CogitoGlobals.debug_log(
+							true,
+							"NetworkInventorySync",
+							"[_on_item_dropped] Found resource_path from inventory slot: %s" % original_resource_path
+						)
+					break
+	
 	# Sync item drop to all clients
 	var item_data = _serialize_item(item)
 	
+	# Override resource_path if we found a better one
+	if original_resource_path != "" and original_resource_path != "unknown" and item_data.get("resource_path") == "unknown":
+		item_data["resource_path"] = original_resource_path
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkInventorySync",
+			"[_on_item_dropped] Overriding resource_path with found path: %s" % original_resource_path
+		)
+	
 	CogitoGlobals.debug_log(
-		enable_logging,
+		true,  # Always log for debugging
 		"NetworkInventorySync",
-		"Local player dropped item: %s, syncing to all clients" % item.name
+		"[LOCAL DROP] Item: %s | Resource Path: %s | Position: %s" % [
+			item_data.get("name", "unknown"),
+			item_data.get("resource_path", "unknown"),
+			position
+		]
 	)
 	
 	# Only sync if we're in multiplayer and have a valid peer_id
@@ -255,16 +333,44 @@ func _on_inventory_updated(inventory: CogitoInventory) -> void:
 ## Serialize item data for RPC (simplified - just item resource path)
 func _serialize_item(item: InventoryItemPD) -> Dictionary:
 	if not item:
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkInventorySync",
+			"[_serialize_item] Item is null!"
+		)
 		return {}
 	
 	# Get resource path if it's a resource
 	var item_path = ""
-	if item.resource_path != "":
+	if item.resource_path != "" and item.resource_path != "unknown":
 		item_path = item.resource_path
 	else:
-		# Try to find the resource path from the item
-		# This is a simplified approach - may need improvement
-		item_path = "unknown"
+		# Try to get resource path from script if available
+		# When item is used, resource_path might be lost, but script should still have it
+		if item.get_script():
+			var script_path = item.get_script().resource_path
+			if script_path != "":
+				# Try to find the original resource by script path
+				# This is a fallback - ideally resource_path should always be set
+				item_path = script_path
+			else:
+				# Last resort: try to find by name in known resources
+				# This is not ideal but better than "unknown"
+				var item_name = item.get("name") if item.get("name") != null else ""
+				CogitoGlobals.debug_log(
+					true,
+					"NetworkInventorySync",
+					"[_serialize_item] WARNING: Item '%s' has no resource_path! Script path: %s" % [item_name, script_path if item.get_script() else "none"]
+				)
+				item_path = "unknown"
+		else:
+			var item_name = item.get("name") if item.get("name") != null else ""
+			CogitoGlobals.debug_log(
+				true,
+				"NetworkInventorySync",
+				"[_serialize_item] WARNING: Item '%s' has no resource_path and no script!" % item_name
+			)
+			item_path = "unknown"
 	
 	# Get item name and quantity safely
 	var item_name = ""
@@ -277,6 +383,12 @@ func _serialize_item(item: InventoryItemPD) -> Dictionary:
 	
 	# Note: quantity is in InventorySlotPD, not InventoryItemPD
 	# So we don't need to serialize quantity here (it's handled separately)
+	
+	CogitoGlobals.debug_log(
+		true,
+		"NetworkInventorySync",
+		"[_serialize_item] Serialized item: name='%s', resource_path='%s'" % [item_name, item_path]
+	)
 	
 	return {
 		"resource_path": item_path,
@@ -322,10 +434,18 @@ func _receive_item_dropped(dropping_peer_id: int, item_data: Dictionary, positio
 		# This is about ourselves, but we already handled it locally
 		return
 	
+	var item_name = item_data.get("name", "unknown")
+	var item_path = item_data.get("resource_path", "unknown")
+	
 	CogitoGlobals.debug_log(
-		enable_logging,
+		true,  # Always log for debugging
 		"NetworkInventorySync",
-		"Received item drop sync for peer %d: %s at position %s" % [dropping_peer_id, item_data.get("name", "unknown"), position]
+		"[REMOTE DROP RECEIVED] Peer %d dropped: %s | Resource Path: %s | Position: %s" % [
+			dropping_peer_id,
+			item_name,
+			item_path,
+			position
+		]
 	)
 	
 	# Spawn the dropped item in the world
@@ -576,13 +696,20 @@ func _remove_pickup_from_world(item_data: Dictionary) -> void:
 
 ## Spawn pickup item in world (called when remote player drops it)
 func _spawn_pickup_in_world(item_data: Dictionary, position: Vector3) -> void:
+	var item_name = item_data.get("name", "unknown")
 	var item_path = item_data.get("resource_path", "")
 	
-	if item_path.is_empty():
+	CogitoGlobals.debug_log(
+		true,
+		"NetworkInventorySync",
+		"[SPAWN ATTEMPT] Trying to spawn item: %s | Resource Path: %s | Position: %s" % [item_name, item_path, position]
+	)
+	
+	if item_path.is_empty() or item_path == "unknown":
 		CogitoGlobals.debug_log(
 			true,
 			"NetworkInventorySync",
-			"Cannot spawn item: no resource path provided"
+			"[SPAWN FAIL] Cannot spawn item '%s': invalid resource path '%s'" % [item_name, item_path]
 		)
 		return
 	
@@ -592,7 +719,7 @@ func _spawn_pickup_in_world(item_data: Dictionary, position: Vector3) -> void:
 		CogitoGlobals.debug_log(
 			true,
 			"NetworkInventorySync",
-			"Cannot spawn item: failed to load resource at %s" % item_path
+			"[SPAWN FAIL] Cannot spawn item '%s': failed to load resource at '%s'" % [item_name, item_path]
 		)
 		return
 	

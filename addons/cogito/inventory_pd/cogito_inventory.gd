@@ -103,6 +103,15 @@ func use_slot_data(index: int):
 		return
 
 	var use_successful: bool = slot_data.inventory_item.use(owner)
+
+	# Emit inventory_item_used through NetworkEventBus (for multiplayer sync)
+	if use_successful and NetworkEventBus:
+		var player_id := -1
+		if PlayerManager and owner:
+			player_id = PlayerManager.get_player_id(owner)
+		if player_id != -1:
+			NetworkEventBus.inventory_item_used.emit(player_id, slot_data.inventory_item)
+
 	if slot_data.inventory_item.has_method("is_consumable") and use_successful:
 		slot_data.quantity -= 1
 		if slot_data.quantity < 1:
