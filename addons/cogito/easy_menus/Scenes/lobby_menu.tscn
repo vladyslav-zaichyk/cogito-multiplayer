@@ -48,6 +48,21 @@ theme_override_font_sizes/font_size = 18
 text = "Server: Unknown"
 horizontal_alignment = 1
 
+[node name="PlayerNameContainer" type="VBoxContainer" parent="ContentMain"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="PlayerNameLabel" type="Label" parent="ContentMain/PlayerNameContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "Your Name:"
+horizontal_alignment = 1
+
+[node name="PlayerNameInput" type="LineEdit" parent="ContentMain/PlayerNameContainer"]
+layout_mode = 2
+placeholder_text = "Enter your name..."
+max_length = 20
+
 [node name="PlayersLabel" type="Label" parent="ContentMain"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 20

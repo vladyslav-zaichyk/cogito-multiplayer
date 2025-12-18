@@ -173,7 +173,18 @@ func _spawn_local_player() -> void:
 		# Notify other peers about local player spawn (both host and clients)
 		# Host needs to notify clients about himself, clients need to notify host about themselves
 		if NetworkManager.is_multiplayer():
-			_player_spawned.rpc(local_peer_id, spawn_pos)
+			# Wait a bit to ensure name is set from lobby
+			await get_tree().process_frame
+			await get_tree().process_frame
+			
+			var player_name = PlayerManager.get_player_name(player_id) if PlayerManager else "Player"
+			# If name is still "You", replace with something better
+			if player_name == "You":
+				if NetworkManager.is_host():
+					player_name = "Host"
+				else:
+					player_name = "Player"
+			_player_spawned.rpc(local_peer_id, spawn_pos, player_name)
 	
 	# In Godot 4, authority is managed through RPC attributes
 	# Local player will control their own character through RPCs
@@ -203,12 +214,19 @@ func _spawn_remote_players() -> void:
 		var local_player = PlayerManager.get_local_player()
 		if local_player:
 			var host_spawn_pos = local_player.global_position
+			var host_player_id = PlayerManager.get_local_player_id()
+			# Wait a bit to ensure name is set from lobby
+			await get_tree().process_frame
+			var host_name = PlayerManager.get_player_name(host_player_id) if host_player_id != -1 else "Host"
+			# If name is still "You", use "Host" instead
+			if host_name == "You":
+				host_name = "Host"
 			CogitoGlobals.debug_log(
 				enable_logging,
 				"PlayerSpawner",
-				"[HOST] Notifying clients about host spawn at position: %s" % host_spawn_pos
+				"[HOST] Notifying clients about host spawn at position: %s (name: %s)" % [host_spawn_pos, host_name]
 			)
-			_player_spawned.rpc(1, host_spawn_pos)
+			_player_spawned.rpc(1, host_spawn_pos, host_name)
 
 
 ## Spawn a remote player for a specific peer
@@ -261,14 +279,20 @@ func _spawn_remote_player(peer_id: int) -> void:
 		var player_id = PlayerManager.register_player(player_instance, false)  # false = not local
 		# Set peer_id for this player
 		PlayerManager.set_player_peer_id(player_id, peer_id)
+		
+		# Get player name - for remote players, we'll get it from the RPC when they spawn
+		# For now, use default name
+		var player_name = "Player %d" % peer_id
+		
 		CogitoGlobals.debug_log(
 			enable_logging,
 			"PlayerSpawner",
 			"Remote player spawned for peer %d with ID: %d at position: %s" % [peer_id, player_id, spawn_pos]
 		)
-	
-	# Notify all clients about this spawn (host spawns representation of remote player)
-	_player_spawned.rpc(peer_id, spawn_pos)
+		
+		# Notify all clients about this spawn (host spawns representation of remote player)
+		# The actual name will be sent when the remote player spawns themselves
+		_player_spawned.rpc(peer_id, spawn_pos, player_name)
 
 
 ## RPC: Request spawn info from host (client only)
@@ -285,7 +309,7 @@ func _request_spawn_info() -> void:
 
 ## RPC: Notify all clients that a player has spawned
 @rpc("any_peer", "call_local", "reliable")
-func _player_spawned(peer_id: int, spawn_position: Vector3) -> void:
+func _player_spawned(peer_id: int, spawn_position: Vector3, player_name: String = "") -> void:
 	# Get sender peer ID to determine who sent this
 	var sender_id = 0
 	if multiplayer.has_multiplayer_peer():
@@ -299,7 +323,7 @@ func _player_spawned(peer_id: int, spawn_position: Vector3) -> void:
 	CogitoGlobals.debug_log(
 		enable_logging,
 		"PlayerSpawner",
-		"%s Received _player_spawned RPC: peer_id=%d, sender_id=%d, spawn_pos=%s" % [role, peer_id, sender_id, spawn_position]
+		"%s Received _player_spawned RPC: peer_id=%d, sender_id=%d, spawn_pos=%s, player_name=%s" % [role, peer_id, sender_id, spawn_position, player_name]
 	)
 	
 	# If we're the host and this is about a remote player, we already spawned them
@@ -316,7 +340,15 @@ func _player_spawned(peer_id: int, spawn_position: Vector3) -> void:
 					"[HOST] Client %d notified about their spawn, creating representation" % peer_id
 				)
 				# Spawn representation of this client on host
+				# Note: player_name is passed in RPC, but _spawn_remote_player doesn't use it
+				# We'll set the name after spawning
 				_spawn_remote_player(peer_id)
+				# Set player name after spawning
+				if not player_name.is_empty() and PlayerManager:
+					var spawned_player_id = PlayerManager.get_player_id(PlayerManager.get_player_by_peer_id(peer_id))
+					if spawned_player_id != -1:
+						await get_tree().process_frame
+						PlayerManager.set_player_name(spawned_player_id, player_name)
 		# If this is about the host (peer_id == 1), we already spawned ourselves locally
 		# Don't spawn again, but also don't return - let clients process it
 		# Actually, we should return here because host doesn't need to process RPC about itself
@@ -390,10 +422,16 @@ func _player_spawned(peer_id: int, spawn_position: Vector3) -> void:
 		var player_id = PlayerManager.register_player(player_instance, false)  # false = not local
 		# Set peer_id for this player
 		PlayerManager.set_player_peer_id(player_id, peer_id)
+		# Set player name if provided (do this AFTER registration so PlayerVisualRepresentation can find it)
+		if not player_name.is_empty():
+			# Wait a frame to ensure PlayerVisualRepresentation is created
+			await get_tree().process_frame
+			PlayerManager.set_player_name(player_id, player_name)
+		
 		CogitoGlobals.debug_log(
 			enable_logging,
 			"PlayerSpawner",
-			"[CLIENT] Remote player spawned for peer %d with ID: %d at position: %s" % [peer_id, player_id, spawn_position]
+			"[CLIENT] Remote player spawned for peer %d with ID: %d at position: %s (name: %s)" % [peer_id, player_id, spawn_position, player_name]
 		)
 	else:
 		push_error("PlayerSpawner: [CLIENT] PlayerManager not found, cannot register player")

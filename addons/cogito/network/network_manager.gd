@@ -265,3 +265,39 @@ func sync_player_rotation(peer_id: int, body_rotation: float, head_rotation: flo
 			if rotation_sync:
 				rotation_sync._receive_rotation_update(body_rotation, head_rotation)
 
+
+## RPC: Sync player attribute (called from NetworkAttributeSync)
+@rpc("any_peer", "call_local", "reliable")
+func sync_player_attribute(peer_id: int, attribute_name: String, current_value: float, max_value: float) -> void:
+	# Route to the correct player's NetworkAttributeSync component
+	if PlayerManager:
+		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		if player_node:
+			var attribute_sync = player_node.get_node_or_null("NetworkAttributeSync")
+			if attribute_sync:
+				attribute_sync._receive_attribute_update(attribute_name, current_value, max_value)
+
+
+## RPC: Sync player state (called from NetworkPlayerStateSync)
+@rpc("any_peer", "call_local", "unreliable")
+func sync_player_state(peer_id: int, state: Dictionary) -> void:
+	# Route to the correct player's NetworkPlayerStateSync component
+	if PlayerManager:
+		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		if player_node:
+			var state_sync = player_node.get_node_or_null("NetworkPlayerStateSync")
+			if state_sync:
+				state_sync._receive_state_update(state)
+
+
+## RPC: Sync player name (called from lobby or when player joins)
+@rpc("any_peer", "call_local", "reliable")
+func sync_player_name(peer_id: int, player_name: String) -> void:
+	# Route to PlayerManager to update the name
+	if PlayerManager:
+		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		if player_node:
+			var player_id = PlayerManager.get_player_id(player_node)
+			if player_id != -1:
+				PlayerManager.set_player_name(player_id, player_name)
+

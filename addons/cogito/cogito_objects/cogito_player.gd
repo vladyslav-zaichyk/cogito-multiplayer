@@ -245,6 +245,14 @@ func _ready():
 		rotation_sync.name = "NetworkRotationSync"
 		add_child(rotation_sync)
 		
+		var attribute_sync = preload("res://addons/cogito/network/network_attribute_sync.gd").new()
+		attribute_sync.name = "NetworkAttributeSync"
+		add_child(attribute_sync)
+		
+		var state_sync = preload("res://addons/cogito/network/network_player_state_sync.gd").new()
+		state_sync.name = "NetworkPlayerStateSync"
+		add_child(state_sync)
+		
 		# Add visual representation for remote players (or all players)
 		var visual_rep = preload("res://addons/cogito/network/player_visual_representation.gd").new()
 		visual_rep.name = "PlayerVisualRepresentation"

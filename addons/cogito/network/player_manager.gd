@@ -9,6 +9,9 @@ var _players: Dictionary = {}
 ## Dictionary mapping player_id -> peer_id (for multiplayer)
 var _player_peer_ids: Dictionary = {}
 
+## Dictionary mapping player_id -> player_name (for multiplayer)
+var _player_names: Dictionary = {}
+
 ## ID of the local player (the player controlled by this client)
 var _local_player_id: int = -1
 
@@ -49,6 +52,13 @@ func register_player(player_node: Node, is_local: bool = false) -> int:
 			# Will be set when we receive spawn info via RPC
 			_player_peer_ids[player_id] = -1
 	
+	# Initialize player name (will be set via set_player_name)
+	if not _player_names.has(player_id):
+		if is_local:
+			_player_names[player_id] = "You"
+		else:
+			_player_names[player_id] = "Player %d" % player_id
+	
 	if is_local:
 		_local_player_id = player_id
 		CogitoGlobals.debug_log(
@@ -82,6 +92,7 @@ func unregister_player(player_id: int) -> void:
 	var player_node = _players[player_id]
 	_players.erase(player_id)
 	_player_peer_ids.erase(player_id)
+	_player_names.erase(player_id)
 	
 	if _local_player_id == player_id:
 		_local_player_id = -1
@@ -244,3 +255,73 @@ func get_player_id(player_node: Node) -> int:
 		if _players[player_id] == player_node:
 			return player_id
 	return -1
+
+
+## Set player name
+func set_player_name(player_id: int, name: String) -> void:
+	if not _players.has(player_id):
+		CogitoGlobals.debug_log(
+			true,
+			"PlayerManager",
+			"Attempted to set name for non-existent player ID: %d" % player_id
+		)
+		return
+	
+	_player_names[player_id] = name
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"PlayerManager",
+		"Player %d name set to: %s" % [player_id, name]
+	)
+	
+	# Update visual representation if player has one
+	var player_node = _players[player_id]
+	if player_node:
+		var visual_rep = player_node.get_node_or_null("PlayerVisualRepresentation")
+		if visual_rep:
+			if visual_rep.has_method("update_player_name"):
+				visual_rep.update_player_name(name)
+				CogitoGlobals.debug_log(
+					enable_logging,
+					"PlayerManager",
+					"Updated visual representation for player %d with name: %s" % [player_id, name]
+				)
+			else:
+				CogitoGlobals.debug_log(
+					enable_logging,
+					"PlayerManager",
+					"PlayerVisualRepresentation found but doesn't have update_player_name method"
+				)
+		else:
+			# PlayerVisualRepresentation may not be created yet, try again after a delay
+			# This can happen if name is set before PlayerVisualRepresentation._ready() completes
+			call_deferred("_update_visual_representation_delayed", player_id, name)
+			CogitoGlobals.debug_log(
+				enable_logging,
+				"PlayerManager",
+				"PlayerVisualRepresentation not found for player %d, will retry after delay" % player_id
+			)
+
+
+## Delayed update of visual representation (called via call_deferred)
+func _update_visual_representation_delayed(player_id: int, name: String) -> void:
+	if not _players.has(player_id):
+		return
+	
+	var player_node = _players[player_id]
+	if not player_node:
+		return
+	
+	var visual_rep = player_node.get_node_or_null("PlayerVisualRepresentation")
+	if visual_rep and visual_rep.has_method("update_player_name"):
+		visual_rep.update_player_name(name)
+		CogitoGlobals.debug_log(
+			enable_logging,
+			"PlayerManager",
+			"Delayed update: Updated visual representation for player %d with name: %s" % [player_id, name]
+		)
+
+
+## Get player name
+func get_player_name(player_id: int) -> String:
+	return _player_names.get(player_id, "Player %d" % player_id)

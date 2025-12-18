@@ -47,19 +47,18 @@ func _ready() -> void:
 	if parent_body.has_method("get") and parent_body.get("player_id"):
 		player_id = parent_body.player_id
 	
-	# Get player name from PlayerManager or use default
+	# Wait a bit more for player to be fully registered and name to be set
+	await get_tree().process_frame
+	await get_tree().process_frame
+	
+	# Get player name from PlayerManager
 	if PlayerManager:
-		var player_node = PlayerManager.get_player(player_id)
-		if player_node:
-			# Try to get name from player node
-			if player_node.has_method("get") and player_node.get("player_name"):
-				player_name = player_node.player_name
-			else:
-				# Check if it's local player
-				if PlayerManager.has_local_player() and PlayerManager.get_local_player_id() == player_id:
-					player_name = "You"
-				else:
-					player_name = "Player %d" % player_id
+		player_name = PlayerManager.get_player_name(player_id)
+		# If name is still default, wait a bit more (name might be syncing via RPC)
+		if player_name == "You" or player_name.begins_with("Player "):
+			# Wait a bit more for name sync
+			await get_tree().create_timer(0.2).timeout
+			player_name = PlayerManager.get_player_name(player_id)
 	
 	# Create visual representation
 	_create_visual_representation()
@@ -133,6 +132,17 @@ func update_player_name(new_name: String) -> void:
 	player_name = new_name
 	if name_label:
 		name_label.text = player_name
+		CogitoGlobals.debug_log(
+			enable_logging,
+			"PlayerVisualRepresentation",
+			"Name label updated for player %d: %s" % [player_id, player_name]
+		)
+	else:
+		CogitoGlobals.debug_log(
+			enable_logging,
+			"PlayerVisualRepresentation",
+			"Name updated for player %d: %s (but name_label is null)" % [player_id, player_name]
+		)
 
 
 ## Set player color
