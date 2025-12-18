@@ -302,6 +302,14 @@ func sync_player_name(peer_id: int, player_name: String) -> void:
 				PlayerManager.set_player_name(player_id, player_name)
 
 
+## RPC: Sync player data (centralized player information)
+@rpc("any_peer", "call_local", "reliable")
+func sync_player_data(peer_id: int, data_dict: Dictionary) -> void:
+	# Route to PlayerManager to update player data
+	if PlayerManager:
+		PlayerManager.update_player_data(peer_id, data_dict)
+
+
 ## RPC: Sync player death (called from NetworkDeathSync)
 @rpc("any_peer", "call_local", "reliable")
 func sync_player_death(peer_id: int) -> void:

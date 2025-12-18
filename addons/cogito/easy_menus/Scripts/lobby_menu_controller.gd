@@ -454,20 +454,26 @@ func _set_player_name(new_name: String) -> void:
 	if new_name.length() > 20:
 		new_name = new_name.substr(0, 20)
 	
-	if not PlayerManager or not PlayerManager.has_local_player():
-		return
-	
-	var local_player_id = PlayerManager.get_local_player_id()
-	if local_player_id == -1:
-		return
-	
-	# Update in PlayerManager
-	PlayerManager.set_player_name(local_player_id, new_name)
-	
-	# Sync via RPC if in multiplayer
+	# Sync via RPC if in multiplayer (do this first, before PlayerManager)
 	if NetworkManager and NetworkManager.is_multiplayer():
 		var peer_id = NetworkManager.get_local_peer_id()
 		NetworkManager.sync_player_name.rpc(peer_id, new_name)
+	
+	# Update in PlayerManager (will store by peer_id if player not registered yet)
+	if PlayerManager:
+		if PlayerManager.has_local_player():
+			var local_player_id = PlayerManager.get_local_player_id()
+			if local_player_id != -1:
+				PlayerManager.set_player_name(local_player_id, new_name)
+		
+		# Update PlayerData (centralized storage)
+		if NetworkManager and NetworkManager.is_multiplayer():
+			var peer_id = NetworkManager.get_local_peer_id()
+			PlayerManager.set_player_name_by_peer_id(peer_id, new_name)
+			# Also sync via RPC
+			var player_data = PlayerManager.get_player_data(peer_id)
+			if player_data:
+				NetworkManager.sync_player_data.rpc(peer_id, player_data.to_dict())
 	
 	CogitoGlobals.debug_log(
 		true,

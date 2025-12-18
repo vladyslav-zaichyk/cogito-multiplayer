@@ -423,10 +423,37 @@ func get_loaded_peers() -> Array:
 
 ## Callback when a peer connects
 func _on_network_connected(peer_id: int) -> void:
-	# If we're loading, the new peer needs to load too
-	if _is_loading and NetworkManager and NetworkManager.is_host():
-		# Server should notify new peer about current scene
-		_notify_peer_loaded.rpc_id(peer_id, NetworkManager.get_local_peer_id(), _current_scene_path)
+	if not NetworkManager or not NetworkManager.is_host():
+		return
+	
+	var role = "[HOST]"
+	CogitoGlobals.debug_log(
+		true,
+		"WorldLoadingManager",
+		"%s Peer connected: %d | is_loading=%s | current_scene_path='%s'"
+		% [role, peer_id, str(_is_loading), _current_scene_path]
+	)
+	
+	# If we don't have any active / remembered scene yet, there's nothing to do.
+	# This usually means we're still in the lobby or single‑player menu.
+	if _current_scene_path.is_empty():
+		CogitoGlobals.debug_log(
+			true,
+			"WorldLoadingManager",
+			"%s No active scene to sync for late join (still in lobby / menu)" % role
+		)
+		return
+	
+	# If we're in the middle of loading, or the game is already running,
+	# make sure the late‑joining client loads the same scene.
+	# The normal loading flow will take care of marking the peer as loaded.
+	_request_scene_load.rpc_id(peer_id, _current_scene_path)
+	CogitoGlobals.debug_log(
+		true,
+		"WorldLoadingManager",
+		"%s Sent _request_scene_load to late‑joining peer %d for scene: %s"
+		% [role, peer_id, _current_scene_path]
+	)
 
 
 ## RPC: Host requests all clients to load a scene

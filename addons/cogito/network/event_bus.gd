@@ -11,6 +11,7 @@ const CogitoInventory = preload("res://addons/cogito/inventory_pd/cogito_invento
 const InventoryItemPD = preload("res://addons/cogito/inventory_pd/CustomResources/InventoryItemPD.gd")
 const InventorySlotPD = preload("res://addons/cogito/inventory_pd/CustomResources/InventorySlotPD.gd")
 const CogitoQuest = preload("res://addons/cogito/quest_system/CustomResources/cogito_quest.gd")
+const PlayerData = preload("res://addons/cogito/network/player_data.gd")
 
 #region Player Events
 ## Emitted when a player is registered in the system
@@ -25,6 +26,8 @@ signal player_died(player_id: int)
 signal player_moved(player_id: int, position: Vector3, rotation: Vector3)
 ## Emitted when a player performs an input action
 signal player_input(player_id: int, action: String, pressed: bool)
+## Emitted when player data is updated (name, etc.)
+signal player_data_updated(peer_id: int, player_data: PlayerData)
 #endregion
 
 #region Inventory Events

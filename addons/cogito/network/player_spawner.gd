@@ -3,6 +3,8 @@ extends Node
 ## Handles spawning players after scene loading
 ## Note: This is an autoload singleton, not a class_name
 
+const PlayerData = preload("res://addons/cogito/network/player_data.gd")
+
 ## Enable/disable logging
 var enable_logging: bool = true  # Enable for debugging
 
@@ -176,15 +178,59 @@ func _spawn_local_player() -> void:
 			# Wait a bit to ensure name is set from lobby
 			await get_tree().process_frame
 			await get_tree().process_frame
+			await get_tree().process_frame  # Extra frame for name sync
 			
-			var player_name = PlayerManager.get_player_name(player_id) if PlayerManager else "Player"
-			# If name is still "You", replace with something better
-			if player_name == "You":
-				if NetworkManager.is_host():
-					player_name = "Host"
-				else:
-					player_name = "Player"
-			_player_spawned.rpc(local_peer_id, spawn_pos, player_name)
+			# Get or create PlayerData for this player
+			var player_data = PlayerManager.get_player_data(local_peer_id) if PlayerManager else null
+			
+			# Get player name - try multiple sources
+			var player_name = ""
+			if player_data and player_data.player_name != "" and not player_data.player_name.begins_with("Player "):
+				player_name = player_data.player_name
+			else:
+				# Try to get from PlayerManager
+				player_name = PlayerManager.get_player_name(player_id) if PlayerManager else ""
+				if player_name == "You" or player_name.begins_with("Player ") or player_name.is_empty():
+					# Try to get from PlayerData by peer_id
+					var data_name = PlayerManager.get_player_name_by_peer_id(local_peer_id) if PlayerManager else ""
+					if not data_name.is_empty() and not data_name.begins_with("Player "):
+						player_name = data_name
+					else:
+						# Try to get from lobby menu
+						var lobby_menu = get_tree().get_first_node_in_group("lobby_menu")
+						if lobby_menu and lobby_menu.has_method("get") and lobby_menu.get("player_name_input"):
+							var name_input = lobby_menu.player_name_input
+							if name_input and name_input.text and not name_input.text.is_empty():
+								player_name = name_input.text
+						
+						# If still empty, use default
+						if player_name.is_empty() or player_name.begins_with("Player "):
+							if NetworkManager.is_host():
+								player_name = "Host"
+							else:
+								player_name = "Player %d" % local_peer_id
+			
+			# Update PlayerData with the name
+			if not player_data:
+				player_data = PlayerManager.get_player_data(local_peer_id) if PlayerManager else null
+			
+			if player_data:
+				player_data.player_name = player_name
+				player_data.spawn_position = spawn_pos
+			
+			# Make sure name is set in PlayerManager
+			if PlayerManager:
+				PlayerManager.set_player_name(player_id, player_data.player_name)
+			
+			# Sync player data via RPC (this includes name and other info)
+			NetworkManager.sync_player_data.rpc(local_peer_id, player_data.to_dict())
+			
+			CogitoGlobals.debug_log(
+				true,  # Always log this
+				"PlayerSpawner",
+				"[LOCAL SPAWN] Sending _player_spawned RPC with name: %s (peer_id: %d)" % [player_data.player_name, local_peer_id]
+			)
+			_player_spawned.rpc(local_peer_id, spawn_pos, player_data.player_name)
 	
 	# In Godot 4, authority is managed through RPC attributes
 	# Local player will control their own character through RPCs
@@ -217,10 +263,22 @@ func _spawn_remote_players() -> void:
 			var host_player_id = PlayerManager.get_local_player_id()
 			# Wait a bit to ensure name is set from lobby
 			await get_tree().process_frame
+			await get_tree().process_frame  # Extra frame for name sync
 			var host_name = PlayerManager.get_player_name(host_player_id) if host_player_id != -1 else "Host"
 			# If name is still "You", use "Host" instead
 			if host_name == "You":
 				host_name = "Host"
+				# Make sure name is set in PlayerManager
+				if PlayerManager:
+					PlayerManager.set_player_name(host_player_id, host_name)
+			
+			# Update PlayerData and sync via RPC before notifying about spawn
+			var host_data = PlayerManager.get_player_data(1) if PlayerManager else null
+			if host_data:
+				host_data.player_name = host_name
+				host_data.spawn_position = host_spawn_pos
+				NetworkManager.sync_player_data.rpc(1, host_data.to_dict())
+			
 			CogitoGlobals.debug_log(
 				enable_logging,
 				"PlayerSpawner",
@@ -259,6 +317,13 @@ func _spawn_remote_player(peer_id: int) -> void:
 		push_error("PlayerSpawner: Failed to instantiate remote player")
 		return
 	
+	# Set peer_id on player instance BEFORE adding to scene tree
+	# This ensures PlayerVisualRepresentation can get peer_id when it initializes
+	if player_instance.has_method("set") and player_instance.get("peer_id") != null:
+		player_instance.peer_id = peer_id
+	elif player_instance.has_method("set_meta"):
+		player_instance.set_meta("peer_id", peer_id)
+	
 	# Add to scene tree first
 	var scene_root = get_tree().current_scene
 	if not scene_root:
@@ -277,17 +342,26 @@ func _spawn_remote_player(peer_id: int) -> void:
 	# Register player
 	if PlayerManager:
 		var player_id = PlayerManager.register_player(player_instance, false)  # false = not local
-		# Set peer_id for this player
+		# Set peer_id for this player IMMEDIATELY (before PlayerVisualRepresentation._ready())
 		PlayerManager.set_player_peer_id(player_id, peer_id)
+		CogitoGlobals.debug_log(
+			true,  # Always log this
+			"PlayerSpawner",
+			"[HOST] Set peer_id=%d for player_id=%d BEFORE PlayerVisualRepresentation init" % [peer_id, player_id]
+		)
 		
 		# Get player name - for remote players, we'll get it from the RPC when they spawn
-		# For now, use default name
+		# For now, use default name (will be updated when client sends their name)
 		var player_name = "Player %d" % peer_id
+		
+		# Set default name in PlayerManager (will be updated when client sends their actual name)
+		if PlayerManager:
+			PlayerManager.set_player_name(player_id, player_name)
 		
 		CogitoGlobals.debug_log(
 			enable_logging,
 			"PlayerSpawner",
-			"Remote player spawned for peer %d with ID: %d at position: %s" % [peer_id, player_id, spawn_pos]
+			"Remote player spawned for peer %d with ID: %d at position: %s (default name: %s)" % [peer_id, player_id, spawn_pos, player_name]
 		)
 		
 		# Notify all clients about this spawn (host spawns representation of remote player)
@@ -350,15 +424,47 @@ func _player_spawned(peer_id: int, spawn_position: Vector3, player_name: String 
 						await get_tree().process_frame
 						PlayerManager.set_player_name(spawned_player_id, player_name)
 		# If this is about the host (peer_id == 1), we already spawned ourselves locally
-		# Don't spawn again, but also don't return - let clients process it
-		# Actually, we should return here because host doesn't need to process RPC about itself
+		# But we should update the name if it was sent by a client
 		if peer_id == 1:
-			CogitoGlobals.debug_log(
-				enable_logging,
-				"PlayerSpawner",
-				"[HOST] Ignoring RPC about ourselves (peer_id=1), already spawned locally"
-			)
+			# If this is from a client (sender_id != 1), they're telling us about the host
+			# We already know about ourselves, but we can update the name if needed
+			if sender_id != 1 and not player_name.is_empty():
+				if PlayerManager:
+					var host_player_id = PlayerManager.get_local_player_id()
+					if host_player_id != -1:
+						PlayerManager.set_player_name(host_player_id, player_name)
+						CogitoGlobals.debug_log(
+							enable_logging,
+							"PlayerSpawner",
+							"[HOST] Updated host name to: %s (from client %d)" % [player_name, sender_id]
+						)
 			return
+		
+		# If we're the host and this is about a remote player that we already spawned,
+		# update their name if it was sent by the client themselves
+		if NetworkManager and NetworkManager.is_host() and sender_id == peer_id and peer_id != 1:
+			# Client is sending their own name, update it
+			if PlayerManager and PlayerManager.has_player_by_peer_id(peer_id):
+				var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+				if player_node:
+					var player_id = PlayerManager.get_player_id(player_node)
+					if player_id != -1 and not player_name.is_empty():
+						# Update PlayerData
+						var player_data = PlayerManager.get_player_data(peer_id)
+						player_data.player_name = player_name
+						player_data.spawn_position = spawn_position
+						
+						# Update in PlayerManager
+						PlayerManager.set_player_name(player_id, player_name)
+						
+						# Also sync the player data via RPC to all clients
+						NetworkManager.sync_player_data.rpc(peer_id, player_data.to_dict())
+						CogitoGlobals.debug_log(
+							true,  # Always log this
+							"PlayerSpawner",
+							"[HOST] Updated name for peer %d to: %s" % [peer_id, player_name]
+						)
+						return  # Don't spawn again, just update the name
 	
 	# Check if scene is loaded - if not, wait for it
 	var scene_root = get_tree().current_scene
@@ -407,6 +513,13 @@ func _player_spawned(peer_id: int, spawn_position: Vector3, player_name: String 
 		push_error("PlayerSpawner: [CLIENT] Failed to instantiate remote player")
 		return
 	
+	# Set peer_id on player instance BEFORE adding to scene tree
+	# This ensures PlayerVisualRepresentation can get peer_id when it initializes
+	if player_instance.has_method("set") and player_instance.get("peer_id") != null:
+		player_instance.peer_id = peer_id
+	elif player_instance.has_method("set_meta"):
+		player_instance.set_meta("peer_id", peer_id)
+	
 	# Add to scene tree first
 	scene_root.add_child(player_instance)
 	
@@ -420,13 +533,30 @@ func _player_spawned(peer_id: int, spawn_position: Vector3, player_name: String 
 	# Register player
 	if PlayerManager:
 		var player_id = PlayerManager.register_player(player_instance, false)  # false = not local
-		# Set peer_id for this player
+		# Set peer_id for this player IMMEDIATELY (before PlayerVisualRepresentation._ready())
 		PlayerManager.set_player_peer_id(player_id, peer_id)
+		CogitoGlobals.debug_log(
+			true,  # Always log this
+			"PlayerSpawner",
+			"[CLIENT] Set peer_id=%d for player_id=%d BEFORE PlayerVisualRepresentation init" % [peer_id, player_id]
+		)
 		# Set player name if provided (do this AFTER registration so PlayerVisualRepresentation can find it)
 		if not player_name.is_empty():
-			# Wait a frame to ensure PlayerVisualRepresentation is created
-			await get_tree().process_frame
+			# Update PlayerData
+			var player_data = PlayerManager.get_player_data(peer_id) if PlayerManager else null
+			if player_data:
+				player_data.player_name = player_name
+				player_data.spawn_position = spawn_position
+			
+			# Set name in PlayerManager
 			PlayerManager.set_player_name(player_id, player_name)
+			# Wait a frame to ensure PlayerVisualRepresentation is created and can receive the name
+			await get_tree().process_frame
+			# Update again in case PlayerVisualRepresentation wasn't ready yet
+			PlayerManager.set_player_name(player_id, player_name)
+			# Also sync the player data via RPC to ensure all clients have the correct name
+			if NetworkManager and NetworkManager.is_multiplayer() and player_data:
+				NetworkManager.sync_player_data.rpc(peer_id, player_data.to_dict())
 		
 		CogitoGlobals.debug_log(
 			enable_logging,
