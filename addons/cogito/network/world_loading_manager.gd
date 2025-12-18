@@ -251,13 +251,18 @@ func _mark_local_peer_loaded() -> void:
 		"%s Current scene after load: %s" % [role, current_scene.get_name() if current_scene else "null"]
 	)
 	
-	# Notify other peers that we've loaded
+	# Notify other peers that we've loaded (do this first, don't block)
 	CogitoGlobals.debug_log(
 		true,
 		"WorldLoadingManager",
 		"%s Notifying other peers that we've loaded" % role
 	)
 	_notify_peer_loaded.rpc(local_peer_id, _current_scene_path)
+	
+	# Initialize pickup items on host (add NetworkPickupID to pre-placed items)
+	# Do this asynchronously after notifying peers, so it doesn't block
+	if NetworkManager.is_host() and current_scene:
+		_initialize_pickup_items_async(current_scene)
 	
 	# Check if all peers have loaded
 	_check_all_peers_loaded()
@@ -431,6 +436,78 @@ func get_current_scene_path() -> String:
 ## Get list of peers that have loaded
 func get_loaded_peers() -> Array:
 	return _peers_loaded.keys()
+
+
+## Initialize pickup items on scene asynchronously (add NetworkPickupID to pre-placed items)
+## Only called on host, doesn't block the loading process
+func _initialize_pickup_items_async(scene_root: Node) -> void:
+	if not NetworkManager or not NetworkManager.is_multiplayer() or not NetworkManager.is_host():
+		return
+	
+	if not scene_root:
+		return
+	
+	# Wait a frame to ensure scene is fully ready, but do it asynchronously
+	await get_tree().process_frame
+	
+	CogitoGlobals.debug_log(
+		true,
+		"WorldLoadingManager",
+		"[HOST] Initializing pickup items on scene..."
+	)
+	
+	var items_found = 0
+	var items_initialized = 0
+	
+	# Recursively find all nodes with PickupComponent
+	var nodes_to_check = []
+	nodes_to_check.append_array(scene_root.get_children())
+	
+	while nodes_to_check.size() > 0:
+		var node = nodes_to_check.pop_front()
+		if not is_instance_valid(node):
+			continue
+		
+		# Check if this node has PickupComponent
+		var has_pickup = false
+		var has_network_id = false
+		
+		for child in node.get_children():
+			if child is PickupComponent:
+				has_pickup = true
+			if child.has_method("get_network_id") or child.has_method("set_network_id"):
+				has_network_id = true
+				break
+		
+		# If node has PickupComponent but no NetworkPickupID, add it
+		if has_pickup and not has_network_id:
+			items_found += 1
+			var network_pickup_id_script = preload("res://addons/cogito/network/network_pickup_id.gd")
+			var network_pickup_id = Node.new()
+			network_pickup_id.set_script(network_pickup_id_script)
+			network_pickup_id.name = "NetworkPickupID"
+			node.add_child(network_pickup_id)
+			items_initialized += 1
+			
+			CogitoGlobals.debug_log(
+				true,
+				"WorldLoadingManager",
+				"[HOST] Added NetworkPickupID to pre-placed item at path: %s" % node.get_path()
+			)
+		
+		# Add children to check
+		for child in node.get_children():
+			nodes_to_check.append(child)
+		
+		# Yield every 10 items to avoid blocking
+		if items_found % 10 == 0:
+			await get_tree().process_frame
+	
+	CogitoGlobals.debug_log(
+		true,
+		"WorldLoadingManager",
+		"[HOST] Pickup items initialization complete: found %d items, initialized %d new NetworkPickupID components" % [items_found, items_initialized]
+	)
 
 
 ## Callback when a peer connects

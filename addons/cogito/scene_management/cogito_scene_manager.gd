@@ -613,21 +613,31 @@ func load_next_scene(
 	target: String, connector_name: String, passed_slot: String, load_mode: CogitoSceneLoadMode
 ) -> void:
 	# In multiplayer, RESET mode requires server authorization
+	# BUT: clients can load scenes if requested by host (through WorldLoadingManager)
 	if NetworkManager and NetworkManager.is_multiplayer() and load_mode == CogitoSceneLoadMode.RESET:
 		# Check if we're the host
 		if not NetworkManager.is_host():
+			# Clients can load scenes if called from WorldLoadingManager (authorized by host)
+			# Check if WorldLoadingManager is currently loading (authorized request)
+			if WorldLoadingManager and WorldLoadingManager.is_loading():
+				CogitoGlobals.debug_log(
+					true,
+					"CSM",
+					"[CLIENT] Scene load authorized by host (through WorldLoadingManager): %s" % target
+				)
+			else:
+				CogitoGlobals.debug_log(
+					true,
+					"CSM",
+					"[CLIENT] Scene reset blocked: only host can reset scenes in multiplayer"
+				)
+				return
+		else:
 			CogitoGlobals.debug_log(
 				true,
 				"CSM",
-				"[CLIENT] Scene reset blocked: only host can reset scenes in multiplayer"
+				"[HOST] Authorizing scene reset to: %s" % target
 			)
-			return
-		
-		CogitoGlobals.debug_log(
-			true,
-			"CSM",
-			"[HOST] Authorizing scene reset to: %s" % target
-		)
 	
 	# Emit scene_changing event through Event Bus
 	if NetworkEventBus:

@@ -774,8 +774,25 @@ func _spawn_pickup_in_world(item_data: Dictionary, position: Vector3) -> void:
 					pickup.slot_data.quantity = quantity
 			break
 	
+	# Add NetworkPickupID component if in multiplayer (for proper synchronization)
+	if NetworkManager and NetworkManager.is_multiplayer():
+		# Check if NetworkPickupID already exists
+		var existing_network_id = dropped_item.get_node_or_null("NetworkPickupID")
+		if not existing_network_id:
+			# Load and add NetworkPickupID component
+			var network_pickup_id_scene = preload("res://addons/cogito/network/network_pickup_id.gd")
+			var network_pickup_id = Node.new()
+			network_pickup_id.set_script(network_pickup_id_scene)
+			network_pickup_id.name = "NetworkPickupID"
+			dropped_item.add_child(network_pickup_id)
+			CogitoGlobals.debug_log(
+				true,
+				"NetworkInventorySync",
+				"Added NetworkPickupID to spawned item: %s" % item_resource.get("name")
+			)
+	
 	CogitoGlobals.debug_log(
-		enable_logging,
+		true,  # Always log for debugging
 		"NetworkInventorySync",
 		"Spawned pickup item in world: %s at %s" % [item_resource.get("name"), position]
 	)
