@@ -20,11 +20,8 @@ var _pending_commands: Dictionary = {}
 
 
 func _ready() -> void:
-	CogitoGlobals.debug_log(
-		enable_logging,
-		"CommandBus",
-		"Command Bus initialized and ready to receive commands."
-	)
+	# CommandBus initialized - no logging needed unless debugging
+	pass
 
 
 ## Register a command handler
@@ -34,12 +31,6 @@ func register_command_handler(command_type: String, handler: Callable) -> void:
 	if not _command_handlers.has(command_type):
 		_command_handlers[command_type] = []
 	_command_handlers[command_type].append(handler)
-	
-	CogitoGlobals.debug_log(
-		enable_logging,
-		"CommandBus",
-		"Registered command handler for: %s" % command_type
-	)
 
 
 ## Register an event handler
@@ -49,12 +40,6 @@ func register_event_handler(event_type: String, handler: Callable) -> void:
 	if not _event_handlers.has(event_type):
 		_event_handlers[event_type] = []
 	_event_handlers[event_type].append(handler)
-	
-	CogitoGlobals.debug_log(
-		enable_logging,
-		"CommandBus",
-		"Registered event handler for: %s" % event_type
-	)
 
 
 ## Execute a command
@@ -65,22 +50,8 @@ func execute_command(command: Command) -> CommandResult:
 		return CommandResult.new(false, "Null command")
 	
 	if command.executed:
-		CogitoGlobals.debug_log(
-			enable_logging,
-			"CommandBus",
-			"Command %s already executed, skipping" % command.command_id
-		)
+		push_warning("CommandBus: Command %s already executed, skipping" % command.command_id)
 		return CommandResult.new(false, "Command already executed")
-	
-	CogitoGlobals.debug_log(
-		enable_logging,
-		"CommandBus",
-		"Executing command: %s (player_id: %d, type: %s)" % [
-			command.command_id,
-			command.player_id,
-			command.get_command_type()
-		]
-	)
 	
 	# Mark as executed
 	command.executed = true
@@ -95,16 +66,6 @@ func execute_command(command: Command) -> CommandResult:
 	# Emit events
 	for event in result.events:
 		_emit_event(event)
-	
-	CogitoGlobals.debug_log(
-		enable_logging,
-		"CommandBus",
-		"Command executed: %s (success: %s, events: %d)" % [
-			command.command_id,
-			result.success,
-			result.events.size()
-		]
-	)
 	
 	return result
 
@@ -128,19 +89,13 @@ func _send_command_for_validation(command: Command) -> void:
 ## Validate and broadcast command to all clients
 func _validate_and_broadcast(command: Command) -> void:
 	if command.validate():
-		CogitoGlobals.debug_log(
-			enable_logging,
-			"CommandBus",
-			"Command validated: %s, broadcasting to all clients" % command.command_id
-		)
 		# Broadcast command to all clients
 		NetworkManager.broadcast_command.rpc(command.serialize())
 	else:
-		CogitoGlobals.debug_log(
-			enable_logging,
-			"CommandBus",
-			"Command validation failed: %s, rolling back" % command.command_id
-		)
+		push_warning("CommandBus: Command validation failed: %s (type: %s), rolling back" % [
+			command.command_id,
+			command.get_command_type()
+		])
 		# Validation failed - rollback local changes
 		_rollback_command(command)
 
@@ -156,37 +111,25 @@ func _validate_and_broadcast_from_network(command_data: Dictionary, sender_peer_
 	
 	# Validate command
 	if command.validate():
-		CogitoGlobals.debug_log(
-			enable_logging,
-			"CommandBus",
-			"[HOST] Command validated from peer %d: %s, broadcasting" % [
-				sender_peer_id,
-				command.command_id
-			]
-		)
 		# Broadcast to all clients (including sender)
 		NetworkManager.broadcast_command.rpc(command.serialize())
 	else:
-		CogitoGlobals.debug_log(
-			enable_logging,
-			"CommandBus",
-			"[HOST] Command validation failed from peer %d: %s" % [
-				sender_peer_id,
-				command.command_id
-			]
-		)
+		push_warning("CommandBus: [HOST] Command validation failed from peer %d: %s (type: %s)" % [
+			sender_peer_id,
+			command.command_id,
+			command.get_command_type()
+		])
 		# TODO: Send rejection to sender
 
 
 ## Rollback command (undo local changes)
 ## TODO: Implement proper rollback mechanism
 func _rollback_command(command: Command) -> void:
-	CogitoGlobals.debug_log(
-		enable_logging,
-		"CommandBus",
-		"Rolling back command: %s" % command.command_id
-	)
-	# For now, just log - proper rollback will be implemented later
+	push_warning("CommandBus: Rolling back command: %s (type: %s) - rollback not yet implemented" % [
+		command.command_id,
+		command.get_command_type()
+	])
+	# For now, just warn - proper rollback will be implemented later
 	# This is a placeholder for future implementation
 
 
@@ -194,16 +137,6 @@ func _rollback_command(command: Command) -> void:
 func _emit_event(event: Event) -> void:
 	if not event:
 		return
-	
-	CogitoGlobals.debug_log(
-		enable_logging,
-		"CommandBus",
-		"Emitting event: %s (player_id: %d, type: %s)" % [
-			event.event_id,
-			event.player_id,
-			event.event_type
-		]
-	)
 	
 	# Call all registered handlers for this event type
 	if _event_handlers.has(event.event_type):

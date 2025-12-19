@@ -36,8 +36,18 @@ func execute() -> CommandResult:
 	if not slot_data or not slot_data.inventory_item:
 		return CommandResult.new(false, "Slot is empty")
 	
-	# Use the item (call existing method)
-	player.inventory_data.use_slot_data(slot_index)
+	# Use the item directly (don't call use_slot_data to avoid recursion)
+	var use_successful: bool = slot_data.inventory_item.use(player.inventory_data.owner)
+	
+	if not use_successful:
+		return CommandResult.new(false, "Failed to use item")
+	
+	# Handle consumable logic
+	if slot_data.inventory_item.has_method("is_consumable") and slot_data.inventory_item.is_consumable():
+		slot_data.quantity -= 1
+		if slot_data.quantity < 1:
+			player.inventory_data.null_out_slots(slot_data)
+	player.inventory_data._emit_inventory_updated()
 	
 	# Create event
 	var event = ItemUsedEvent.new(player_id, slot_data.inventory_item, slot_index)

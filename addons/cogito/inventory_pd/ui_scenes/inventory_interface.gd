@@ -531,8 +531,10 @@ func _drop_item(slot_data: InventorySlotPD) -> bool:
 		
 		if not result.success:
 			# Command failed, but item is already spawned - this shouldn't happen
-			# but we'll log it for debugging
 			push_warning("DropItemCommand failed but item was already spawned: %s" % result.error_message)
+	else:
+		# Fallback warning
+		push_warning("InventoryInterface: Player ID not found, using fallback (old system) instead of DropItemCommand")
 	
 	# Also emit through NetworkEventBus for backward compatibility
 	if NetworkEventBus and player:

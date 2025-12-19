@@ -114,12 +114,17 @@ func use_slot_data(index: int):
 		var command = UseItemCommand.new(player_id, index)
 		var result = CommandBus.execute_command(command)
 		
-		if not result.success:
+		if result.success:
+			# Command executed successfully, item was used by command
+			# Command already handles consumable logic and inventory updates
+			return
+		else:
 			# Command failed, don't use item
+			push_warning("UseItemCommand failed: %s" % result.error_message)
 			return
 	
-	# Fallback to old system if CommandBus is not available or command failed
-	# (This shouldn't happen, but keeping for safety)
+	# Fallback to old system if player_id not found
+	push_warning("CogitoInventory: Player ID not found, using fallback (old system) instead of UseItemCommand")
 	var use_successful: bool = slot_data.inventory_item.use(owner)
 
 	# Also emit through NetworkEventBus for backward compatibility

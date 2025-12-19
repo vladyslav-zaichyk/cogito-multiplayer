@@ -66,6 +66,7 @@ func pick_up(_player_interaction_component: PlayerInteractionComponent):
 	
 	if player_id == -1:
 		# Fallback to old system if player not found
+		push_warning("PickupComponent: Player ID not found, using fallback (old system) instead of PickupItemCommand")
 		if not _player_interaction_component.get_parent().inventory_data.pick_up_slot_data(slot_data):
 			return
 		_handle_pickup_success(_player_interaction_component)
