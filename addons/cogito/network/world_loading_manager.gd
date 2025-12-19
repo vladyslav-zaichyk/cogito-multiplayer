@@ -546,11 +546,11 @@ func _initialize_interactables_async(scene_root: Node) -> void:
 		if not is_instance_valid(node):
 			continue
 		
-		# Check if this node is a CogitoDoor or CogitoSwitch
+		# Check if this node is a CogitoDoor, CogitoSwitch, or CogitoContainer
 		var is_interactable = false
 		var has_network_sync = false
 		
-		if node is CogitoDoor or node is CogitoSwitch:
+		if node is CogitoDoor or node is CogitoSwitch or node is CogitoContainer:
 			is_interactable = true
 			# Check if it already has NetworkInteractable
 			for child in node.get_children():

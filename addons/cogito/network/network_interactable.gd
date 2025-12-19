@@ -3,8 +3,11 @@ extends Node
 ## Synchronizes state of interactive objects (doors, switches, etc.) in multiplayer
 ## Attach this to a CogitoDoor, CogitoSwitch, or other interactable object
 
+## Preload required classes
+const InventorySlotPD = preload("res://addons/cogito/inventory_pd/CustomResources/InventorySlotPD.gd")
+
 ## Enable/disable logging
-var enable_logging: bool = true  # Enable by default for debugging interactables
+var enable_logging: bool = false  # Disabled by default
 
 ## Reference to the parent interactable object
 var parent_interactable: Node = null
@@ -13,7 +16,7 @@ var parent_interactable: Node = null
 var network_id: String = ""
 
 ## Type of interactable (DOOR, SWITCH, etc.)
-enum InteractableType { DOOR, SWITCH, UNKNOWN }
+enum InteractableType { DOOR, SWITCH, CONTAINER, UNKNOWN }
 var interactable_type: InteractableType = InteractableType.UNKNOWN
 
 ## Last synced state (to avoid duplicate syncs)
@@ -21,6 +24,9 @@ var last_synced_state: Dictionary = {}
 
 ## Is this the host? (only host can change state)
 var is_host: bool = false
+
+## Flag to prevent recursive RPC calls when applying state from network
+var _is_applying_network_state: bool = false
 
 
 func _ready() -> void:
@@ -39,6 +45,9 @@ func _ready() -> void:
 	elif parent_interactable is CogitoSwitch:
 		interactable_type = InteractableType.SWITCH
 		_setup_switch()
+	elif parent_interactable is CogitoContainer:
+		interactable_type = InteractableType.CONTAINER
+		_setup_container()
 	else:
 		CogitoGlobals.debug_log(
 			true,
@@ -122,6 +131,39 @@ func _setup_switch() -> void:
 	)
 
 
+## Setup for CogitoContainer
+func _setup_container() -> void:
+	var container = parent_interactable as CogitoContainer
+	if not container:
+		return
+	
+	# Connect to container signals
+	# Note: toggle_inventory is emitted when player interacts, but we need to track open/close state
+	# We'll use container_closed signal and check interaction_text to determine state
+	if container.has_signal("container_closed"):
+		var connected = container.container_closed.connect(_on_container_closed)
+		if connected != OK:
+			push_error("NetworkInteractable: Failed to connect container_closed signal: %d" % connected)
+	
+	# Also connect to inventory_updated to sync inventory changes
+	if container.inventory_data and container.inventory_data.has_signal("inventory_updated"):
+		var connected = container.inventory_data.inventory_updated.connect(_on_container_inventory_updated)
+		if connected != OK:
+			push_error("NetworkInteractable: Failed to connect inventory_updated signal: %d" % connected)
+	
+	# Connect to toggle_inventory to detect when container is opened
+	if container.has_signal("toggle_inventory"):
+		var connected = container.toggle_inventory.connect(_on_container_toggled)
+		if connected != OK:
+			push_error("NetworkInteractable: Failed to connect toggle_inventory signal: %d" % connected)
+	
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"NetworkInteractable",
+		"Connected to CogitoContainer signals"
+	)
+
+
 ## Generate unique network ID for this interactable
 func _generate_network_id() -> String:
 	# Use scene path as network ID (unique per scene instance)
@@ -147,73 +189,51 @@ func _generate_network_id() -> String:
 
 ## Called when door state changes
 func _on_door_state_changed(is_open: bool) -> void:
-	CogitoGlobals.debug_log(
-		enable_logging,
-		"NetworkInteractable",
-		"[DOOR STATE CHANGED] Signal received: is_open=%s (is_host: %s, multiplayer: %s)" % [
-			is_open,
-			is_host,
-			NetworkManager.is_multiplayer() if NetworkManager else false
-		]
-	)
-	
-	if not NetworkManager or not NetworkManager.is_multiplayer():
-		CogitoGlobals.debug_log(
-			enable_logging,
-			"NetworkInteractable",
-			"[DOOR STATE CHANGED] Skipping - not in multiplayer"
-		)
+	# Don't sync if we're applying state from network (to avoid feedback loop)
+	if _is_applying_network_state:
+		print("[NetworkInteractable] [%s] Door state changed but skipping - applying network state" % ["HOST" if is_host else "CLIENT"])
 		return
 	
-	# Only host can change state and sync it
-	if not is_host:
-		CogitoGlobals.debug_log(
-			enable_logging,
-			"NetworkInteractable",
-			"[DOOR STATE CHANGED] Skipping - not host"
-		)
+	if not NetworkManager or not NetworkManager.is_multiplayer():
 		return
 	
 	var door = parent_interactable as CogitoDoor
 	if not door:
-		CogitoGlobals.debug_log(
-			enable_logging,
-			"NetworkInteractable",
-			"[DOOR STATE CHANGED] Error - parent is not CogitoDoor"
-		)
 		return
 	
 	# Prepare state dictionary
+	var current_is_locked = door.is_locked if "is_locked" in door else false
 	var state = {
 		"is_open": is_open,
-		"is_locked": door.is_locked if "is_locked" in door else false
+		"is_locked": current_is_locked
 	}
 	
-	CogitoGlobals.debug_log(
-		enable_logging,
-		"NetworkInteractable",
-		"[DOOR STATE CHANGED] State: %s (has_changed: %s)" % [state, _has_state_changed(state)]
-	)
+	print("[NetworkInteractable] [%s] Door state changed signal: is_open=%s, is_locked=%s, last_synced=%s" % [
+		"HOST" if is_host else "CLIENT",
+		is_open,
+		current_is_locked,
+		last_synced_state
+	])
 	
 	# Check if state actually changed
-	if _has_state_changed(state):
+	var has_changed = _has_state_changed(state)
+	print("[NetworkInteractable] [%s] State changed check: %s" % ["HOST" if is_host else "CLIENT", has_changed])
+	
+	if has_changed:
+		print("[NetworkInteractable] [%s] Door state changed: is_open=%s, sending RPC" % ["HOST" if is_host else "CLIENT", is_open])
 		_sync_state_to_clients(state)
 		_update_last_synced_state(state)
 	else:
-		CogitoGlobals.debug_log(
-			enable_logging,
-			"NetworkInteractable",
-			"[DOOR STATE CHANGED] State unchanged, skipping sync"
-		)
+		print("[NetworkInteractable] [%s] Door state unchanged, skipping RPC" % ["HOST" if is_host else "CLIENT"])
 
 
 ## Called when door lock state changes
 func _on_door_lock_state_changed(is_locked: bool) -> void:
-	if not NetworkManager or not NetworkManager.is_multiplayer():
+	# Don't sync if we're applying state from network (to avoid feedback loop)
+	if _is_applying_network_state:
 		return
 	
-	# Only host can change state and sync it
-	if not is_host:
+	if not NetworkManager or not NetworkManager.is_multiplayer():
 		return
 	
 	var door = parent_interactable as CogitoDoor
@@ -228,59 +248,159 @@ func _on_door_lock_state_changed(is_locked: bool) -> void:
 	
 	# Check if state actually changed
 	if _has_state_changed(state):
+		print("[NetworkInteractable] [%s] Door lock state changed: is_locked=%s, sending RPC" % ["HOST" if is_host else "CLIENT", is_locked])
 		_sync_state_to_clients(state)
 		_update_last_synced_state(state)
 
 
 ## Called when switch state changes
 func _on_switch_state_changed(is_on: bool) -> void:
-	CogitoGlobals.debug_log(
-		enable_logging,
-		"NetworkInteractable",
-		"[SWITCH STATE CHANGED] Signal received: is_on=%s (is_host: %s, multiplayer: %s)" % [
-			is_on,
-			is_host,
-			NetworkManager.is_multiplayer() if NetworkManager else false
-		]
-	)
+	# Don't sync if we're applying state from network (to avoid feedback loop)
+	if _is_applying_network_state:
+		return
 	
 	if not NetworkManager or not NetworkManager.is_multiplayer():
-		CogitoGlobals.debug_log(
-			enable_logging,
-			"NetworkInteractable",
-			"[SWITCH STATE CHANGED] Skipping - not in multiplayer"
-		)
 		return
 	
-	# Only host can change state and sync it
-	if not is_host:
-		CogitoGlobals.debug_log(
-			enable_logging,
-			"NetworkInteractable",
-			"[SWITCH STATE CHANGED] Skipping - not host"
-		)
+	var switch = parent_interactable as CogitoSwitch
+	if not switch:
 		return
+	
+	# Get actual current state from switch (signal might fire before state is updated)
+	var actual_is_on = switch.is_on if "is_on" in switch else is_on
 	
 	var state = {
-		"is_on": is_on
+		"is_on": actual_is_on
 	}
-	
-	CogitoGlobals.debug_log(
-		enable_logging,
-		"NetworkInteractable",
-		"[SWITCH STATE CHANGED] State: %s (has_changed: %s)" % [state, _has_state_changed(state)]
-	)
 	
 	# Check if state actually changed
 	if _has_state_changed(state):
+		print("[NetworkInteractable] [%s] Switch state changed: is_on=%s, sending RPC" % ["HOST" if is_host else "CLIENT", actual_is_on])
 		_sync_state_to_clients(state)
 		_update_last_synced_state(state)
+
+
+## Called when container is toggled (opened/closed)
+func _on_container_toggled(_external_inventory_owner) -> void:
+	# Don't sync if we're applying state from network (to avoid feedback loop)
+	if _is_applying_network_state:
+		return
+	
+	if not NetworkManager or not NetworkManager.is_multiplayer():
+		return
+	
+	var container = parent_interactable as CogitoContainer
+	if not container:
+		return
+	
+	# Determine if container is open by checking interaction_text
+	# If interaction_text matches text_when_open, container is open
+	var is_open = false
+	if container.interaction_text == tr(container.text_when_open):
+		is_open = true
+	elif container.interaction_text == tr(container.text_when_closed):
+		is_open = false
 	else:
-		CogitoGlobals.debug_log(
-			enable_logging,
-			"NetworkInteractable",
-			"[SWITCH STATE CHANGED] State unchanged, skipping sync"
-		)
+		# Fallback: assume it's being opened if text doesn't match closed text
+		# This handles the case when container is first opened
+		is_open = (container.interaction_text != tr(container.text_when_closed))
+	
+	var state = {
+		"is_open": is_open
+	}
+	
+	# Check if state actually changed
+	if _has_state_changed(state):
+		print("[NetworkInteractable] [%s] Container toggled: is_open=%s, sending RPC" % ["HOST" if is_host else "CLIENT", is_open])
+		_sync_state_to_clients(state)
+		_update_last_synced_state(state)
+
+
+## Called when container is closed
+func _on_container_closed() -> void:
+	# Don't sync if we're applying state from network (to avoid feedback loop)
+	if _is_applying_network_state:
+		return
+	
+	if not NetworkManager or not NetworkManager.is_multiplayer():
+		return
+	
+	var container = parent_interactable as CogitoContainer
+	if not container:
+		return
+	
+	var state = {
+		"is_open": false
+	}
+	
+	# Check if state actually changed
+	if _has_state_changed(state):
+		print("[NetworkInteractable] [%s] Container closed, sending RPC" % ["HOST" if is_host else "CLIENT"])
+		_sync_state_to_clients(state)
+		_update_last_synced_state(state)
+
+
+## Called when container inventory is updated
+func _on_container_inventory_updated(inventory_data: CogitoInventory) -> void:
+	# Don't sync if we're applying state from network (to avoid feedback loop)
+	if _is_applying_network_state:
+		return
+	
+	if not NetworkManager or not NetworkManager.is_multiplayer():
+		return
+	
+	var container = parent_interactable as CogitoContainer
+	if not container or container.inventory_data != inventory_data:
+		return
+	
+	# Serialize inventory state
+	var inventory_state = _serialize_container_inventory(inventory_data)
+	
+	var state = {
+		"is_open": _get_container_open_state(container),
+		"inventory": inventory_state
+	}
+	
+	# Always sync inventory changes (they're important)
+	print("[NetworkInteractable] [%s] Container inventory updated, sending RPC" % ["HOST" if is_host else "CLIENT"])
+	_sync_state_to_clients(state)
+	_update_last_synced_state(state)
+
+
+## Helper: Get container open state
+func _get_container_open_state(container: CogitoContainer) -> bool:
+	if container.interaction_text == tr(container.text_when_open):
+		return true
+	elif container.interaction_text == tr(container.text_when_closed):
+		return false
+	else:
+		# Fallback: assume closed if text doesn't match
+		return false
+
+
+## Helper: Serialize container inventory
+func _serialize_container_inventory(inventory: CogitoInventory) -> Dictionary:
+	var serialized = {
+		"slots": []
+	}
+	
+	for i in range(inventory.inventory_slots.size()):
+		var slot = inventory.inventory_slots[i]
+		if slot and slot.inventory_item:
+			var slot_data = {
+				"index": i,
+				"item_name": slot.inventory_item.name,
+				"quantity": slot.quantity if "quantity" in slot else 1
+			}
+			# Try to get resource path for proper deserialization
+			if slot.inventory_item.resource_path:
+				slot_data["resource_path"] = slot.inventory_item.resource_path
+			elif slot.inventory_item.get_script() and slot.inventory_item.get_script().resource_path:
+				slot_data["resource_path"] = slot.inventory_item.get_script().resource_path
+			
+			serialized.slots.append(slot_data)
+	
+	return serialized
 
 
 ## Check if state has changed
@@ -313,6 +433,13 @@ func _update_last_synced_state(state: Dictionary = {}) -> void:
 				last_synced_state = {
 					"is_on": switch.is_on if "is_on" in switch else false
 				}
+		elif interactable_type == InteractableType.CONTAINER:
+			var container = parent_interactable as CogitoContainer
+			if container:
+				last_synced_state = {
+					"is_open": _get_container_open_state(container),
+					"inventory": _serialize_container_inventory(container.inventory_data) if container.inventory_data else {}
+				}
 	else:
 		last_synced_state = state.duplicate()
 
@@ -334,11 +461,11 @@ func _sync_state_to_clients(state: Dictionary = {}) -> void:
 		"state": state
 	}
 	
-	CogitoGlobals.debug_log(
-		enable_logging,
-		"NetworkInteractable",
-		"[HOST] Syncing state for %s: %s" % [network_id, state]
-	)
+	print("[NetworkInteractable] [%s] Calling RPC sync_interactable_state for %s: %s" % [
+		"HOST" if is_host else "CLIENT",
+		parent_interactable.name if parent_interactable else "unknown",
+		state
+	])
 	
 	# Send RPC through NetworkManager
 	NetworkManager.sync_interactable_state.rpc(interactable_data)
@@ -348,44 +475,72 @@ func _sync_state_to_clients(state: Dictionary = {}) -> void:
 func _receive_state_update(interactable_data: Dictionary) -> void:
 	var received_id = interactable_data.get("network_id", "")
 	
-	CogitoGlobals.debug_log(
-		enable_logging,
-		"NetworkInteractable",
-		"[RPC RECEIVED] network_id=%s (ours: %s, is_host: %s)" % [received_id, network_id, is_host]
-	)
-	
 	# Only process if this is about us
 	if received_id != network_id:
-		CogitoGlobals.debug_log(
-			enable_logging,
-			"NetworkInteractable",
-			"[RPC RECEIVED] ID mismatch, ignoring (received: %s, ours: %s)" % [received_id, network_id]
-		)
-		return
-	
-	# Don't process if we're the host (we already have the correct state)
-	if is_host:
-		CogitoGlobals.debug_log(
-			enable_logging,
-			"NetworkInteractable",
-			"[RPC RECEIVED] We are host, ignoring (already have correct state)"
-		)
 		return
 	
 	var state = interactable_data.get("state", {})
 	var type_str = interactable_data.get("type", "")
 	
-	CogitoGlobals.debug_log(
-		enable_logging,
-		"NetworkInteractable",
-		"[CLIENT] Received state update for %s: %s (type: %s)" % [network_id, state, type_str]
-	)
+	print("[NetworkInteractable] [%s] Received RPC for %s: %s" % [
+		"HOST" if is_host else "CLIENT",
+		parent_interactable.name if parent_interactable else "unknown",
+		state
+	])
 	
-	# Apply state based on type
+	# Check if this is our own RPC (state already matches current state)
+	# If so, we don't need to apply it, just update last_synced_state
+	var is_own_rpc = false
 	if type_str == "DOOR":
-		_apply_door_state(state)
+		var door = parent_interactable as CogitoDoor
+		if door:
+			var current_is_open = door.is_open if "is_open" in door else false
+			var current_is_locked = door.is_locked if "is_locked" in door else false
+			var received_is_open = state.get("is_open", false)
+			var received_is_locked = state.get("is_locked", false)
+			
+			if current_is_open == received_is_open and current_is_locked == received_is_locked:
+				is_own_rpc = true
+				print("[NetworkInteractable] [%s] Received own RPC (state matches), skipping apply" % ["HOST" if is_host else "CLIENT"])
 	elif type_str == "SWITCH":
-		_apply_switch_state(state)
+		var switch = parent_interactable as CogitoSwitch
+		if switch:
+			var current_is_on = switch.is_on if "is_on" in switch else false
+			var received_is_on = state.get("is_on", false)
+			
+			if current_is_on == received_is_on:
+				is_own_rpc = true
+				print("[NetworkInteractable] [%s] Received own RPC (state matches), skipping apply" % ["HOST" if is_host else "CLIENT"])
+	elif type_str == "CONTAINER":
+		var container = parent_interactable as CogitoContainer
+		if container:
+			var current_is_open = _get_container_open_state(container)
+			var received_is_open = state.get("is_open", false)
+			
+			# For containers, we also check inventory state if present
+			var inventory_matches = true
+			if "inventory" in state and container.inventory_data:
+				var current_inventory = _serialize_container_inventory(container.inventory_data)
+				var received_inventory = state.get("inventory", {})
+				# Simple comparison: check if slot counts match
+				var current_slots = current_inventory.get("slots", [])
+				var received_slots = received_inventory.get("slots", [])
+				if current_slots.size() != received_slots.size():
+					inventory_matches = false
+			
+			if current_is_open == received_is_open and inventory_matches:
+				is_own_rpc = true
+				print("[NetworkInteractable] [%s] Received own RPC (state matches), skipping apply" % ["HOST" if is_host else "CLIENT"])
+	
+	# Only apply state if it's different (not our own RPC)
+	if not is_own_rpc:
+		# Apply state based on type
+		if type_str == "DOOR":
+			_apply_door_state(state)
+		elif type_str == "SWITCH":
+			_apply_switch_state(state)
+		elif type_str == "CONTAINER":
+			_apply_container_state(state)
 	
 	# Update last synced state
 	_update_last_synced_state(state)
@@ -399,6 +554,9 @@ func _apply_door_state(state: Dictionary) -> void:
 	
 	var is_open = state.get("is_open", false)
 	var is_locked = state.get("is_locked", false)
+	
+	# Set flag to prevent feedback loop
+	_is_applying_network_state = true
 	
 	# Temporarily disconnect signals to avoid feedback loop
 	if door.door_state_changed.is_connected(_on_door_state_changed):
@@ -466,11 +624,9 @@ func _apply_door_state(state: Dictionary) -> void:
 	if door.has_signal("lock_state_changed") and not door.lock_state_changed.is_connected(_on_door_lock_state_changed):
 		door.lock_state_changed.connect(_on_door_lock_state_changed)
 	
-	CogitoGlobals.debug_log(
-		enable_logging,
-		"NetworkInteractable",
-		"[CLIENT] Applied door state: is_open=%s, is_locked=%s" % [is_open, is_locked]
-	)
+	# Clear flag after a frame to allow future local changes
+	await get_tree().process_frame
+	_is_applying_network_state = false
 
 
 ## Apply switch state (client-side)
@@ -481,11 +637,14 @@ func _apply_switch_state(state: Dictionary) -> void:
 	
 	var is_on = state.get("is_on", false)
 	
+	# Set flag to prevent feedback loop
+	_is_applying_network_state = true
+	
 	# Temporarily disconnect signal to avoid feedback loop
 	if switch.switched.is_connected(_on_switch_state_changed):
 		switch.switched.disconnect(_on_switch_state_changed)
 	
-	# Apply state
+	# Apply state only if it's different
 	if "is_on" in switch and switch.is_on != is_on:
 		if is_on:
 			switch.switch_on()
@@ -496,9 +655,88 @@ func _apply_switch_state(state: Dictionary) -> void:
 	if not switch.switched.is_connected(_on_switch_state_changed):
 		switch.switched.connect(_on_switch_state_changed)
 	
-	CogitoGlobals.debug_log(
-		enable_logging,
-		"NetworkInteractable",
-		"[CLIENT] Applied switch state: is_on=%s" % is_on
-	)
+	# Clear flag after a frame to allow future local changes
+	await get_tree().process_frame
+	_is_applying_network_state = false
+
+
+## Apply container state (client-side)
+func _apply_container_state(state: Dictionary) -> void:
+	var container = parent_interactable as CogitoContainer
+	if not container:
+		return
+	
+	var is_open = state.get("is_open", false)
+	var inventory_state = state.get("inventory", {})
+	
+	# Set flag to prevent feedback loop
+	_is_applying_network_state = true
+	
+	# Temporarily disconnect signals to avoid feedback loop
+	if container.has_signal("container_closed") and container.container_closed.is_connected(_on_container_closed):
+		container.container_closed.disconnect(_on_container_closed)
+	if container.has_signal("toggle_inventory") and container.toggle_inventory.is_connected(_on_container_toggled):
+		container.toggle_inventory.disconnect(_on_container_toggled)
+	if container.inventory_data and container.inventory_data.has_signal("inventory_updated") and container.inventory_data.inventory_updated.is_connected(_on_container_inventory_updated):
+		container.inventory_data.inventory_updated.disconnect(_on_container_inventory_updated)
+	
+	# Apply open/close state
+	var current_is_open = _get_container_open_state(container)
+	if current_is_open != is_open:
+		if is_open:
+			container.open()
+		else:
+			container.close()
+	
+	# Apply inventory state if provided
+	if not inventory_state.is_empty() and container.inventory_data:
+		_apply_container_inventory(container.inventory_data, inventory_state)
+	
+	# Reconnect signals
+	if container.has_signal("container_closed") and not container.container_closed.is_connected(_on_container_closed):
+		container.container_closed.connect(_on_container_closed)
+	if container.has_signal("toggle_inventory") and not container.toggle_inventory.is_connected(_on_container_toggled):
+		container.toggle_inventory.connect(_on_container_toggled)
+	if container.inventory_data and container.inventory_data.has_signal("inventory_updated") and not container.inventory_data.inventory_updated.is_connected(_on_container_inventory_updated):
+		container.inventory_data.inventory_updated.connect(_on_container_inventory_updated)
+	
+	# Clear flag after a frame to allow future local changes
+	await get_tree().process_frame
+	_is_applying_network_state = false
+
+
+## Helper: Apply container inventory state
+func _apply_container_inventory(inventory: CogitoInventory, inventory_state: Dictionary) -> void:
+	# Clear existing inventory
+	for i in range(inventory.inventory_slots.size()):
+		inventory.inventory_slots[i] = null
+	
+	# Apply serialized inventory
+	var slots = inventory_state.get("slots", [])
+	for slot_data in slots:
+		var index = slot_data.get("index", -1)
+		if index < 0 or index >= inventory.inventory_slots.size():
+			continue
+		
+		# Try to load item from resource path
+		var item_resource = null
+		if "resource_path" in slot_data:
+			item_resource = load(slot_data.resource_path) as InventoryItemPD
+		
+		# If resource loading failed, try to find by name
+		if not item_resource:
+			# This is a fallback - in a real implementation, you'd want a better lookup system
+			push_warning("NetworkInteractable: Could not load item from resource_path: %s" % slot_data.get("resource_path", ""))
+			continue
+		
+		# Create slot data
+		var slot = InventorySlotPD.new()
+		slot.inventory_item = item_resource
+		slot.quantity = slot_data.get("quantity", 1)
+		slot.origin_index = index
+		
+		inventory.inventory_slots[index] = slot
+	
+	# Emit inventory updated signal
+	inventory._emit_inventory_updated()
 

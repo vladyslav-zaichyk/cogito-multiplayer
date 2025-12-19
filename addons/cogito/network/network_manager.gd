@@ -529,39 +529,16 @@ func sync_interactable_state(interactable_data: Dictionary) -> void:
 	# They will check if the network_id matches
 	var scene_root = get_tree().current_scene
 	if not scene_root:
-		CogitoGlobals.debug_log(
-			true,
-			"NetworkManager",
-			"[sync_interactable_state] No current scene"
-		)
 		return
 	
 	# Find all NetworkInteractable components
 	var interactables = []
 	_find_network_interactables(scene_root, interactables)
 	
-	var network_id = interactable_data.get("network_id", "")
-	var type_str = interactable_data.get("type", "")
-	var state = interactable_data.get("state", {})
-	
-	CogitoGlobals.debug_log(
-		true,
-		"NetworkManager",
-		"[sync_interactable_state] RPC received: network_id=%s, type=%s, state=%s, found %d interactables" % [
-			network_id, type_str, state, interactables.size()
-		]
-	)
-	
 	# Send state update to matching interactable
 	for interactable in interactables:
 		if interactable.has_method("_receive_state_update"):
 			interactable._receive_state_update(interactable_data)
-		else:
-			CogitoGlobals.debug_log(
-				true,
-				"NetworkManager",
-				"[sync_interactable_state] Component %s missing _receive_state_update method" % interactable.name
-			)
 
 
 ## Helper: Recursively find all NetworkInteractable components
