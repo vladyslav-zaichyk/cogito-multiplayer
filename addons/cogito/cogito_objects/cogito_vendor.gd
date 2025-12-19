@@ -82,6 +82,16 @@ func _delayed_object_spawn() -> void:
 	spawned_object.position = spawn_point.global_position
 	spawned_object.rotation = spawn_rotation
 	get_tree().current_scene.add_child(spawned_object)
+	
+	# Sync spawn to other clients in multiplayer
+	if NetworkManager and NetworkManager.is_multiplayer() and object_to_spawn:
+		var spawn_data = {
+			"scene_path": object_to_spawn.resource_path,
+			"position": spawn_point.global_position,
+			"rotation": spawn_rotation
+		}
+		# Call RPC for all other peers (not locally, since we already spawned it)
+		NetworkManager.sync_object_spawn.rpc(spawn_data)
 
 
 func _update_vendor_state() -> void:

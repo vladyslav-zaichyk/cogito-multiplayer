@@ -548,3 +548,62 @@ func _find_network_interactables(node: Node, result: Array) -> void:
 			result.append(child)
 		_find_network_interactables(child, result)
 
+
+## RPC: Sync object spawn (called when an object is spawned dynamically)
+@rpc("any_peer", "reliable")
+func sync_object_spawn(spawn_data: Dictionary) -> void:
+	# This RPC is only called on remote peers (not locally)
+	# The local peer spawns the object directly, then calls this RPC for others
+	
+	var scene_path = spawn_data.get("scene_path", "")
+	var position = spawn_data.get("position", Vector3.ZERO)
+	var rotation = spawn_data.get("rotation", Vector3.ZERO)
+	
+	if scene_path.is_empty():
+		push_error("NetworkManager: sync_object_spawn called with empty scene_path")
+		return
+	
+	# Load and instantiate the scene
+	var scene = load(scene_path) as PackedScene
+	if not scene:
+		push_error("NetworkManager: Failed to load scene: %s" % scene_path)
+		return
+	
+	var spawned_object = scene.instantiate()
+	if not spawned_object:
+		push_error("NetworkManager: Failed to instantiate scene: %s" % scene_path)
+		return
+	
+	# Set position and rotation
+	if spawned_object is Node3D:
+		spawned_object.position = position
+		spawned_object.rotation = rotation
+	
+	# Add to current scene
+	var current_scene = get_tree().current_scene
+	if current_scene:
+		current_scene.add_child(spawned_object)
+		
+		# If this is a pickup item, add NetworkPickupID if it doesn't have one
+		if spawned_object.has_method("get") and "PickupComponent" in spawned_object.get_groups():
+			# Check if it already has NetworkPickupID
+			var has_network_id = false
+			for child in spawned_object.get_children():
+				if child.has_method("get_network_id"):
+					has_network_id = true
+					break
+			
+			if not has_network_id:
+				var network_id_component = preload("res://addons/cogito/network/network_pickup_id.gd").new()
+				network_id_component.name = "NetworkPickupID"
+				spawned_object.add_child(network_id_component)
+		
+		print("[NetworkManager] [%s] Spawned object from network: %s at %s" % [
+			"HOST" if is_host() else "CLIENT",
+			scene_path,
+			position
+		])
+	else:
+		push_error("NetworkManager: No current scene to spawn object into")
+		spawned_object.queue_free()
+
