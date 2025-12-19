@@ -5,6 +5,7 @@ extends Node
 
 ## Preload required classes
 const InventorySlotPD = preload("res://addons/cogito/inventory_pd/CustomResources/InventorySlotPD.gd")
+const CogitoTurnwheel = preload("res://addons/cogito/cogito_objects/cogito_turnwheel.gd")
 
 ## Enable/disable logging
 var enable_logging: bool = false  # Disabled by default
@@ -16,7 +17,7 @@ var parent_interactable: Node = null
 var network_id: String = ""
 
 ## Type of interactable (DOOR, SWITCH, etc.)
-enum InteractableType { DOOR, SWITCH, CONTAINER, UNKNOWN }
+enum InteractableType { DOOR, SWITCH, CONTAINER, TURNWHEEL, UNKNOWN }
 var interactable_type: InteractableType = InteractableType.UNKNOWN
 
 ## Last synced state (to avoid duplicate syncs)
@@ -48,6 +49,9 @@ func _ready() -> void:
 	elif parent_interactable is CogitoContainer:
 		interactable_type = InteractableType.CONTAINER
 		_setup_container()
+	elif parent_interactable is CogitoTurnwheel:
+		interactable_type = InteractableType.TURNWHEEL
+		_setup_turnwheel()
 	else:
 		CogitoGlobals.debug_log(
 			true,
@@ -128,6 +132,25 @@ func _setup_switch() -> void:
 		"Connected to CogitoSwitch signals (switched: %s)" % [
 			parent_interactable.switched.is_connected(_on_switch_state_changed)
 		]
+	)
+
+
+## Setup for CogitoTurnwheel
+func _setup_turnwheel() -> void:
+	var turnwheel = parent_interactable as CogitoTurnwheel
+	if not turnwheel:
+		return
+	
+	# Connect to turnwheel state signal
+	if turnwheel.has_signal("turnwheel_state_changed"):
+		var connected = turnwheel.turnwheel_state_changed.connect(_on_turnwheel_state_changed)
+		if connected != OK:
+			push_error("NetworkInteractable: Failed to connect turnwheel_state_changed signal: %d" % connected)
+	
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"NetworkInteractable",
+		"Connected to CogitoTurnwheel signals"
 	)
 
 
@@ -340,6 +363,30 @@ func _on_container_closed() -> void:
 		_update_last_synced_state(state)
 
 
+## Called when turnwheel state changes
+func _on_turnwheel_state_changed(has_been_turned: bool) -> void:
+	# Don't sync if we're applying state from network (to avoid feedback loop)
+	if _is_applying_network_state:
+		return
+	
+	if not NetworkManager or not NetworkManager.is_multiplayer():
+		return
+	
+	var turnwheel = parent_interactable as CogitoTurnwheel
+	if not turnwheel:
+		return
+	
+	var state = {
+		"has_been_turned": has_been_turned
+	}
+	
+	# Check if state actually changed
+	if _has_state_changed(state):
+		print("[NetworkInteractable] [%s] Turnwheel state changed: has_been_turned=%s, sending RPC" % ["HOST" if is_host else "CLIENT", has_been_turned])
+		_sync_state_to_clients(state)
+		_update_last_synced_state(state)
+
+
 ## Called when container inventory is updated
 func _on_container_inventory_updated(inventory_data: CogitoInventory) -> void:
 	# Don't sync if we're applying state from network (to avoid feedback loop)
@@ -440,6 +487,12 @@ func _update_last_synced_state(state: Dictionary = {}) -> void:
 					"is_open": _get_container_open_state(container),
 					"inventory": _serialize_container_inventory(container.inventory_data) if container.inventory_data else {}
 				}
+		elif interactable_type == InteractableType.TURNWHEEL:
+			var turnwheel = parent_interactable as CogitoTurnwheel
+			if turnwheel:
+				last_synced_state = {
+					"has_been_turned": turnwheel.has_been_turned if "has_been_turned" in turnwheel else false
+				}
 	else:
 		last_synced_state = state.duplicate()
 
@@ -531,6 +584,15 @@ func _receive_state_update(interactable_data: Dictionary) -> void:
 			if current_is_open == received_is_open and inventory_matches:
 				is_own_rpc = true
 				print("[NetworkInteractable] [%s] Received own RPC (state matches), skipping apply" % ["HOST" if is_host else "CLIENT"])
+	elif type_str == "TURNWHEEL":
+		var turnwheel = parent_interactable as CogitoTurnwheel
+		if turnwheel:
+			var current_has_been_turned = turnwheel.has_been_turned if "has_been_turned" in turnwheel else false
+			var received_has_been_turned = state.get("has_been_turned", false)
+			
+			if current_has_been_turned == received_has_been_turned:
+				is_own_rpc = true
+				print("[NetworkInteractable] [%s] Received own RPC (state matches), skipping apply" % ["HOST" if is_host else "CLIENT"])
 	
 	# Only apply state if it's different (not our own RPC)
 	if not is_own_rpc:
@@ -541,6 +603,8 @@ func _receive_state_update(interactable_data: Dictionary) -> void:
 			_apply_switch_state(state)
 		elif type_str == "CONTAINER":
 			_apply_container_state(state)
+		elif type_str == "TURNWHEEL":
+			_apply_turnwheel_state(state)
 	
 	# Update last synced state
 	_update_last_synced_state(state)
@@ -739,4 +803,34 @@ func _apply_container_inventory(inventory: CogitoInventory, inventory_state: Dic
 	
 	# Emit inventory updated signal
 	inventory._emit_inventory_updated()
+
+
+## Apply turnwheel state (client-side)
+func _apply_turnwheel_state(state: Dictionary) -> void:
+	var turnwheel = parent_interactable as CogitoTurnwheel
+	if not turnwheel:
+		return
+	
+	var has_been_turned = state.get("has_been_turned", false)
+	
+	# Set flag to prevent feedback loop
+	_is_applying_network_state = true
+	
+	# Temporarily disconnect signal to avoid feedback loop
+	if turnwheel.has_signal("turnwheel_state_changed") and turnwheel.turnwheel_state_changed.is_connected(_on_turnwheel_state_changed):
+		turnwheel.turnwheel_state_changed.disconnect(_on_turnwheel_state_changed)
+	
+	# Apply state only if it's different
+	if "has_been_turned" in turnwheel and turnwheel.has_been_turned != has_been_turned:
+		turnwheel.has_been_turned = has_been_turned
+		# Note: We don't call interact() here because that would trigger nodes_to_trigger
+		# The state change is enough - the visual rotation happens in _is_being_turned()
+	
+	# Reconnect signal
+	if turnwheel.has_signal("turnwheel_state_changed") and not turnwheel.turnwheel_state_changed.is_connected(_on_turnwheel_state_changed):
+		turnwheel.turnwheel_state_changed.connect(_on_turnwheel_state_changed)
+	
+	# Clear flag after a frame to allow future local changes
+	await get_tree().process_frame
+	_is_applying_network_state = false
 

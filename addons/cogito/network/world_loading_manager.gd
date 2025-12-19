@@ -3,6 +3,9 @@ extends Node
 ## Ensures all clients have loaded the scene before spawning players
 ## Note: This is an autoload singleton, not a class_name
 
+## Preload required classes
+const CogitoTurnwheel = preload("res://addons/cogito/cogito_objects/cogito_turnwheel.gd")
+
 ## Enable/disable logging
 var enable_logging: bool = true  # Enable for debugging
 
@@ -546,11 +549,11 @@ func _initialize_interactables_async(scene_root: Node) -> void:
 		if not is_instance_valid(node):
 			continue
 		
-		# Check if this node is a CogitoDoor, CogitoSwitch, or CogitoContainer
+		# Check if this node is a CogitoDoor, CogitoSwitch, CogitoContainer, or CogitoTurnwheel
 		var is_interactable = false
 		var has_network_sync = false
 		
-		if node is CogitoDoor or node is CogitoSwitch or node is CogitoContainer:
+		if node is CogitoDoor or node is CogitoSwitch or node is CogitoContainer or node is CogitoTurnwheel:
 			is_interactable = true
 			# Check if it already has NetworkInteractable
 			for child in node.get_children():
@@ -655,4 +658,3 @@ func _on_network_disconnected(peer_id: int) -> void:
 	# Check if we can proceed (maybe we were waiting for this peer)
 	if _is_loading:
 		_check_all_peers_loaded()
-

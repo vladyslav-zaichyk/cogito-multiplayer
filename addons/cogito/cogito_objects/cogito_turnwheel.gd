@@ -2,6 +2,7 @@
 extends AnimatableBody3D
 
 signal object_state_updated(interaction_text: String)
+signal turnwheel_state_changed(has_been_turned: bool)
 
 @onready var audio_stream_player_3d = $AudioStreamPlayer3D
 
@@ -59,6 +60,7 @@ func interact(_player_interaction_component):
 	CogitoGlobals.debug_log(
 		true, "cogito_turnwheel.gd", "Turnwheel has been turned: " + str(has_been_turned)
 	)
+	turnwheel_state_changed.emit(has_been_turned)
 	for node in nodes_to_trigger:
 		node.interact(null)
 
