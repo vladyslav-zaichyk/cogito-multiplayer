@@ -3,6 +3,8 @@ extends AnimatableBody3D
 
 signal object_state_updated(interaction_text: String)
 signal turnwheel_state_changed(has_been_turned: bool)
+signal turnwheel_interaction_started()
+signal turnwheel_interaction_stopped()
 
 @onready var audio_stream_player_3d = $AudioStreamPlayer3D
 
@@ -30,6 +32,7 @@ enum PromptPositionMode {
 var has_been_turned: bool = false
 var interaction_nodes: Array[Node]
 var cogito_properties: CogitoProperties = null
+var is_currently_turning: bool = false  # Track if interaction is in progress
 
 
 func _ready():
@@ -45,6 +48,11 @@ func _ready():
 
 
 func _is_being_turned(_time_remaining: float):
+	# Emit signal when interaction starts (first call)
+	if not is_currently_turning:
+		is_currently_turning = true
+		turnwheel_interaction_started.emit()
+	
 	if !audio_stream_player_3d.playing:
 		audio_stream_player_3d.play()
 
@@ -56,6 +64,9 @@ func _is_being_turned(_time_remaining: float):
 
 func interact(_player_interaction_component):
 	audio_stream_player_3d.stop()
+	is_currently_turning = false
+	turnwheel_interaction_stopped.emit()
+	
 	has_been_turned = !has_been_turned
 	CogitoGlobals.debug_log(
 		true, "cogito_turnwheel.gd", "Turnwheel has been turned: " + str(has_been_turned)

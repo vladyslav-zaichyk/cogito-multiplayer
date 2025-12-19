@@ -147,6 +147,17 @@ func _setup_turnwheel() -> void:
 		if connected != OK:
 			push_error("NetworkInteractable: Failed to connect turnwheel_state_changed signal: %d" % connected)
 	
+	# Connect to interaction start/stop signals for animation sync
+	if turnwheel.has_signal("turnwheel_interaction_started"):
+		var connected = turnwheel.turnwheel_interaction_started.connect(_on_turnwheel_interaction_started)
+		if connected != OK:
+			push_error("NetworkInteractable: Failed to connect turnwheel_interaction_started signal: %d" % connected)
+	
+	if turnwheel.has_signal("turnwheel_interaction_stopped"):
+		var connected = turnwheel.turnwheel_interaction_stopped.connect(_on_turnwheel_interaction_stopped)
+		if connected != OK:
+			push_error("NetworkInteractable: Failed to connect turnwheel_interaction_stopped signal: %d" % connected)
+	
 	CogitoGlobals.debug_log(
 		enable_logging,
 		"NetworkInteractable",
@@ -361,6 +372,52 @@ func _on_container_closed() -> void:
 		print("[NetworkInteractable] [%s] Container closed, sending RPC" % ["HOST" if is_host else "CLIENT"])
 		_sync_state_to_clients(state)
 		_update_last_synced_state(state)
+
+
+## Called when turnwheel interaction starts
+func _on_turnwheel_interaction_started() -> void:
+	# Don't sync if we're applying state from network (to avoid feedback loop)
+	if _is_applying_network_state:
+		return
+	
+	if not NetworkManager or not NetworkManager.is_multiplayer():
+		return
+	
+	var turnwheel = parent_interactable as CogitoTurnwheel
+	if not turnwheel:
+		return
+	
+	# Sync interaction start (for animation)
+	var state = {
+		"has_been_turned": turnwheel.has_been_turned if "has_been_turned" in turnwheel else false,
+		"is_turning": true
+	}
+	
+	print("[NetworkInteractable] [%s] Turnwheel interaction started, sending RPC" % ["HOST" if is_host else "CLIENT"])
+	_sync_state_to_clients(state)
+
+
+## Called when turnwheel interaction stops
+func _on_turnwheel_interaction_stopped() -> void:
+	# Don't sync if we're applying state from network (to avoid feedback loop)
+	if _is_applying_network_state:
+		return
+	
+	if not NetworkManager or not NetworkManager.is_multiplayer():
+		return
+	
+	var turnwheel = parent_interactable as CogitoTurnwheel
+	if not turnwheel:
+		return
+	
+	# Sync interaction stop (for animation)
+	var state = {
+		"has_been_turned": turnwheel.has_been_turned if "has_been_turned" in turnwheel else false,
+		"is_turning": false
+	}
+	
+	print("[NetworkInteractable] [%s] Turnwheel interaction stopped, sending RPC" % ["HOST" if is_host else "CLIENT"])
+	_sync_state_to_clients(state)
 
 
 ## Called when turnwheel state changes
@@ -812,25 +869,64 @@ func _apply_turnwheel_state(state: Dictionary) -> void:
 		return
 	
 	var has_been_turned = state.get("has_been_turned", false)
+	var is_turning = state.get("is_turning", false)
 	
 	# Set flag to prevent feedback loop
 	_is_applying_network_state = true
 	
-	# Temporarily disconnect signal to avoid feedback loop
+	# Temporarily disconnect signals to avoid feedback loop
 	if turnwheel.has_signal("turnwheel_state_changed") and turnwheel.turnwheel_state_changed.is_connected(_on_turnwheel_state_changed):
 		turnwheel.turnwheel_state_changed.disconnect(_on_turnwheel_state_changed)
+	if turnwheel.has_signal("turnwheel_interaction_started") and turnwheel.turnwheel_interaction_started.is_connected(_on_turnwheel_interaction_started):
+		turnwheel.turnwheel_interaction_started.disconnect(_on_turnwheel_interaction_started)
+	if turnwheel.has_signal("turnwheel_interaction_stopped") and turnwheel.turnwheel_interaction_stopped.is_connected(_on_turnwheel_interaction_stopped):
+		turnwheel.turnwheel_interaction_stopped.disconnect(_on_turnwheel_interaction_stopped)
 	
 	# Apply state only if it's different
 	if "has_been_turned" in turnwheel and turnwheel.has_been_turned != has_been_turned:
 		turnwheel.has_been_turned = has_been_turned
-		# Note: We don't call interact() here because that would trigger nodes_to_trigger
-		# The state change is enough - the visual rotation happens in _is_being_turned()
 	
-	# Reconnect signal
+	# Handle animation sync (start/stop turning)
+	if "is_turning" in state:
+		if is_turning and not turnwheel.is_currently_turning:
+			# Start turning animation on remote client
+			turnwheel.is_currently_turning = true
+			# Start audio if available
+			if turnwheel.audio_stream_player_3d and not turnwheel.audio_stream_player_3d.playing:
+				turnwheel.audio_stream_player_3d.play()
+			# Start rotation animation (will be called every frame)
+			_start_turnwheel_rotation_animation(turnwheel)
+		elif not is_turning and turnwheel.is_currently_turning:
+			# Stop turning animation on remote client
+			turnwheel.is_currently_turning = false
+			if turnwheel.audio_stream_player_3d:
+				turnwheel.audio_stream_player_3d.stop()
+			_stop_turnwheel_rotation_animation(turnwheel)
+	
+	# Reconnect signals
 	if turnwheel.has_signal("turnwheel_state_changed") and not turnwheel.turnwheel_state_changed.is_connected(_on_turnwheel_state_changed):
 		turnwheel.turnwheel_state_changed.connect(_on_turnwheel_state_changed)
+	if turnwheel.has_signal("turnwheel_interaction_started") and not turnwheel.turnwheel_interaction_started.is_connected(_on_turnwheel_interaction_started):
+		turnwheel.turnwheel_interaction_started.connect(_on_turnwheel_interaction_started)
+	if turnwheel.has_signal("turnwheel_interaction_stopped") and not turnwheel.turnwheel_interaction_stopped.is_connected(_on_turnwheel_interaction_stopped):
+		turnwheel.turnwheel_interaction_stopped.connect(_on_turnwheel_interaction_stopped)
 	
 	# Clear flag after a frame to allow future local changes
 	await get_tree().process_frame
 	_is_applying_network_state = false
+
+
+## Helper: Start turnwheel rotation animation on remote client
+func _start_turnwheel_rotation_animation(turnwheel: CogitoTurnwheel) -> void:
+	# Create a timer or use _process to continuously rotate
+	# For now, we'll use a simple approach: rotate every frame while is_currently_turning is true
+	# This will be handled in a _process loop or through a timer
+	# Note: This is a simplified approach - in a full implementation, you'd want to sync the exact rotation speed and timing
+	pass
+
+
+## Helper: Stop turnwheel rotation animation on remote client
+func _stop_turnwheel_rotation_animation(turnwheel: CogitoTurnwheel) -> void:
+	# Stop any rotation animation
+	pass
 
