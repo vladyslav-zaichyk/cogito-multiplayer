@@ -1,6 +1,9 @@
 extends InteractionComponent
 class_name PickupComponent
 
+## Preload command class for static typing
+const PickupItemCommand = preload("res://addons/cogito/network/commands/inventory/pickup_item_command.gd")
+
 @export var slot_data: InventorySlotPD
 @export var display_item_name: bool = false
 
@@ -56,8 +59,57 @@ func pick_up(_player_interaction_component: PlayerInteractionComponent):
 			)
 			return
 
-	if not _player_interaction_component.get_parent().inventory_data.pick_up_slot_data(slot_data):
+	# Use Command/Event Sourcing architecture
+	# CommandBus is an autoload singleton (registered in cogito_plugin.gd)
+	# Accessible directly as global variable at runtime
+	# Get player ID
+	var player_id = -1
+	if PlayerManager:
+		player_id = PlayerManager.get_player_id(_player_interaction_component.get_parent())
+	
+	if player_id == -1:
+		# Fallback to old system if player not found
+		if not _player_interaction_component.get_parent().inventory_data.pick_up_slot_data(slot_data):
+			return
+		_handle_pickup_success(_player_interaction_component)
 		return
+	
+	# Get item position and network ID
+	var parent_obj = get_parent()
+	var item_position = Vector3.ZERO
+	var network_id = -1
+	var scene_path = ""
+	
+	if parent_obj is Node3D:
+		item_position = (parent_obj as Node3D).global_position
+	
+	# Try to get network_id from NetworkPickupID component
+	for child in parent_obj.get_children():
+		if child.has_method("get_network_id"):
+			network_id = child.get_network_id()
+			break
+	
+	# Get scene path if available
+	if parent_obj.is_inside_tree():
+		scene_path = str(parent_obj.get_path())
+	
+	# Create and execute command (using class_name for static typing)
+	var command = PickupItemCommand.new(player_id, slot_data, item_position, network_id, scene_path)
+	var result = CommandBus.execute_command(command)
+	
+	if result.success:
+		# Command executed successfully, handle UI updates
+		_handle_pickup_success(_player_interaction_component)
+	else:
+		# Command failed, show error
+		_player_interaction_component.send_hint(
+			null,
+			result.error_message if result.error_message else "Failed to pick up item"
+		)
+
+
+## Handle successful pickup (UI updates, etc.)
+func _handle_pickup_success(_player_interaction_component: PlayerInteractionComponent) -> void:
 
 	# Update wieldable UI if we have picked up ammo for current wieldable
 	# TODO: Possibly replace with a better solution, maybe by signaling the change

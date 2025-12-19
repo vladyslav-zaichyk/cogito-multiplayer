@@ -140,12 +140,11 @@ size = Vector3(0.0973389, 0.0952759, 0.815624)
 [sub_resource type="BoxShape3D" id="BoxShape3D_5bhcv"]
 size = Vector3(0.0973389, 0.0457916, 0.443713)
 
-[sub_resource type="Resource" id="Resource_jmc02"]
+[sub_resource type="Resource" id="Resource_el0vi"]
 resource_local_to_scene = true
 script = ExtResource("4_t66im")
 wieldable_scene = ExtResource("7_7eewm")
 wieldable_crosshair = ExtResource("6_f34pd")
-no_reload = false
 hint_on_empty = "Out of ammo."
 charge_max = 100.0
 ammo_item_name = "Laser Ammo"
@@ -155,24 +154,16 @@ wieldable_damage = 1.0
 name = "Laser Rifle"
 description = "Goes pew pew pew. Needs Laser Ammo to reload."
 icon = ExtResource("3_jmc02")
-is_stackable = false
-is_droppable = true
-is_unique = false
-stack_size = 0
 drop_scene = "res://addons/cogito/packed_scenes/Pickups/pickup_laser_rifle.tscn"
-item_drop_size = 0.5
-hint_text_on_use = ""
 item_size = Vector2(3, 2)
 sound_pickup = ExtResource("5_1nwxd")
 can_auto_slot = true
 slot_number = 1
 
-[sub_resource type="Resource" id="Resource_t66im"]
+[sub_resource type="Resource" id="Resource_vadni"]
 resource_local_to_scene = true
 script = ExtResource("3_iw0du")
-inventory_item = SubResource("Resource_jmc02")
-quantity = 1
-origin_index = -1
+inventory_item = SubResource("Resource_el0vi")
 
 [node name="Pickup_LaserRifle" type="RigidBody3D"]
 collision_layer = 3
@@ -203,4 +194,4 @@ shape = SubResource("BoxShape3D_5bhcv")
 hold_interaction_text = "(HOLD) Wield"
 
 [node name="PickupComponent" parent="." instance=ExtResource("2_3uch0")]
-slot_data = SubResource("Resource_t66im")
+slot_data = SubResource("Resource_vadni")

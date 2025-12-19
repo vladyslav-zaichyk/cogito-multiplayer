@@ -710,3 +710,48 @@ func sync_flashlight_state(flashlight_data: Dictionary) -> void:
 							]
 						)
 
+
+## RPC: Validate command (client -> host)
+## Client sends command to host for validation
+## Note: Only host should process this, but we can't restrict RPC to host only
+## So we check is_host() inside the function
+@rpc("any_peer", "call_local", "reliable")
+func validate_command(command_data: Dictionary) -> void:
+	# Only host can receive validation requests
+	if not is_host():
+		return
+	
+	var sender_peer_id = multiplayer.get_remote_sender_id()
+	
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"NetworkManager",
+		"[HOST] Received command validation request from peer %d: %s" % [
+			sender_peer_id,
+			command_data.get("command_type", "unknown")
+		]
+	)
+	
+	# Route to CommandBus for validation
+	# CommandBus is an autoload singleton (registered in cogito_plugin.gd)
+	# Accessible directly as global variable at runtime
+	CommandBus._validate_and_broadcast_from_network(command_data, sender_peer_id)
+
+
+## RPC: Broadcast command to all clients (host -> all)
+## Host broadcasts validated command to all clients
+@rpc("any_peer", "call_local", "reliable")
+func broadcast_command(command_data: Dictionary) -> void:
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"NetworkManager",
+		"[%s] Received command broadcast: %s" % [
+			"HOST" if is_host() else "CLIENT",
+			command_data.get("command_type", "unknown")
+		]
+	)
+	
+	# Route to CommandBus for execution
+	# CommandBus is an autoload singleton (registered in cogito_plugin.gd)
+	# Accessible directly as global variable at runtime
+	CommandBus.receive_validated_command(command_data)
