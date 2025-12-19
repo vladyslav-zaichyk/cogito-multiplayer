@@ -341,6 +341,7 @@ func _update_remote_wieldable(wieldable_data: Dictionary) -> void:
 			# 2. The Wieldables container is under Head, so it will automatically rotate with head.rotation
 			# 3. Calling equip() and seeking to end can cause incorrect orientation
 			# We just need to set up the reference and show the mesh
+			# TODO: This will be properly fixed with ViewModel/WorldModel architecture (Phase 2.4)
 			
 			CogitoGlobals.debug_log(
 				enable_logging,
@@ -355,16 +356,15 @@ func _update_remote_wieldable(wieldable_data: Dictionary) -> void:
 				_show_all_meshes(wieldable_node)
 			
 			# For flashlight, also show the mesh immediately (it's hidden in _ready())
-			# and sync the on/off state
+			# Default to off for remote players (state will be synced via RPC when toggled)
 			if wieldable_node.has_method("toggle_flashlight"):
 				# Flashlight - show mesh immediately
 				if wieldable_node.wieldable_mesh:
 					wieldable_node.wieldable_mesh.show()
 				
-				# TODO: Sync flashlight on/off state via RPC
-				# For now, default to off for remote players
-				if wieldable_node.has_method("toggle_flashlight"):
-					wieldable_node.toggle_flashlight(false)
+				# Default to off for remote players
+				# The actual state will be synced when the local player toggles it
+				wieldable_node.toggle_flashlight(false)
 		
 		CogitoGlobals.debug_log(
 			enable_logging,

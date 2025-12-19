@@ -42,7 +42,9 @@ func _ready():
 
 
 func _process(delta):
-	if is_on:
+	# Only process battery drain for local player's flashlight
+	# Remote players' flashlights don't have equipped_wieldable_item set
+	if is_on and player_interaction_component and player_interaction_component.equipped_wieldable_item:
 		# Drain battery when flashlight is on
 		player_interaction_component.equipped_wieldable_item.subtract(delta * drain_rate)
 		if player_interaction_component.equipped_wieldable_item.charge_current == 0:
@@ -104,16 +106,34 @@ func toggle_on_off():
 
 	if is_on:
 		toggle_flashlight(false)
-	elif player_interaction_component.equipped_wieldable_item.charge_current > 0:
-		toggle_flashlight(true)
-	else:
-		player_interaction_component.equipped_wieldable_item.send_empty_hint()
+	elif player_interaction_component and player_interaction_component.equipped_wieldable_item:
+		if player_interaction_component.equipped_wieldable_item.charge_current > 0:
+			toggle_flashlight(true)
+		else:
+			player_interaction_component.equipped_wieldable_item.send_empty_hint()
 
 
 # Function to set the flashlight state
 func toggle_flashlight(new_state: bool):
 	is_on = new_state
 	spot_light_3d.visible = new_state
+	
+	# Sync flashlight state to other clients in multiplayer
+	if NetworkManager and NetworkManager.is_multiplayer():
+		# Only sync if this is the local player's flashlight
+		if player_interaction_component:
+			var player = player_interaction_component.get_parent() if player_interaction_component else null
+			if player and PlayerManager:
+				var player_id = PlayerManager.get_player_id(player)
+				var is_local = PlayerManager.has_local_player() and PlayerManager.get_local_player_id() == player_id
+				
+				if is_local:
+					var peer_id = NetworkManager.get_local_peer_id()
+					var flashlight_data = {
+						"peer_id": peer_id,
+						"is_on": new_state
+					}
+					NetworkManager.sync_flashlight_state.rpc(flashlight_data)
 
 
 # Function to play a sound

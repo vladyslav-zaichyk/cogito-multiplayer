@@ -607,3 +607,106 @@ func sync_object_spawn(spawn_data: Dictionary) -> void:
 		push_error("NetworkManager: No current scene to spawn object into")
 		spawned_object.queue_free()
 
+
+## RPC: Sync projectile spawn (called when a player shoots)
+@rpc("any_peer", "reliable")
+func sync_projectile_spawn(projectile_data: Dictionary) -> void:
+	# This RPC is only called on remote peers (not locally)
+	# The local peer spawns the projectile directly, then calls this RPC for others
+	
+	var scene_path = projectile_data.get("scene_path", "")
+	var position = projectile_data.get("position", Vector3.ZERO)
+	var rotation = projectile_data.get("rotation", Vector3.ZERO)
+	var linear_velocity = projectile_data.get("linear_velocity", Vector3.ZERO)
+	var damage_amount = projectile_data.get("damage_amount", 0)
+	var shooter_peer_id = projectile_data.get("shooter_peer_id", 0)
+	
+	if scene_path.is_empty():
+		push_error("NetworkManager: sync_projectile_spawn called with empty scene_path")
+		return
+	
+	# Load and instantiate the projectile scene
+	var scene = load(scene_path) as PackedScene
+	if not scene:
+		push_error("NetworkManager: Failed to load projectile scene: %s" % scene_path)
+		return
+	
+	var projectile = scene.instantiate()
+	if not projectile:
+		push_error("NetworkManager: Failed to instantiate projectile: %s" % scene_path)
+		return
+	
+	# Set position and rotation (works for any Node3D)
+	if projectile is Node3D:
+		projectile.position = position
+		projectile.rotation = rotation
+		
+		# Set physics properties if it's a RigidBody3D
+		if projectile is RigidBody3D:
+			projectile.linear_velocity = linear_velocity
+		
+		# Set damage amount if projectile has this property
+		# Try multiple methods to set damage_amount
+		if "damage_amount" in projectile:
+			projectile.damage_amount = damage_amount
+		elif projectile.has_method("set"):
+			projectile.set("damage_amount", damage_amount)
+		
+		# Set Direction if projectile has this property (used in CogitoProjectile)
+		if linear_velocity.length() > 0:
+			var direction = linear_velocity.normalized()
+			if "Direction" in projectile:
+				projectile.Direction = direction
+			elif projectile.has_method("set"):
+				projectile.set("Direction", direction)
+	
+	# Add to current scene
+	var current_scene = get_tree().current_scene
+	if current_scene:
+		current_scene.add_child(projectile)
+		
+		CogitoGlobals.debug_log(
+			enable_logging,
+			"NetworkManager",
+			"[%s] Spawned projectile from peer %d: %s at %s with velocity %s" % [
+				"HOST" if is_host() else "CLIENT",
+				shooter_peer_id,
+				scene_path,
+				position,
+				linear_velocity
+			]
+		)
+	else:
+		push_error("NetworkManager: No current scene to spawn projectile into")
+		projectile.queue_free()
+
+
+## RPC: Sync flashlight state (called when a player toggles flashlight)
+@rpc("any_peer", "reliable")
+func sync_flashlight_state(flashlight_data: Dictionary) -> void:
+	# This RPC is called when a player toggles their flashlight on/off
+	var peer_id = flashlight_data.get("peer_id", 0)
+	var is_on = flashlight_data.get("is_on", false)
+	
+	# Find the player by peer_id
+	if PlayerManager:
+		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		if player_node:
+			# Find NetworkWieldableSync component
+			var wieldable_sync = player_node.get_node_or_null("NetworkWieldableSync")
+			if wieldable_sync:
+				# Get the remote wieldable node (flashlight)
+				if wieldable_sync.remote_wieldable_node:
+					var flashlight = wieldable_sync.remote_wieldable_node
+					if flashlight.has_method("toggle_flashlight"):
+						flashlight.toggle_flashlight(is_on)
+						CogitoGlobals.debug_log(
+							enable_logging,
+							"NetworkManager",
+							"[%s] Synced flashlight state for peer %d: %s" % [
+								"HOST" if is_host() else "CLIENT",
+								peer_id,
+								"ON" if is_on else "OFF"
+							]
+						)
+

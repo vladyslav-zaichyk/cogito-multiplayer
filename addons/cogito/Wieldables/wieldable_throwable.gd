@@ -66,12 +66,46 @@ func action_primary(_passed_item_reference: InventoryItemPD, _is_released: bool)
 	var _camera_collision = player_interaction_component.Get_Camera_Collision()
 	var Direction = (_camera_collision - bullet_point.get_global_transform().origin).normalized()
 
-	# Spawning projectile
+	# Spawning projectile locally
 	var projectile = instantiate_projectile()
 	bullet_point.add_child(projectile)
+	var projectile_position = bullet_point.global_position
 	projectile.damage_amount = _passed_item_reference.wieldable_damage
-	projectile.set_linear_velocity(Direction * projectile_velocity)
+	var projectile_velocity_vector = Direction * projectile_velocity
+	projectile.set_linear_velocity(projectile_velocity_vector)
 	projectile.reparent(get_tree().get_current_scene())
+	
+	# Sync projectile spawn to other clients in multiplayer
+	if NetworkManager and NetworkManager.is_multiplayer():
+		# Only sync if this is the local player's wieldable
+		var player = player_interaction_component.get_parent() if player_interaction_component else null
+		if player and PlayerManager:
+			var player_id = PlayerManager.get_player_id(player)
+			var is_local = PlayerManager.has_local_player() and PlayerManager.get_local_player_id() == player_id
+			
+			if is_local:
+				# Get projectile scene path
+				var projectile_scene_path = ""
+				if projectile_override and projectile_override.resource_path:
+					projectile_scene_path = projectile_override.resource_path
+				elif item_reference and item_reference.drop_scene:
+					projectile_scene_path = item_reference.drop_scene
+				else:
+					# Fallback: try to get from projectile's scene_file_path
+					if projectile.scene_file_path:
+						projectile_scene_path = projectile.scene_file_path
+				
+				if not projectile_scene_path.is_empty():
+					var projectile_data = {
+						"scene_path": projectile_scene_path,
+						"position": projectile_position,
+						"rotation": projectile.rotation,
+						"linear_velocity": projectile_velocity_vector,
+						"damage_amount": _passed_item_reference.wieldable_damage,
+						"shooter_peer_id": NetworkManager.get_local_peer_id()
+					}
+					
+					NetworkManager.sync_projectile_spawn.rpc(projectile_data)
 
 
 func instantiate_projectile() -> Node3D:

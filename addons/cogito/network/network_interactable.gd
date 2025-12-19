@@ -600,56 +600,58 @@ func _receive_state_update(interactable_data: Dictionary) -> void:
 	
 	# Check if this is our own RPC (state already matches current state)
 	# If so, we don't need to apply it, just update last_synced_state
+	# BUT: Only skip if we're NOT currently applying network state (to avoid blocking legitimate updates)
 	var is_own_rpc = false
-	if type_str == "DOOR":
-		var door = parent_interactable as CogitoDoor
-		if door:
-			var current_is_open = door.is_open if "is_open" in door else false
-			var current_is_locked = door.is_locked if "is_locked" in door else false
-			var received_is_open = state.get("is_open", false)
-			var received_is_locked = state.get("is_locked", false)
-			
-			if current_is_open == received_is_open and current_is_locked == received_is_locked:
-				is_own_rpc = true
-				print("[NetworkInteractable] [%s] Received own RPC (state matches), skipping apply" % ["HOST" if is_host else "CLIENT"])
-	elif type_str == "SWITCH":
-		var switch = parent_interactable as CogitoSwitch
-		if switch:
-			var current_is_on = switch.is_on if "is_on" in switch else false
-			var received_is_on = state.get("is_on", false)
-			
-			if current_is_on == received_is_on:
-				is_own_rpc = true
-				print("[NetworkInteractable] [%s] Received own RPC (state matches), skipping apply" % ["HOST" if is_host else "CLIENT"])
-	elif type_str == "CONTAINER":
-		var container = parent_interactable as CogitoContainer
-		if container:
-			var current_is_open = _get_container_open_state(container)
-			var received_is_open = state.get("is_open", false)
-			
-			# For containers, we also check inventory state if present
-			var inventory_matches = true
-			if "inventory" in state and container.inventory_data:
-				var current_inventory = _serialize_container_inventory(container.inventory_data)
-				var received_inventory = state.get("inventory", {})
-				# Simple comparison: check if slot counts match
-				var current_slots = current_inventory.get("slots", [])
-				var received_slots = received_inventory.get("slots", [])
-				if current_slots.size() != received_slots.size():
-					inventory_matches = false
-			
-			if current_is_open == received_is_open and inventory_matches:
-				is_own_rpc = true
-				print("[NetworkInteractable] [%s] Received own RPC (state matches), skipping apply" % ["HOST" if is_host else "CLIENT"])
-	elif type_str == "TURNWHEEL":
-		var turnwheel = parent_interactable as CogitoTurnwheel
-		if turnwheel:
-			var current_has_been_turned = turnwheel.has_been_turned if "has_been_turned" in turnwheel else false
-			var received_has_been_turned = state.get("has_been_turned", false)
-			
-			if current_has_been_turned == received_has_been_turned:
-				is_own_rpc = true
-				print("[NetworkInteractable] [%s] Received own RPC (state matches), skipping apply" % ["HOST" if is_host else "CLIENT"])
+	if not _is_applying_network_state:
+		if type_str == "DOOR":
+			var door = parent_interactable as CogitoDoor
+			if door:
+				var current_is_open = door.is_open if "is_open" in door else false
+				var current_is_locked = door.is_locked if "is_locked" in door else false
+				var received_is_open = state.get("is_open", false)
+				var received_is_locked = state.get("is_locked", false)
+				
+				if current_is_open == received_is_open and current_is_locked == received_is_locked:
+					is_own_rpc = true
+					print("[NetworkInteractable] [%s] Received own RPC (state matches), skipping apply" % ["HOST" if is_host else "CLIENT"])
+		elif type_str == "SWITCH":
+			var switch = parent_interactable as CogitoSwitch
+			if switch:
+				var current_is_on = switch.is_on if "is_on" in switch else false
+				var received_is_on = state.get("is_on", false)
+				
+				if current_is_on == received_is_on:
+					is_own_rpc = true
+					print("[NetworkInteractable] [%s] Received own RPC (state matches), skipping apply" % ["HOST" if is_host else "CLIENT"])
+		elif type_str == "CONTAINER":
+			var container = parent_interactable as CogitoContainer
+			if container:
+				var current_is_open = _get_container_open_state(container)
+				var received_is_open = state.get("is_open", false)
+				
+				# For containers, we also check inventory state if present
+				var inventory_matches = true
+				if "inventory" in state and container.inventory_data:
+					var current_inventory = _serialize_container_inventory(container.inventory_data)
+					var received_inventory = state.get("inventory", {})
+					# Simple comparison: check if slot counts match
+					var current_slots = current_inventory.get("slots", [])
+					var received_slots = received_inventory.get("slots", [])
+					if current_slots.size() != received_slots.size():
+						inventory_matches = false
+				
+				if current_is_open == received_is_open and inventory_matches:
+					is_own_rpc = true
+					print("[NetworkInteractable] [%s] Received own RPC (state matches), skipping apply" % ["HOST" if is_host else "CLIENT"])
+		elif type_str == "TURNWHEEL":
+			var turnwheel = parent_interactable as CogitoTurnwheel
+			if turnwheel:
+				var current_has_been_turned = turnwheel.has_been_turned if "has_been_turned" in turnwheel else false
+				var received_has_been_turned = state.get("has_been_turned", false)
+				
+				if current_has_been_turned == received_has_been_turned:
+					is_own_rpc = true
+					print("[NetworkInteractable] [%s] Received own RPC (state matches), skipping apply" % ["HOST" if is_host else "CLIENT"])
 	
 	# Only apply state if it's different (not our own RPC)
 	if not is_own_rpc:

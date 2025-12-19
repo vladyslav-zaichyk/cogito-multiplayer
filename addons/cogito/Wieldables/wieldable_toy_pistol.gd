@@ -62,21 +62,52 @@ func action_primary(_passed_item_reference: InventoryItemPD, _is_released: bool)
 	var _camera_collision = player_interaction_component.Get_Camera_Collision()
 	var Direction = (_camera_collision - bullet_point.get_global_transform().origin).normalized()
 
-	# Spawning projectile
+	# Spawning projectile locally
 	var Projectile = get_projectile()
 	bullet_point.add_child(Projectile)
-	Projectile.set_global_position(
-		Vector3(
-			bullet_point.global_position.x,
-			bullet_point.global_position.y,
-			bullet_point.global_position.z
-		)
+	var projectile_position = Vector3(
+		bullet_point.global_position.x,
+		bullet_point.global_position.y,
+		bullet_point.global_position.z
 	)
+	Projectile.set_global_position(projectile_position)
 	Projectile.global_transform.basis = bullet_point.global_transform.basis
 	Projectile.damage_amount = _passed_item_reference.wieldable_damage
-	Projectile.set_linear_velocity(Direction * projectile_velocity)
+	var projectile_velocity_vector = Direction * projectile_velocity
+	Projectile.set_linear_velocity(projectile_velocity_vector)
 	Projectile.Direction = Direction
 	Projectile.reparent(get_tree().get_current_scene())
+	
+	# Sync projectile spawn to other clients in multiplayer
+	if NetworkManager and NetworkManager.is_multiplayer():
+		# Only sync if this is the local player's wieldable
+		# Check if player_interaction_component belongs to local player
+		var player = player_interaction_component.get_parent() if player_interaction_component else null
+		if player and PlayerManager:
+			var player_id = PlayerManager.get_player_id(player)
+			var is_local = PlayerManager.has_local_player() and PlayerManager.get_local_player_id() == player_id
+			
+			if is_local:
+				# Get projectile scene path
+				var projectile_scene_path = ""
+				if projectile_prefab and projectile_prefab.resource_path:
+					projectile_scene_path = projectile_prefab.resource_path
+				else:
+					# Fallback: try to get from Projectile's scene_file_path
+					if Projectile.scene_file_path:
+						projectile_scene_path = Projectile.scene_file_path
+				
+				if not projectile_scene_path.is_empty():
+					var projectile_data = {
+						"scene_path": projectile_scene_path,
+						"position": projectile_position,
+						"rotation": Projectile.rotation,
+						"linear_velocity": projectile_velocity_vector,
+						"damage_amount": _passed_item_reference.wieldable_damage,
+						"shooter_peer_id": NetworkManager.get_local_peer_id()
+					}
+					
+					NetworkManager.sync_projectile_spawn.rpc(projectile_data)
 
 
 func action_secondary(is_released: bool):
