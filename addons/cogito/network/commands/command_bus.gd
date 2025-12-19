@@ -5,6 +5,8 @@ extends Node
 ## Note: Cannot use class_name because this is an autoload singleton.
 ## Registered in cogito_plugin.gd as "CommandBus" autoload.
 ## Accessible directly as global variable at runtime (e.g., CommandBus.execute_command()).
+## 
+## Commands and Events use class_name for static typing, so we can call them directly.
 
 ## Enable/disable logging
 var enable_logging: bool = false
@@ -237,10 +239,15 @@ func _deserialize_command(data: Dictionary) -> Command:
 	var command_type = data.get("command_type", "")
 	
 	# Map command types to their classes (using class_name for static typing)
+	# Commands have class_name, so we can call them directly
 	# This will be expanded as we add more commands
 	match command_type:
 		"pickup_item_command":
 			return PickupItemCommand.deserialize(data)
+		"drop_item_command":
+			return DropItemCommand.deserialize(data)
+		"use_item_command":
+			return UseItemCommand.deserialize(data)
 		_:
 			push_error("CommandBus: Unknown command type: %s" % command_type)
 	
@@ -252,10 +259,15 @@ func _deserialize_event(data: Dictionary) -> Event:
 	var event_type = data.get("event_type", "")
 	
 	# Map event types to their classes (using class_name for static typing)
+	# Events have class_name, so we can call them directly
 	# This will be expanded as we add more events
 	match event_type:
 		"item_picked":
 			return ItemPickedEvent.deserialize(data)
+		"item_dropped":
+			return ItemDroppedEvent.deserialize(data)
+		"item_used":
+			return ItemUsedEvent.deserialize(data)
 		_:
 			push_error("CommandBus: Unknown event type: %s" % event_type)
 	

@@ -102,12 +102,29 @@ func use_slot_data(index: int):
 	if !slot_data.inventory_item.has_method("use"):
 		return
 
+	# Use Command/Event Sourcing architecture
+	# CommandBus is an autoload singleton (registered in cogito_plugin.gd)
+	# Accessible directly as global variable at runtime
+	var player_id = -1
+	if PlayerManager and owner:
+		player_id = PlayerManager.get_player_id(owner)
+	
+	if player_id != -1:
+		# Create and execute command (using class_name for static typing)
+		var command = UseItemCommand.new(player_id, index)
+		var result = CommandBus.execute_command(command)
+		
+		if not result.success:
+			# Command failed, don't use item
+			return
+	
+	# Fallback to old system if CommandBus is not available or command failed
+	# (This shouldn't happen, but keeping for safety)
 	var use_successful: bool = slot_data.inventory_item.use(owner)
 
-	# Emit inventory_item_used through NetworkEventBus (for multiplayer sync)
+	# Also emit through NetworkEventBus for backward compatibility
 	if use_successful and NetworkEventBus:
-		var player_id := -1
-		if PlayerManager and owner:
+		if player_id == -1 and PlayerManager and owner:
 			player_id = PlayerManager.get_player_id(owner)
 		if player_id != -1:
 			NetworkEventBus.inventory_item_used.emit(player_id, slot_data.inventory_item)

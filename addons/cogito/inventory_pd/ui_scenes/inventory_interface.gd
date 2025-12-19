@@ -512,10 +512,31 @@ func _drop_item(slot_data: InventorySlotPD) -> bool:
 		if node.has_method("get_item_type"):
 			node.slot_data = slot_data
 	
-	# Emit inventory_item_dropped signal through NetworkEventBus
+	# Use Command/Event Sourcing architecture
+	# CommandBus is an autoload singleton (registered in cogito_plugin.gd)
+	# Accessible directly as global variable at runtime
+	var player_id = -1
+	if PlayerManager:
+		player_id = PlayerManager.get_player_id(player)
+	
+	if player_id != -1:
+		# Get slot index from inventory
+		var slot_index = -1
+		if player.inventory_data:
+			slot_index = player.inventory_data.inventory_slots.find(slot_data)
+		
+		# Create and execute command with actual drop position
+		var command = DropItemCommand.new(player_id, slot_data, slot_index, dropped_item.global_position)
+		var result = CommandBus.execute_command(command)
+		
+		if not result.success:
+			# Command failed, but item is already spawned - this shouldn't happen
+			# but we'll log it for debugging
+			push_warning("DropItemCommand failed but item was already spawned: %s" % result.error_message)
+	
+	# Also emit through NetworkEventBus for backward compatibility
 	if NetworkEventBus and player:
-		var player_id = -1
-		if PlayerManager:
+		if player_id == -1 and PlayerManager:
 			player_id = PlayerManager.get_player_id(player)
 		if player_id != -1:
 			NetworkEventBus.inventory_item_dropped.emit(player_id, slot_data.inventory_item, dropped_item.global_position)

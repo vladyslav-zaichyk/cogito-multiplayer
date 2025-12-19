@@ -1,9 +1,6 @@
 extends InteractionComponent
 class_name PickupComponent
 
-## Preload command class for static typing
-const PickupItemCommand = preload("res://addons/cogito/network/commands/inventory/pickup_item_command.gd")
-
 @export var slot_data: InventorySlotPD
 @export var display_item_name: bool = false
 
