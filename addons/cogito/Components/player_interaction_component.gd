@@ -1,6 +1,9 @@
 extends Node3D
 class_name PlayerInteractionComponent
 
+## Preload command class for static typing
+const StopCarryingCommand = preload("res://addons/cogito/network/commands/carry/stop_carrying_command.gd")
+
 # Signals for UI/HUD use
 signal interaction_prompt(interaction_text: String)
 signal hint_prompt(hint_icon: Texture2D, hint_text: String)
@@ -105,8 +108,43 @@ func _input(event: InputEvent) -> void:
 
 	if is_carrying and !get_parent().is_movement_paused and is_instance_valid(carried_object):
 		if Input.is_action_just_pressed("action_primary"):
+			# Use Command/Event Sourcing architecture
+			var player_id = -1
+			if PlayerManager and player:
+				player_id = PlayerManager.get_player_id(player)
+			
+			if player_id != -1:
+				# Calculate throw force
+				var carried_object_mass: float = (carried_object.get_parent() as RigidBody3D).mass
+				var throw_force: float = carried_object_mass * throw_power_mass_multiplier
+				throw_force = clamp(throw_force, 0, max_throw_power)
+				
+				# Check stamina if needed
+				if stamina_attribute and throw_force >= throw_stamina_threshold:
+					if stamina_attribute.value_current < throw_stamina_drain:
+						if drop_when_cant_throw:
+							# Drop instead of throw
+							var drop_force: float = carried_object_mass * drop_power_mass_multiplier
+							drop_force = clamp(drop_force, 0, max_drop_power)
+							var command = StopCarryingCommand.new(player_id, carried_object, drop_force)
+							CommandBus.execute_command(command)
+						return
+					else:
+						player.decrease_attribute(stamina_attribute.attribute_name, throw_stamina_drain)
+				
+				# Create and execute command (using class_name for static typing)
+				var command = StopCarryingCommand.new(player_id, carried_object, throw_force)
+				var result = CommandBus.execute_command(command)
+				
+				if result.success:
+					# Command executed successfully, throw handled by command
+					return
+				else:
+					# Command failed, fallback to old system
+					push_warning("StopCarryingCommand (throw) failed: %s" % result.error_message)
+			
+			# Fallback to old system if player_id not found or command failed
 			_attempt_throw()
-			#carried_object.throw(throw_power)
 
 	# Wieldable primary Action Input
 	if is_wielding and !get_parent().is_movement_paused:
@@ -130,8 +168,30 @@ func _handle_interaction(action: String) -> void:
 	if is_carrying:
 		if is_instance_valid(carried_object):
 			if carried_object.input_map_action == action:
+				# Use Command/Event Sourcing architecture
+				var player_id = -1
+				if PlayerManager and player:
+					player_id = PlayerManager.get_player_id(player)
+				
+				if player_id != -1:
+					# Calculate drop force
+					var carried_object_mass: float = (carried_object.get_parent() as RigidBody3D).mass
+					var drop_force: float = carried_object_mass * drop_power_mass_multiplier
+					drop_force = clamp(drop_force, 0, max_drop_power)
+					
+					# Create and execute command (using class_name for static typing)
+					var command = StopCarryingCommand.new(player_id, carried_object, drop_force)
+					var result = CommandBus.execute_command(command)
+					
+					if result.success:
+						# Command executed successfully, drop handled by command
+						return
+					else:
+						# Command failed, fallback to old system
+						push_warning("StopCarryingCommand failed: %s" % result.error_message)
+				
+				# Fallback to old system if player_id not found or command failed
 				_drop_carried_object()
-				#carried_object.throw(1)
 				return
 			else:
 				# Allow 'take' input actions for the carried object
