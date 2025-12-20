@@ -284,6 +284,76 @@ func unlock_door():
 	lock_state_changed.emit(is_locked)
 
 
+## Open door first (with animation), then unlock after animation completes
+## This restores the old behavior where unlock happens after opening animation
+func open_then_unlock(interactor: Node3D):
+	player_interaction_component = interactor
+	
+	# First, open the door (this will trigger the opening animation)
+	# Note: We temporarily set is_locked to false so open_door() can run
+	# But we'll unlock it properly after animation completes
+	var was_locked = is_locked
+	is_locked = false
+	open_door(interactor)
+	is_locked = was_locked  # Restore lock state temporarily
+	
+	# Wait for animation to complete, then unlock
+	if door_type == DoorType.ANIMATED and anim_player and opening_animation:
+		# For animated doors, wait for animation to finish
+		# Get animation duration
+		var anim_duration = 0.0
+		if anim_player.has_animation(opening_animation):
+			anim_duration = anim_player.get_animation(opening_animation).length
+		
+		if anim_duration > 0:
+			# Create a timer to wait for animation to complete
+			var unlock_timer = Timer.new()
+			add_child(unlock_timer)
+			unlock_timer.wait_time = anim_duration
+			unlock_timer.one_shot = true
+			unlock_timer.timeout.connect(func(): 
+				_on_opening_animation_finished()
+				unlock_timer.queue_free()
+			)
+			unlock_timer.start()
+		else:
+			# Animation not found or has no duration, unlock immediately
+			_on_opening_animation_finished()
+	elif door_type == DoorType.ROTATING:
+		# For rotating doors, wait until door stops moving
+		# Use a timer that checks is_moving periodically
+		var unlock_timer = Timer.new()
+		add_child(unlock_timer)
+		unlock_timer.wait_time = 0.1  # Check every 0.1 seconds
+		unlock_timer.timeout.connect(func():
+			if not is_moving:
+				_on_opening_animation_finished()
+				unlock_timer.queue_free()
+		)
+		unlock_timer.start()
+	else:
+		# For sliding doors, door_speed is the animation duration
+		# (as used in open_door: tween_property(..., door_speed))
+		var anim_duration = door_speed if door_speed > 0 else 1.0
+		
+		# Create a timer to wait for animation to complete
+		var unlock_timer = Timer.new()
+		add_child(unlock_timer)
+		unlock_timer.wait_time = anim_duration
+		unlock_timer.one_shot = true
+		unlock_timer.timeout.connect(func(): 
+			_on_opening_animation_finished()
+			unlock_timer.queue_free()
+		)
+		unlock_timer.start()
+
+
+## Called when opening animation finishes - unlock the door
+func _on_opening_animation_finished():
+	# Now unlock the door
+	unlock_door()
+
+
 func lock_door():
 	audio_stream_player_3d.stream = lock_sound
 	audio_stream_player_3d.play()

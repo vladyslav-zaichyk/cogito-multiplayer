@@ -10,6 +10,32 @@ func _ready() -> void:
 
 
 func interact(_player_interaction_component):
+	# Try to use Command/Event Sourcing architecture if available
+	var player_id = -1
+	if PlayerManager and _player_interaction_component.player:
+		player_id = PlayerManager.get_player_id(_player_interaction_component.player)
+	
+	# Check if we should use command system
+	if player_id != -1 and parent_node is CogitoDoor:
+		var door = parent_node as CogitoDoor
+		var door_action = "unlock" if door.is_locked else "lock"
+		
+		# Check if player has key or lockpick before executing command
+		var has_key = check_for_item(_player_interaction_component, door.key)
+		var has_lockpick = check_for_item(_player_interaction_component, door.lockpick)
+		
+		if has_key or has_lockpick:
+			var command = InteractWithDoorCommand.new(player_id, door, door_action, false)
+			var result = CommandBus.execute_command(command)
+			
+			if result.success:
+				was_interacted_with.emit(interaction_text, input_map_action)
+				return
+			else:
+				# Command failed, fallback to old system
+				push_warning("LockInteraction: Door lock/unlock command failed: %s, using fallback" % result.error_message)
+	
+	# Fallback to old system
 	if check_for_item(_player_interaction_component, parent_node.key):
 		if parent_node.has_method("interact2"):
 			parent_node.interact2(_player_interaction_component)

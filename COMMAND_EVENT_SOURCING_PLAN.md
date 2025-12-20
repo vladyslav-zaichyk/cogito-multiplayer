@@ -80,10 +80,10 @@ static func deserialize(data: Dictionary) -> Command:
 ```
 
 **Критерії готовності:**
-- [ ] Клас створено та зареєстровано як class_name
-- [ ] Всі базові поля визначено
-- [ ] Методи execute(), validate(), serialize(), deserialize() реалізовано
-- [ ] Документація додана
+- [x] Клас створено та зареєстровано як class_name
+- [x] Всі базові поля визначено
+- [x] Методи execute(), validate(), serialize(), deserialize() реалізовано
+- [x] Документація додана
 
 #### 0.1.2: Створити CommandResult
 ```gdscript
@@ -106,9 +106,9 @@ func _init(success_value: bool = true, error: String = ""):
 ```
 
 **Критерії готовності:**
-- [ ] Клас створено та зареєстровано як class_name
-- [ ] Всі поля визначено
-- [ ] Конструктор реалізовано
+- [x] Клас створено та зареєстровано як class_name
+- [x] Всі поля визначено (включає response_code систему)
+- [x] Конструктор реалізовано
 
 #### 0.1.3: Створити базовий клас Event
 ```gdscript
@@ -144,9 +144,9 @@ func serialize() -> Dictionary:
 ```
 
 **Критерії готовності:**
-- [ ] Клас створено та зареєстровано як class_name
-- [ ] Всі поля визначено
-- [ ] Метод serialize() реалізовано
+- [x] Клас створено та зареєстровано як class_name
+- [x] Всі поля визначено
+- [x] Метод serialize() реалізовано
 
 #### 0.1.4: Створити CommandBus (автолоад)
 ```gdscript
@@ -219,11 +219,13 @@ func _emit_event(event: Event) -> void:
 ```
 
 **Критерії готовності:**
-- [ ] Клас створено та зареєстровано як автолоад
-- [ ] Реєстрація обробників працює
-- [ ] Виконання команд працює
-- [ ] Інтеграція з NetworkManager працює
-- [ ] Логування додано
+- [x] Клас створено та зареєстровано як автолоад
+- [x] Реєстрація обробників працює
+- [x] Виконання команд працює (з оптимістичним виконанням та pre-validation)
+- [x] Інтеграція з NetworkManager працює
+- [x] Логування додано (через ResponseHandler)
+- [x] ResponseHandler створено для централізованої обробки результатів
+- [x] ResponseCode система реалізована (SUCCESS, CLIENT_ERROR, SERVER_ERROR)
 
 **Залежності:**
 - NetworkManager має RPC методи `validate_command` та `broadcast_command`
@@ -379,7 +381,10 @@ func _init(player_id_value: int, item_value: InventoryItemPD, slot_data_value: I
 
 **Оцінка часу:** 2-3 години
 
-**Загальний прогрес Фази 1:** 0/3 етапів (0%)
+**Загальний прогрес Фази 1:** ✅ 3/3 етапів (100%) - ЗАВЕРШЕНО
+- ✅ Етап 1.1: PickupItemCommand - реалізовано
+- ✅ Етап 1.2: DropItemCommand - реалізовано
+- ✅ Етап 1.3: UseItemCommand - реалізовано
 
 ---
 
@@ -415,7 +420,11 @@ func _init(player_id_value: int, item_value: InventoryItemPD, slot_data_value: I
 
 **Оцінка часу:** 2-3 години
 
-**Загальний прогрес Фази 2:** 0/4 етапів (0%)
+**Загальний прогрес Фази 2:** ✅ 4/4 етапів (100%) - ЗАВЕРШЕНО
+- ✅ Етап 2.1: EquipWieldableCommand - реалізовано
+- ✅ Етап 2.2: UnequipWieldableCommand - реалізовано
+- ✅ Етап 2.3: WieldableActionCommand - реалізовано
+- ✅ Етап 2.4: ReloadWieldableCommand - реалізовано
 
 ---
 
@@ -439,7 +448,10 @@ func _init(player_id_value: int, item_value: InventoryItemPD, slot_data_value: I
 
 **Оцінка часу:** 3-4 години
 
-**Загальний прогрес Фази 3:** 0/3 етапів (0%)
+**Загальний прогрес Фази 3:** ✅ 2/3 етапів (67%) - МАЙЖЕ ЗАВЕРШЕНО
+- ✅ Етап 3.1: StartCarryingCommand - реалізовано
+- ✅ Етап 3.2: StopCarryingCommand - реалізовано (включає drop та throw)
+- ⏸️ Етап 3.3: ThrowCarriedItemCommand - об'єднано з StopCarryingCommand
 
 ---
 
@@ -463,7 +475,11 @@ func _init(player_id_value: int, item_value: InventoryItemPD, slot_data_value: I
 
 **Оцінка часу:** 2-3 години
 
-**Загальний прогрес Фази 4:** 0/3 етапів (0%)
+**Загальний прогрес Фази 4:** ✅ 4/4 етапів (100%) - ЗАВЕРШЕНО
+- ✅ Етап 4.1: InteractWithDoorCommand - реалізовано (включає open_then_unlock для анімації, hold interaction для lock/unlock)
+- ✅ Етап 4.2: InteractWithContainerCommand - реалізовано
+- ✅ Етап 4.3: InteractWithSwitchCommand - реалізовано
+- ✅ Етап 4.4: InteractWithTurnwheelCommand - реалізовано (start/stop/complete, visual replication)
 
 ---
 
@@ -571,17 +587,83 @@ func broadcast_command(command_data: Dictionary) -> void:
 
 ## Загальний прогрес
 
-**Завершено:** 0/13 етапів (0%)  
-**Поточний етап:** Фаза 0 - Створення базової інфраструктури
+**Завершено:** ✅ 13/13 основних етапів (100%)  
+**Поточний статус:** Всі основні фази завершені, система працює в синглплеєрі та мультиплеєрі
+
+### Детальний прогрес:
+
+**Фаза 0: Базова інфраструктура** - ✅ 100%
+- ✅ Command, CommandResult, Event базові класи
+- ✅ CommandBus з оптимістичним виконанням та pre-validation
+- ✅ ResponseHandler для централізованої обробки результатів
+- ✅ ResponseCode система (SUCCESS, CLIENT_ERROR, SERVER_ERROR)
+
+**Фаза 1: Inventory Commands** - ✅ 100%
+- ✅ PickupItemCommand
+- ✅ DropItemCommand
+- ✅ UseItemCommand
+
+**Фаза 2: Wieldable Commands** - ✅ 100%
+- ✅ EquipWieldableCommand
+- ✅ UnequipWieldableCommand
+- ✅ WieldableActionCommand
+- ✅ ReloadWieldableCommand
+
+**Фаза 3: Carry Commands** - ✅ 100% (ThrowCarriedItemCommand об'єднано з StopCarryingCommand)
+- ✅ StartCarryingCommand
+- ✅ StopCarryingCommand (включає drop та throw)
+
+**Фаза 4: Interaction Commands** - ✅ 100%
+- ✅ InteractWithDoorCommand (з open_then_unlock для анімації та hold interaction)
+- ✅ InteractWithContainerCommand
+- ✅ InteractWithSwitchCommand
+- ✅ InteractWithTurnwheelCommand (з start/stop/complete та visual replication)
 
 ---
 
-## Наступні кроки
+## Наступні кроки (опціональні покращення)
 
-1. **Створити базову інфраструктуру** (Фаза 0) - 4-6 годин
-2. **Реалізувати PickupItemCommand** (Фаза 1.1) - 3-4 години
-3. **Протестувати та виправити баги** - 2-3 години
-4. **Продовжити з іншими командами** (DropItemCommand, UseItemCommand)
+### Покращення архітектури (рефакторинг):
+1. **Винести обробку turnwheel/door в окремі сервіси/стратегії** - для кращого дотримання SOLID
+2. **Реєстрація обробників подій замість жорстко закодованих `_handle_*_event()`** - для кращого Open/Closed принципу
+3. **Створити абстракцію для різних типів hold-інтеракцій** - для уникнення дублювання коду
+
+### Додаткові можливості:
+1. **Event Store для replay** - зберігання подій для майбутнього replay (якщо потрібно)
+2. **Rollback система** - повна реалізація rollback для невалідних команд (зараз тільки логування)
+3. **Command Queue** - черга команд для обробки в правильному порядку
+4. **Command History** - історія команд для debugging
+
+### Оптимізації:
+1. **Batch commands** - групування команд для зменшення мережевого трафіку
+2. **Command compression** - стиснення серіалізованих команд
+3. **Prediction/Reconciliation** - покращення оптимістичного виконання
+
+---
+
+## Додаткові реалізації (поза основним планом)
+
+### ResponseCode система
+- ✅ Реалізовано HTTP-подібну систему кодів відповідей (2xx, 4xx, 5xx)
+- ✅ ResponseHandler для централізованої обробки результатів
+- ✅ Категорії: SUCCESS, CLIENT_ERROR, SERVER_ERROR
+- ✅ Автоматичне логування на основі категорії коду
+
+### Покращення для дверей
+- ✅ `open_then_unlock()` - відновлено стару поведінку (анімація перед unlock)
+- ✅ Підтримка hold interaction для lock/unlock через DualInteraction
+- ✅ Інтеграція LockInteraction з командною системою
+
+### Покращення для turnwheel
+- ✅ `start_visual_rotation()`, `stop_visual_rotation()`, `complete_interaction()` - розділення візуальної реплікації та логіки
+- ✅ Підтримка "start", "stop", "complete" типів інтеракції
+- ✅ Visual replication на всіх клієнтах через `_physics_process`
+- ✅ Правильна обробка скасування hold
+
+### Оптимізації CommandBus
+- ✅ Pre-validation для запобігання помилок валідації після optimistic execution
+- ✅ Правильна обробка подій на remote клієнтах (без re-execution команд)
+- ✅ Десеріалізація команд та подій через `class_name` (без preload)
 
 ---
 
@@ -590,5 +672,5 @@ func broadcast_command(command_data: Dictionary) -> void:
 - Команди мають бути ідемпотентними (можна виконати кілька разів без побічних ефектів)
 - Події мають бути immutable (не змінюються після створення)
 - Валідація має бути швидкою (не блокує геймплей)
-- Rollback має бути надійним (відкочує всі зміни)
+- Rollback має бути надійним (відкочує всі зміни) - ⚠️ поки що тільки логування, повна реалізація в майбутньому
 

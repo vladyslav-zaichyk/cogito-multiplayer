@@ -291,23 +291,38 @@ func _handle_interaction(action: String) -> void:
 					
 					# Check interactable type and create appropriate command
 					if interactable is CogitoDoor:
-						# Determine action (toggle, lock, unlock)
-						var door_action = "toggle"
-						var target_state = false
-						if "is_open" in interactable:
-							target_state = not interactable.is_open
-						
-						# Check if it's a lock/unlock action (would need to check interaction text or other signals)
-						# For now, just use toggle
-						
-						var command = InteractWithDoorCommand.new(player_id, interactable, door_action, target_state)
-						var result = CommandBus.execute_command(command)
-						
-						if result.success:
-							command_executed = true
-							# Command executed successfully, interaction handled by command
-							# Still need to rebuild prompts
-							_rebuild_interaction_prompts()
+						# Check if this is a DualInteraction (hold for lock/unlock)
+						# DualInteraction should be handled by the old system (hold UI)
+						# When hold completes, on_hold_complete will trigger LockInteraction.interact()
+						# which will use the command system (see lock_interaction.gd)
+						if node is DualInteraction:
+							# Don't execute command immediately - let DualInteraction handle hold UI
+							# LockInteraction.interact() will handle the command when hold completes
+							command_executed = false  # Let old system handle DualInteraction
+						elif action == "interact2" and node.get_script() and node.get_script().resource_path.ends_with("lock_interaction.gd"):
+							# LockInteraction uses interact2 action - handle lock/unlock
+							var door_action = "unlock" if interactable.is_locked else "lock"
+							var command = InteractWithDoorCommand.new(player_id, interactable, door_action, false)
+							var result = CommandBus.execute_command(command)
+							
+							if result.success:
+								command_executed = true
+								_rebuild_interaction_prompts()
+						else:
+							# Regular interaction (BasicInteraction or HoldInteraction) - toggle door
+							var door_action = "toggle"
+							var target_state = false
+							if "is_open" in interactable:
+								target_state = not interactable.is_open
+							
+							var command = InteractWithDoorCommand.new(player_id, interactable, door_action, target_state)
+							var result = CommandBus.execute_command(command)
+							
+							if result.success:
+								command_executed = true
+								# Command executed successfully, interaction handled by command
+								# Still need to rebuild prompts
+								_rebuild_interaction_prompts()
 					
 					elif interactable is CogitoSwitch:
 						var command = InteractWithSwitchCommand.new(player_id, interactable)

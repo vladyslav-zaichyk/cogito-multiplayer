@@ -97,25 +97,19 @@ func execute() -> CommandResult:
 										inventory.remove_item_from_stack(slot_data)
 								break
 				
-				# If player has key or lockpick, unlock the door
+				# If player has key or lockpick, open door first, then unlock after animation
 				if has_key or has_lockpick:
-					# First unlock the door using interact2() (like lock_interaction does)
-					# This triggers unlock sound and updates lock state
-					if door.has_method("interact2"):
-						door.interact2(player_interaction_component)
-					
-					# After unlocking, use interact() to open the door
-					# This will trigger the opening animation properly
-					# interact() checks if door is locked, and if not, opens it
-					if not door.is_open and door.has_method("interact"):
-						door.interact(player_interaction_component)
+					# Restore old behavior: open door first (with animation), then unlock after animation completes
+					# This ensures the unlock sound/state change happens after the opening animation
+					if door.has_method("open_then_unlock"):
+						door.open_then_unlock(player_interaction_component)
 					else:
-						# Fallback: directly unlock
-						if door.has_method("unlock_door"):
-							door.unlock_door()
-						# After unlocking, open the door if it's closed
+						# Fallback: open door, then unlock immediately (no animation wait)
 						if not door.is_open and door.has_method("open_door"):
 							door.open_door(player_interaction_component)
+						# Unlock after opening (old behavior was to wait for animation, but fallback does it immediately)
+						if door.has_method("unlock_door"):
+							door.unlock_door()
 				else:
 					# No key - show hint (like door_rattle does)
 					if door.has_method("door_rattle"):
