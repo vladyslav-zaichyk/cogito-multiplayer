@@ -16,6 +16,7 @@ const EquipWieldableCommand = preload("res://addons/cogito/network/commands/wiel
 const UnequipWieldableCommand = preload("res://addons/cogito/network/commands/wieldable/unequip_wieldable_command.gd")
 const WieldableActionCommand = preload("res://addons/cogito/network/commands/wieldable/wieldable_action_command.gd")
 const ReloadWieldableCommand = preload("res://addons/cogito/network/commands/wieldable/reload_wieldable_command.gd")
+const StartCarryingCommand = preload("res://addons/cogito/network/commands/carry/start_carrying_command.gd")
 
 ## Preload event classes for static typing
 const ItemPickedEvent = preload("res://addons/cogito/network/commands/events/item_picked_event.gd")
@@ -25,6 +26,7 @@ const WieldableEquippedEvent = preload("res://addons/cogito/network/commands/eve
 const WieldableUnequippedEvent = preload("res://addons/cogito/network/commands/events/wieldable_unequipped_event.gd")
 const WieldableActionEvent = preload("res://addons/cogito/network/commands/events/wieldable_action_event.gd")
 const WieldableReloadedEvent = preload("res://addons/cogito/network/commands/events/wieldable_reloaded_event.gd")
+const CarryingStartedEvent = preload("res://addons/cogito/network/commands/events/carrying_started_event.gd")
 
 ## Enable/disable logging
 var enable_logging: bool = false
@@ -270,6 +272,8 @@ func _deserialize_command(data: Dictionary) -> Command:
 			return WieldableActionCommand.deserialize(data)
 		"reload_wieldable_command":
 			return ReloadWieldableCommand.deserialize(data)
+		"start_carrying_command":
+			return StartCarryingCommand.deserialize(data)
 		_:
 			var error_result = CommandResult.new(false, "Unknown command type: %s" % command_type)
 			error_result.response_code = CommandResult.ResponseCode.DESERIALIZATION_ERROR
@@ -301,6 +305,8 @@ func _deserialize_event(data: Dictionary) -> Event:
 			return WieldableActionEvent.deserialize(data)
 		"wieldable_reloaded":
 			return WieldableReloadedEvent.deserialize(data)
+		"carrying_started":
+			return CarryingStartedEvent.deserialize(data)
 		_:
 			var error_result = CommandResult.new(false, "Unknown event type: %s" % event_type)
 			error_result.response_code = CommandResult.ResponseCode.DESERIALIZATION_ERROR
