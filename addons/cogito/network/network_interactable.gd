@@ -225,7 +225,6 @@ func _generate_network_id() -> String:
 func _on_door_state_changed(is_open: bool) -> void:
 	# Don't sync if we're applying state from network (to avoid feedback loop)
 	if _is_applying_network_state:
-		print("[NetworkInteractable] [%s] Door state changed but skipping - applying network state" % ["HOST" if is_host else "CLIENT"])
 		return
 	
 	if not NetworkManager or not NetworkManager.is_multiplayer():
@@ -242,23 +241,12 @@ func _on_door_state_changed(is_open: bool) -> void:
 		"is_locked": current_is_locked
 	}
 	
-	print("[NetworkInteractable] [%s] Door state changed signal: is_open=%s, is_locked=%s, last_synced=%s" % [
-		"HOST" if is_host else "CLIENT",
-		is_open,
-		current_is_locked,
-		last_synced_state
-	])
-	
 	# Check if state actually changed
 	var has_changed = _has_state_changed(state)
-	print("[NetworkInteractable] [%s] State changed check: %s" % ["HOST" if is_host else "CLIENT", has_changed])
 	
 	if has_changed:
-		print("[NetworkInteractable] [%s] Door state changed: is_open=%s, sending RPC" % ["HOST" if is_host else "CLIENT", is_open])
 		_sync_state_to_clients(state)
 		_update_last_synced_state(state)
-	else:
-		print("[NetworkInteractable] [%s] Door state unchanged, skipping RPC" % ["HOST" if is_host else "CLIENT"])
 
 
 ## Called when door lock state changes
@@ -282,7 +270,6 @@ func _on_door_lock_state_changed(is_locked: bool) -> void:
 	
 	# Check if state actually changed
 	if _has_state_changed(state):
-		print("[NetworkInteractable] [%s] Door lock state changed: is_locked=%s, sending RPC" % ["HOST" if is_host else "CLIENT", is_locked])
 		_sync_state_to_clients(state)
 		_update_last_synced_state(state)
 
@@ -309,7 +296,6 @@ func _on_switch_state_changed(is_on: bool) -> void:
 	
 	# Check if state actually changed
 	if _has_state_changed(state):
-		print("[NetworkInteractable] [%s] Switch state changed: is_on=%s, sending RPC" % ["HOST" if is_host else "CLIENT", actual_is_on])
 		_sync_state_to_clients(state)
 		_update_last_synced_state(state)
 
@@ -345,7 +331,6 @@ func _on_container_toggled(_external_inventory_owner) -> void:
 	
 	# Check if state actually changed
 	if _has_state_changed(state):
-		print("[NetworkInteractable] [%s] Container toggled: is_open=%s, sending RPC" % ["HOST" if is_host else "CLIENT", is_open])
 		_sync_state_to_clients(state)
 		_update_last_synced_state(state)
 
@@ -393,7 +378,6 @@ func _on_turnwheel_interaction_started() -> void:
 		"is_turning": true
 	}
 	
-	print("[NetworkInteractable] [%s] Turnwheel interaction started, sending RPC" % ["HOST" if is_host else "CLIENT"])
 	_sync_state_to_clients(state)
 
 
@@ -416,7 +400,6 @@ func _on_turnwheel_interaction_stopped() -> void:
 		"is_turning": false
 	}
 	
-	print("[NetworkInteractable] [%s] Turnwheel interaction stopped, sending RPC" % ["HOST" if is_host else "CLIENT"])
 	_sync_state_to_clients(state)
 
 
@@ -439,7 +422,6 @@ func _on_turnwheel_state_changed(has_been_turned: bool) -> void:
 	
 	# Check if state actually changed
 	if _has_state_changed(state):
-		print("[NetworkInteractable] [%s] Turnwheel state changed: has_been_turned=%s, sending RPC" % ["HOST" if is_host else "CLIENT", has_been_turned])
 		_sync_state_to_clients(state)
 		_update_last_synced_state(state)
 
@@ -466,7 +448,6 @@ func _on_container_inventory_updated(inventory_data: CogitoInventory) -> void:
 	}
 	
 	# Always sync inventory changes (they're important)
-	print("[NetworkInteractable] [%s] Container inventory updated, sending RPC" % ["HOST" if is_host else "CLIENT"])
 	_sync_state_to_clients(state)
 	_update_last_synced_state(state)
 
@@ -571,12 +552,6 @@ func _sync_state_to_clients(state: Dictionary = {}) -> void:
 		"state": state
 	}
 	
-	print("[NetworkInteractable] [%s] Calling RPC sync_interactable_state for %s: %s" % [
-		"HOST" if is_host else "CLIENT",
-		parent_interactable.name if parent_interactable else "unknown",
-		state
-	])
-	
 	# Send RPC through NetworkManager
 	NetworkManager.sync_interactable_state.rpc(interactable_data)
 
@@ -591,12 +566,6 @@ func _receive_state_update(interactable_data: Dictionary) -> void:
 	
 	var state = interactable_data.get("state", {})
 	var type_str = interactable_data.get("type", "")
-	
-	print("[NetworkInteractable] [%s] Received RPC for %s: %s" % [
-		"HOST" if is_host else "CLIENT",
-		parent_interactable.name if parent_interactable else "unknown",
-		state
-	])
 	
 	# Check if this is our own RPC (state already matches current state)
 	# If so, we don't need to apply it, just update last_synced_state
@@ -613,7 +582,6 @@ func _receive_state_update(interactable_data: Dictionary) -> void:
 				
 				if current_is_open == received_is_open and current_is_locked == received_is_locked:
 					is_own_rpc = true
-					print("[NetworkInteractable] [%s] Received own RPC (state matches), skipping apply" % ["HOST" if is_host else "CLIENT"])
 		elif type_str == "SWITCH":
 			var switch = parent_interactable as CogitoSwitch
 			if switch:
@@ -622,7 +590,6 @@ func _receive_state_update(interactable_data: Dictionary) -> void:
 				
 				if current_is_on == received_is_on:
 					is_own_rpc = true
-					print("[NetworkInteractable] [%s] Received own RPC (state matches), skipping apply" % ["HOST" if is_host else "CLIENT"])
 		elif type_str == "CONTAINER":
 			var container = parent_interactable as CogitoContainer
 			if container:
@@ -642,7 +609,6 @@ func _receive_state_update(interactable_data: Dictionary) -> void:
 				
 				if current_is_open == received_is_open and inventory_matches:
 					is_own_rpc = true
-					print("[NetworkInteractable] [%s] Received own RPC (state matches), skipping apply" % ["HOST" if is_host else "CLIENT"])
 		elif type_str == "TURNWHEEL":
 			var turnwheel = parent_interactable as CogitoTurnwheel
 			if turnwheel:
@@ -651,7 +617,6 @@ func _receive_state_update(interactable_data: Dictionary) -> void:
 				
 				if current_has_been_turned == received_has_been_turned:
 					is_own_rpc = true
-					print("[NetworkInteractable] [%s] Received own RPC (state matches), skipping apply" % ["HOST" if is_host else "CLIENT"])
 	
 	# Only apply state if it's different (not our own RPC)
 	if not is_own_rpc:

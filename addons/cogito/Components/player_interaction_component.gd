@@ -1,7 +1,8 @@
 extends Node3D
 class_name PlayerInteractionComponent
 
-## Command class uses class_name for static typing, so we can call it directly
+## Command classes use class_name for static typing, so we can call them directly
+## (InteractWithDoorCommand, InteractWithSwitchCommand, InteractWithContainerCommand)
 
 # Signals for UI/HUD use
 signal interaction_prompt(interaction_text: String)
@@ -96,7 +97,49 @@ func exclude_player(rid: RID):
 
 
 func _process(_delta):
-	pass
+	# Check if turnwheel hold was cancelled (player released button early)
+	# If turnwheel is turning but hold UI is not holding, stop the turnwheel
+	if player and "player_hud" in player:
+		var hud = player.get_node_or_null(NodePath(player.player_hud))
+		if hud and "hold_ui" in hud:
+			var hold_ui = hud.hold_ui
+			if hold_ui:
+				var tracker = get_node_or_null("_turnwheel_hold_tracker")
+				if tracker and tracker.has_meta("active_turnwheel"):
+					var turnwheel = tracker.get_meta("active_turnwheel")
+					if turnwheel:
+						# Check if turnwheel is turning (using has() for safety)
+						var is_turning = false
+						if turnwheel.has_method("get") and "is_currently_turning" in turnwheel:
+							is_turning = turnwheel.is_currently_turning
+						elif "is_currently_turning" in turnwheel:
+							is_turning = turnwheel.is_currently_turning
+						
+						if not hold_ui.is_holding and is_turning:
+							print("[TURNWHEEL DEBUG] Hold cancelled but turnwheel still turning! Stopping...")
+							# Hold was cancelled, check if any turnwheel is still turning
+							# Turnwheel is still turning but hold was cancelled - stop it
+							# Send command to stop turning
+							var player_id = -1
+							if PlayerManager:
+								player_id = PlayerManager.get_player_id(player)
+							
+							if player_id != -1:
+								# Don't actually complete the turn, just stop the visual rotation
+								if turnwheel.has_method("stop_visual_rotation"):
+									turnwheel.stop_visual_rotation()
+								else:
+									# Fallback if method doesn't exist
+									if "audio_stream_player_3d" in turnwheel and turnwheel.audio_stream_player_3d:
+										turnwheel.audio_stream_player_3d.stop()
+									if "is_currently_turning" in turnwheel:
+										turnwheel.is_currently_turning = false
+									if turnwheel.has_signal("turnwheel_interaction_stopped"):
+										turnwheel.turnwheel_interaction_stopped.emit()
+								print("[TURNWHEEL DEBUG] Turnwheel stopped successfully")
+							
+							# Clear the tracker
+							tracker.set_meta("active_turnwheel", null)
 
 
 func _input(event: InputEvent) -> void:
@@ -237,6 +280,95 @@ func _handle_interaction(action: String) -> void:
 				if !node.ignore_open_gui and get_parent().is_showing_ui:
 					return
 				
+				# Use Command/Event Sourcing architecture for specific interactable types
+				var player_id = -1
+				if PlayerManager and player:
+					player_id = PlayerManager.get_player_id(player)
+				
+				# Try to use commands for doors, switches, and containers
+				if player_id != -1:
+					var command_executed = false
+					
+					# Check interactable type and create appropriate command
+					if interactable is CogitoDoor:
+						# Determine action (toggle, lock, unlock)
+						var door_action = "toggle"
+						var target_state = false
+						if "is_open" in interactable:
+							target_state = not interactable.is_open
+						
+						# Check if it's a lock/unlock action (would need to check interaction text or other signals)
+						# For now, just use toggle
+						
+						var command = InteractWithDoorCommand.new(player_id, interactable, door_action, target_state)
+						var result = CommandBus.execute_command(command)
+						
+						if result.success:
+							command_executed = true
+							# Command executed successfully, interaction handled by command
+							# Still need to rebuild prompts
+							_rebuild_interaction_prompts()
+					
+					elif interactable is CogitoSwitch:
+						var command = InteractWithSwitchCommand.new(player_id, interactable)
+						var result = CommandBus.execute_command(command)
+						
+						if result.success:
+							command_executed = true
+							# Command executed successfully, interaction handled by command
+							_rebuild_interaction_prompts()
+					
+					elif interactable is CogitoContainer:
+						var command = InteractWithContainerCommand.new(player_id, interactable)
+						var result = CommandBus.execute_command(command)
+						
+						if result.success:
+							command_executed = true
+							# Command executed successfully, interaction handled by command
+							# Containers might need special handling for UI
+							_rebuild_interaction_prompts()
+					
+					elif interactable is CogitoTurnwheel:
+						# Turnwheel uses DualInteraction (press-and-hold)
+						# We need to handle both start and complete of hold
+						if node is DualInteraction:
+							# Subscribe to hold signals for turnwheel
+							var dual_interaction = node as DualInteraction
+							
+							# Connect to hold complete signal to execute command
+							if not dual_interaction.on_hold_complete.is_connected(_on_turnwheel_hold_complete):
+								print("[TURNWHEEL DEBUG] Connecting on_hold_complete signal for turnwheel: %s" % interactable.get_path())
+								dual_interaction.on_hold_complete.connect(_on_turnwheel_hold_complete.bind(interactable, player_id))
+							else:
+								print("[TURNWHEEL DEBUG] on_hold_complete signal already connected for turnwheel: %s" % interactable.get_path())
+							
+							# Also connect to is_being_held to track when hold starts
+							# This will trigger visual replication on all clients
+							if not dual_interaction.is_being_held.is_connected(_on_turnwheel_hold_start):
+								dual_interaction.is_being_held.connect(_on_turnwheel_hold_start.bind(interactable, player_id))
+							
+							# Store reference to turnwheel for cleanup if hold is cancelled
+							# We'll check this in _process to detect if hold was cancelled
+							var tracker = get_node_or_null("_turnwheel_hold_tracker")
+							if not tracker:
+								tracker = Node.new()
+								tracker.name = "_turnwheel_hold_tracker"
+								add_child(tracker)
+								tracker.set_meta("active_turnwheel", null)
+							
+							if tracker:
+								tracker.set_meta("active_turnwheel", interactable)
+								print("[TURNWHEEL DEBUG] Stored turnwheel reference in tracker")
+					
+					if command_executed:
+						# Emit interaction events through Event Bus
+						if NetworkEventBus and owner_id != -1:
+							var interaction_type = node.get_script().get_path().get_file().get_basename() if node.get_script() else "unknown"
+							NetworkEventBus.interaction_started.emit(owner_id, interactable, interaction_type)
+							NetworkEventBus.interaction_completed.emit(owner_id, interactable, interaction_type)
+						break
+				
+				# Fallback to old system if player_id not found or command not applicable
 				# Emit interaction_started event through Event Bus
 				if NetworkEventBus and owner_id != -1:
 					var interaction_type = node.get_script().get_path().get_file().get_basename() if node.get_script() else "unknown"
@@ -653,6 +785,50 @@ func _attempt_throw() -> void:
 			player.decrease_attribute(stamina_attribute.attribute_name, throw_stamina_drain)
 
 	carried_object.throw(throw_force)
+
+
+## Handler for turnwheel hold start - triggers visual replication
+func _on_turnwheel_hold_start(_time_remaining: float, turnwheel: Node, player_id_value: int) -> void:
+	print("[TURNWHEEL DEBUG] _on_turnwheel_hold_start called: time_remaining=%s, player_id=%s" % [_time_remaining, player_id_value])
+	# Only send command on first call (when hold actually starts)
+	# Check if it's a turnwheel and if it's already turning
+	if not turnwheel.has_method("get") or not "is_currently_turning" in turnwheel:
+		print("[TURNWHEEL DEBUG] Turnwheel check failed: has_method=%s, has_property=%s" % [turnwheel.has_method("get"), "is_currently_turning" in turnwheel])
+		return
+	
+	if turnwheel.is_currently_turning:
+		print("[TURNWHEEL DEBUG] Turnwheel already turning, skipping")
+		return  # Already started
+	
+	print("[TURNWHEEL DEBUG] Sending start command for turnwheel")
+	# Send start command for visual replication
+	var command = InteractWithTurnwheelCommand.new(player_id_value, turnwheel, "start")
+	var result = CommandBus.execute_command(command)
+	
+	if not result.success:
+		# Command failed, but continue with normal flow
+		push_warning("Turnwheel hold start command failed: %s" % result.error_message)
+	else:
+		print("[TURNWHEEL DEBUG] Start command executed successfully")
+
+
+## Handler for turnwheel hold complete - executes turnwheel logic
+func _on_turnwheel_hold_complete(_player_interaction_component: PlayerInteractionComponent, turnwheel: Node, player_id_value: int) -> void:
+	print("[TURNWHEEL DEBUG] _on_turnwheel_hold_complete called: player_id=%s" % player_id_value)
+	# Execute command to complete turnwheel interaction
+	var command = InteractWithTurnwheelCommand.new(player_id_value, turnwheel, "complete")
+	var result = CommandBus.execute_command(command)
+	
+	if result.success:
+		print("[TURNWHEEL DEBUG] Complete command executed successfully")
+		# Command executed successfully, turnwheel handled by command
+		# The command will call turnwheel.interact() which handles state change
+		_rebuild_interaction_prompts()
+	else:
+		# Command failed, fallback to old system
+		push_warning("Turnwheel hold complete command failed: %s, using fallback" % result.error_message)
+		if turnwheel.has_method("interact"):
+			turnwheel.interact(_player_interaction_component)
 
 
 func _drop_carried_object() -> void:

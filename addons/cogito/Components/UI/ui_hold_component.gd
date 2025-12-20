@@ -47,13 +47,64 @@ func _process(_delta: float) -> void:
 			interaction_distance
 			>= player_interaction_component.interaction_raycast.target_position.length()
 		):
+			# Player moved too far - stop holding and stop turnwheel if it's a turnwheel
+			_stop_turnwheel_if_needed()
 			stop_holding()
 	elif hold_interaction:
+		# Hold was cancelled (is_holding became false)
+		_stop_turnwheel_if_needed()
 		stop_holding()
+
+
+## Stop turnwheel visual rotation if hold was cancelled
+func _stop_turnwheel_if_needed():
+	if not hold_interaction:
+		return
+	
+	# Check if this is a turnwheel
+	var is_turnwheel = false
+	var turnwheel_node = null
+	if hold_interaction.parent_node:
+		if hold_interaction.parent_node is CogitoTurnwheel:
+			is_turnwheel = true
+			turnwheel_node = hold_interaction.parent_node
+		elif hold_interaction.parent_node.get_script() and hold_interaction.parent_node.get_script().resource_path.ends_with("cogito_turnwheel.gd"):
+			is_turnwheel = true
+			turnwheel_node = hold_interaction.parent_node
+	
+	if is_turnwheel and turnwheel_node:
+		print("[HOLD UI DEBUG] Hold cancelled for turnwheel - stopping visual rotation")
+		
+		# Stop locally
+		if turnwheel_node.has_method("stop_visual_rotation"):
+			turnwheel_node.stop_visual_rotation()
+		elif "is_currently_turning" in turnwheel_node and turnwheel_node.is_currently_turning:
+			# Fallback if method doesn't exist
+			if "audio_stream_player_3d" in turnwheel_node and turnwheel_node.audio_stream_player_3d:
+				turnwheel_node.audio_stream_player_3d.stop()
+			turnwheel_node.is_currently_turning = false
+			if turnwheel_node.has_signal("turnwheel_interaction_stopped"):
+				turnwheel_node.turnwheel_interaction_stopped.emit()
+		
+		# Send command to stop on all clients
+		var player_id = -1
+		if PlayerManager and player_interaction_component and player_interaction_component.player:
+			player_id = PlayerManager.get_player_id(player_interaction_component.player)
+		
+		if player_id != -1:
+			var command = InteractWithTurnwheelCommand.new(player_id, turnwheel_node, "stop")
+			var result = CommandBus.execute_command(command)
+			if result.success:
+				print("[HOLD UI DEBUG] Turnwheel stop command executed successfully")
+			else:
+				print("[HOLD UI DEBUG] Turnwheel stop command failed: %s" % result.error_message)
 
 
 func _input(event):
 	if is_holding and event.is_action_released(hold_interaction.input_map_action):
+		# Stop turnwheel if hold was cancelled early
+		_stop_turnwheel_if_needed()
+		
 		if hold_interaction is DualInteraction:
 			hold_interaction.on_quick_press.emit(player_interaction_component)
 		if hold_interaction is ExtendedPickupInteraction:
@@ -67,15 +118,47 @@ func _input(event):
 
 
 func _on_hold_complete():
+	print("[HOLD UI DEBUG] _on_hold_complete() called: hold_interaction=%s, type=%s" % [hold_interaction, hold_interaction.get_class() if hold_interaction else "null"])
+	
+	# Special handling for turnwheel - check if parent_node is CogitoTurnwheel
+	var is_turnwheel = false
+	if hold_interaction and hold_interaction.parent_node:
+		if hold_interaction.parent_node is CogitoTurnwheel:
+			is_turnwheel = true
+		elif hold_interaction.parent_node.get_script() and hold_interaction.parent_node.get_script().resource_path.ends_with("cogito_turnwheel.gd"):
+			is_turnwheel = true
+	
 	# Important for HoldInteraction to be a base HoldInteraction, not a subclass, to work
 	if (
 		hold_interaction is not DualInteraction
 		and hold_interaction is not ExtendedPickupInteraction
 	):
-		hold_interaction.parent_node.interact(player_interaction_component)
+		# Special case: if this is a turnwheel, we need to use command system
+		if is_turnwheel:
+			print("[HOLD UI DEBUG] Turnwheel with base HoldInteraction - using command system")
+			var player_id = -1
+			if PlayerManager and player_interaction_component and player_interaction_component.player:
+				player_id = PlayerManager.get_player_id(player_interaction_component.player)
+			
+			if player_id != -1:
+				var command = InteractWithTurnwheelCommand.new(player_id, hold_interaction.parent_node, "complete")
+				var result = CommandBus.execute_command(command)
+				if result.success:
+					print("[HOLD UI DEBUG] Turnwheel complete command executed successfully")
+				else:
+					print("[HOLD UI DEBUG] Turnwheel complete command failed: %s, using fallback" % result.error_message)
+					hold_interaction.parent_node.interact(player_interaction_component)
+			else:
+				print("[HOLD UI DEBUG] Player ID not found, using fallback")
+				hold_interaction.parent_node.interact(player_interaction_component)
+		else:
+			print("[HOLD UI DEBUG] Base HoldInteraction - calling parent_node.interact()")
+			hold_interaction.parent_node.interact(player_interaction_component)
 	elif hold_interaction is DualInteraction:
+		print("[HOLD UI DEBUG] DualInteraction - emitting on_hold_complete signal for: %s" % hold_interaction.get_path())
 		hold_interaction.on_hold_complete.emit(player_interaction_component)
 	elif hold_interaction is ExtendedPickupInteraction:
+		print("[HOLD UI DEBUG] ExtendedPickupInteraction - calling use()")
 		hold_interaction.use()
 	stop_holding()
 
@@ -106,9 +189,33 @@ func start_holding(_hold_interaction: HoldInteraction) -> void:
 		hold_timer.start()
 		hold_interaction = _hold_interaction
 		player_interaction_component.player.is_movement_paused = true
+		
+		# Special handling for turnwheel - send "start" command for visual replication
+		var is_turnwheel = false
+		if hold_interaction and hold_interaction.parent_node:
+			if hold_interaction.parent_node is CogitoTurnwheel:
+				is_turnwheel = true
+			elif hold_interaction.parent_node.get_script() and hold_interaction.parent_node.get_script().resource_path.ends_with("cogito_turnwheel.gd"):
+				is_turnwheel = true
+		
+		if is_turnwheel and not (hold_interaction is DualInteraction):
+			# Turnwheel with base HoldInteraction - send start command
+			print("[HOLD UI DEBUG] Turnwheel hold started - sending start command")
+			var player_id = -1
+			if PlayerManager and player_interaction_component and player_interaction_component.player:
+				player_id = PlayerManager.get_player_id(player_interaction_component.player)
+			
+			if player_id != -1:
+				var command = InteractWithTurnwheelCommand.new(player_id, hold_interaction.parent_node, "start")
+				var result = CommandBus.execute_command(command)
+				if result.success:
+					print("[HOLD UI DEBUG] Turnwheel start command executed successfully")
+				else:
+					print("[HOLD UI DEBUG] Turnwheel start command failed: %s" % result.error_message)
 
 
 func stop_holding() -> void:
+	print("[TURNWHEEL DEBUG] stop_holding() called: is_holding=%s, hold_interaction=%s" % [is_holding, hold_interaction])
 	hold_timer.stop()
 	hide()
 	is_holding = false

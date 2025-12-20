@@ -226,6 +226,16 @@ func receive_validated_command(command_data: Dictionary) -> void:
 	for event_data in events_data:
 		var event = _deserialize_event(event_data)
 		if event:
+			# Special handling for specific events - trigger visual replication
+			# Check event type by string (since class_name might not be available at compile time)
+			# Events are RefCounted objects, access properties directly
+			var event_type = event.event_type if "event_type" in event else ""
+			print("[COMMAND BUS DEBUG] receive_validated_command: Processing event type=%s" % event_type)
+			if event_type == "turnwheel_interacted":
+				print("[COMMAND BUS DEBUG] Calling _handle_turnwheel_event")
+				_handle_turnwheel_event(event)
+			elif event_type == "door_interacted":
+				_handle_door_event(event)
 			_emit_event(event)
 	
 	# Mark as synced (not executed, since we didn't execute it)
@@ -259,6 +269,14 @@ func _deserialize_command(data: Dictionary) -> Command:
 			return StartCarryingCommand.deserialize(data)
 		"stop_carrying_command":
 			return StopCarryingCommand.deserialize(data)
+		"interact_with_door_command":
+			return InteractWithDoorCommand.deserialize(data)
+		"interact_with_switch_command":
+			return InteractWithSwitchCommand.deserialize(data)
+		"interact_with_container_command":
+			return InteractWithContainerCommand.deserialize(data)
+		"interact_with_turnwheel_command":
+			return InteractWithTurnwheelCommand.deserialize(data)
 		_:
 			var error_result = CommandResult.new(false, "Unknown command type: %s" % command_type)
 			error_result.response_code = CommandResult.ResponseCode.DESERIALIZATION_ERROR
@@ -266,6 +284,150 @@ func _deserialize_command(data: Dictionary) -> Command:
 				ResponseHandler.handle_result(error_result, null, {"context": "deserialize_command", "command_type": command_type})
 	
 	return null
+
+
+## Handle Turnwheel event for visual replication on remote clients
+func _handle_turnwheel_event(event) -> void:
+	if not event:
+		return
+	
+	# TurnwheelInteractedEvent is a RefCounted object, access properties directly
+	var turnwheel_path = event.turnwheel_path if "turnwheel_path" in event else ""
+	if turnwheel_path.is_empty():
+		return
+	
+	var interaction_type = event.interaction_type if "interaction_type" in event else ""
+	
+	var scene_tree = Engine.get_main_loop() as SceneTree
+	if not scene_tree or not scene_tree.current_scene:
+		return
+	
+	var turnwheel_node = scene_tree.current_scene.get_node_or_null(NodePath(turnwheel_path))
+	if not turnwheel_node:
+		return
+	
+	# Check if it's a turnwheel (try class_name first, then script path)
+	var is_turnwheel = false
+	if turnwheel_node is CogitoTurnwheel:
+		is_turnwheel = true
+	elif turnwheel_node.get_script() and turnwheel_node.get_script().resource_path.ends_with("cogito_turnwheel.gd"):
+		is_turnwheel = true
+	
+	if not is_turnwheel:
+		return
+	
+	print("[COMMAND BUS DEBUG] _handle_turnwheel_event: type=%s, path=%s" % [interaction_type, turnwheel_path])
+	
+	match interaction_type:
+		"start":
+			# Start visual rotation on remote clients
+			print("[COMMAND BUS DEBUG] Starting turnwheel rotation on remote client")
+			if turnwheel_node.has_method("start_visual_rotation"):
+				turnwheel_node.start_visual_rotation()
+			else:
+				# Fallback if method doesn't exist
+				if turnwheel_node.has_signal("turnwheel_interaction_started"):
+					turnwheel_node.turnwheel_interaction_started.emit()
+				if turnwheel_node.audio_stream_player_3d:
+					if not turnwheel_node.audio_stream_player_3d.playing:
+						turnwheel_node.audio_stream_player_3d.play()
+				turnwheel_node.is_currently_turning = true
+		
+		"stop":
+			# Stop visual rotation on remote clients (hold was cancelled early)
+			print("[COMMAND BUS DEBUG] Stopping turnwheel rotation on remote client (hold cancelled)")
+			if turnwheel_node.has_method("stop_visual_rotation"):
+				turnwheel_node.stop_visual_rotation()
+			else:
+				# Fallback if method doesn't exist
+				if turnwheel_node.audio_stream_player_3d:
+					turnwheel_node.audio_stream_player_3d.stop()
+				turnwheel_node.is_currently_turning = false
+				if turnwheel_node.has_signal("turnwheel_interaction_stopped"):
+					turnwheel_node.turnwheel_interaction_stopped.emit()
+		
+		"complete":
+			# Complete visual rotation on remote clients
+			# IMPORTANT: We need to sync state and trigger nodes for visual replication
+			# The event contains the correct state from the executing player
+			print("[COMMAND BUS DEBUG] Completing turnwheel on remote client - syncing state and triggering nodes")
+			
+			# Stop visual rotation
+			if turnwheel_node.has_method("stop_visual_rotation"):
+				turnwheel_node.stop_visual_rotation()
+			else:
+				# Fallback if method doesn't exist
+				if turnwheel_node.audio_stream_player_3d:
+					turnwheel_node.audio_stream_player_3d.stop()
+				turnwheel_node.is_currently_turning = false
+				if turnwheel_node.has_signal("turnwheel_interaction_stopped"):
+					turnwheel_node.turnwheel_interaction_stopped.emit()
+			
+			# Sync state from event (don't toggle, use the state from the event)
+			var event_has_been_turned = event.has_been_turned if "has_been_turned" in event else false
+			var state_changed = turnwheel_node.has_been_turned != event_has_been_turned
+			if state_changed:
+				turnwheel_node.has_been_turned = event_has_been_turned
+				print("[COMMAND BUS DEBUG] Synced has_been_turned=%s from event (was %s)" % [event_has_been_turned, not event_has_been_turned])
+				turnwheel_node.turnwheel_state_changed.emit(event_has_been_turned)
+			
+			# Trigger nodes for visual replication on remote clients
+			# This ensures that bridges, doors, etc. are visually synced
+			if state_changed and "nodes_to_trigger" in turnwheel_node:
+				print("[COMMAND BUS DEBUG] Triggering %s nodes for visual replication" % turnwheel_node.nodes_to_trigger.size())
+				for node in turnwheel_node.nodes_to_trigger:
+					if node and node.has_method("interact"):
+						print("[COMMAND BUS DEBUG] Triggering node on remote client: %s" % node.get_path())
+						node.interact(null)
+
+
+func _handle_door_event(event) -> void:
+	if not event:
+		return
+	
+	# DoorInteractedEvent is a RefCounted object, access properties directly
+	var door_path = event.door_path
+	if door_path.is_empty():
+		return
+	
+	var action = event.action
+	var is_open = event.is_open
+	var is_locked = event.is_locked
+	
+	var scene_tree = Engine.get_main_loop() as SceneTree
+	if not scene_tree or not scene_tree.current_scene:
+		return
+	
+	var door_node = scene_tree.current_scene.get_node_or_null(NodePath(door_path))
+	if not door_node:
+		return
+	
+	# Apply door state changes for visual replication on remote clients
+	# Only apply if this is not the local player's action
+	var local_player_id = PlayerManager.get_local_player_id() if PlayerManager else -1
+	if event.player_id != local_player_id:
+		match action:
+			"toggle":
+				# Toggle door state
+				if is_open and not door_node.is_open:
+					# Door should be open but isn't - open it
+					if door_node.has_method("open_door"):
+						door_node.is_open = false  # Force animation
+						door_node.open_door(null)
+				elif not is_open and door_node.is_open:
+					# Door should be closed but isn't - close it
+					if door_node.has_method("close_door"):
+						door_node.close_door(null)
+			"unlock":
+				# Unlock door
+				if not is_locked and door_node.is_locked:
+					if door_node.has_method("unlock_door"):
+						door_node.unlock_door()
+			"lock":
+				# Lock door
+				if is_locked and not door_node.is_locked:
+					if door_node.has_method("lock_door"):
+						door_node.lock_door()
 
 
 ## Deserialize event from data (factory method)
@@ -294,6 +456,14 @@ func _deserialize_event(data: Dictionary) -> Event:
 			return CarryingStartedEvent.deserialize(data)
 		"carrying_stopped":
 			return CarryingStoppedEvent.deserialize(data)
+		"door_interacted":
+			return DoorInteractedEvent.deserialize(data)
+		"switch_interacted":
+			return SwitchInteractedEvent.deserialize(data)
+		"container_interacted":
+			return ContainerInteractedEvent.deserialize(data)
+		"turnwheel_interacted":
+			return TurnwheelInteractedEvent.deserialize(data)
 		_:
 			var error_result = CommandResult.new(false, "Unknown event type: %s" % event_type)
 			error_result.response_code = CommandResult.ResponseCode.DESERIALIZATION_ERROR
