@@ -29,18 +29,26 @@ func execute() -> CommandResult:
 		player = PlayerManager.get_player(player_id)
 	
 	if not player or not player.inventory_data:
-		return CommandResult.new(false, "Player or inventory not found")
+		var error_result = CommandResult.new(false, "Player or inventory not found")
+		error_result.response_code = CommandResult.ResponseCode.PLAYER_NOT_FOUND
+		return error_result
 	
 	# Check if item is droppable
 	if not slot_data or not slot_data.inventory_item:
-		return CommandResult.new(false, "Invalid slot data")
+		var error_result = CommandResult.new(false, "Invalid slot data")
+		error_result.response_code = CommandResult.ResponseCode.ITEM_NOT_FOUND
+		return error_result
 	
 	if not slot_data.inventory_item.is_droppable:
-		return CommandResult.new(false, "Item is not droppable")
+		var error_result = CommandResult.new(false, "Item is not droppable")
+		error_result.response_code = CommandResult.ResponseCode.EXECUTION_FAILED
+		return error_result
 	
 	# Check if item is being wielded
 	if slot_data.inventory_item.has_method("update_wieldable_data") and slot_data.inventory_item.is_being_wielded:
-		return CommandResult.new(false, "Cannot drop item while wielding it")
+		var error_result = CommandResult.new(false, "Cannot drop item while wielding it")
+		error_result.response_code = CommandResult.ResponseCode.INVALID_STATE
+		return error_result
 	
 	# Note: The actual drop logic (spawning in world) is handled by inventory_interface._drop_item()
 	# This command handles event emission for network synchronization

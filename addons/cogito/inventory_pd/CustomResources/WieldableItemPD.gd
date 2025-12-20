@@ -53,6 +53,52 @@ func use(target) -> bool:
 	if player_interaction_component.carried_object != null:
 		player_interaction_component.send_hint(null, "Can't equip item while carrying.")
 		return false
+	
+	# Use Command/Event Sourcing architecture
+	# CommandBus is an autoload singleton (registered in cogito_plugin.gd)
+	# Accessible directly as global variable at runtime
+	var player_id = -1
+	if PlayerManager:
+		player_id = PlayerManager.get_player_id(target)
+	
+	# Find slot index in inventory
+	var slot_index = -1
+	if target.inventory_data:
+		for index in range(target.inventory_data.inventory_slots.size()):
+			var slot = target.inventory_data.inventory_slots[index]
+			if slot and slot.inventory_item == self:
+				slot_index = index
+				break
+	
+	if player_id != -1:
+		# Create and execute command
+		if is_being_wielded:
+			# Unequip command
+			const UnequipWieldableCommand = preload("res://addons/cogito/network/commands/wieldable/unequip_wieldable_command.gd")
+			var command = UnequipWieldableCommand.new(player_id, self)
+			var result = CommandBus.execute_command(command)
+			
+			if result.success:
+				# Command executed successfully, unequip handled by command
+				return true
+			else:
+				player_interaction_component.send_hint(null, result.error_message if result.error_message else "Failed to unequip wieldable")
+				return false
+		else:
+			# Equip command
+			const EquipWieldableCommand = preload("res://addons/cogito/network/commands/wieldable/equip_wieldable_command.gd")
+			var command = EquipWieldableCommand.new(player_id, self, slot_index)
+			var result = CommandBus.execute_command(command)
+			
+			if result.success:
+				# Command executed successfully, equip handled by command
+				return true
+			else:
+				player_interaction_component.send_hint(null, result.error_message if result.error_message else "Failed to equip wieldable")
+				return false
+	
+	# Fallback to old system if player_id not found
+	push_warning("WieldableItemPD: Player ID not found, using fallback (old system) instead of Equip/UnequipWieldableCommand")
 	if is_being_wielded:
 		CogitoGlobals.debug_log(
 			true,

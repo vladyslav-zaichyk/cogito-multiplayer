@@ -26,21 +26,29 @@ func execute() -> CommandResult:
 		player = PlayerManager.get_player(player_id)
 	
 	if not player or not player.inventory_data:
-		return CommandResult.new(false, "Player or inventory not found")
+		var error_result = CommandResult.new(false, "Player or inventory not found")
+		error_result.response_code = CommandResult.ResponseCode.PLAYER_NOT_FOUND
+		return error_result
 	
 	# Check if slot index is valid
 	if slot_index < 0 or slot_index >= player.inventory_data.inventory_slots.size():
-		return CommandResult.new(false, "Invalid slot index")
+		var error_result = CommandResult.new(false, "Invalid slot index")
+		error_result.response_code = CommandResult.ResponseCode.EXECUTION_FAILED
+		return error_result
 	
 	var slot_data = player.inventory_data.inventory_slots[slot_index]
 	if not slot_data or not slot_data.inventory_item:
-		return CommandResult.new(false, "Slot is empty")
+		var error_result = CommandResult.new(false, "Slot is empty")
+		error_result.response_code = CommandResult.ResponseCode.ITEM_NOT_FOUND
+		return error_result
 	
 	# Use the item directly (don't call use_slot_data to avoid recursion)
 	var use_successful: bool = slot_data.inventory_item.use(player.inventory_data.owner)
 	
 	if not use_successful:
-		return CommandResult.new(false, "Failed to use item")
+		var error_result = CommandResult.new(false, "Failed to use item")
+		error_result.response_code = CommandResult.ResponseCode.EXECUTION_FAILED
+		return error_result
 	
 	# Handle consumable logic
 	if slot_data.inventory_item.has_method("is_consumable") and slot_data.inventory_item.is_consumable():

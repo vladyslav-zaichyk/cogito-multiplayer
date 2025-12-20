@@ -314,27 +314,92 @@ func change_wieldable_to(next_wieldable: InventoryItemPD):
 
 
 func attempt_action_primary(is_released: bool):
+	# Use Command/Event Sourcing architecture
+	# CommandBus is an autoload singleton (registered in cogito_plugin.gd)
+	# Accessible directly as global variable at runtime
+	var player_id = -1
+	if PlayerManager and player:
+		player_id = PlayerManager.get_player_id(player)
+	
+	if player_id != -1:
+		const WieldableActionCommand = preload("res://addons/cogito/network/commands/wieldable/wieldable_action_command.gd")
+		var command = WieldableActionCommand.new(player_id, WieldableActionCommand.ActionType.PRIMARY, is_released)
+		var result = CommandBus.execute_command(command)
+		
+		if result.success:
+			# Command executed successfully, action handled by command
+			return
+		else:
+			# Command failed, don't perform action
+			push_warning("WieldableActionCommand (primary) failed: %s" % result.error_message)
+			return
+	
+	# Fallback to old system if player_id not found
+	push_warning("PlayerInteractionComponent: Player ID not found, using fallback (old system) instead of WieldableActionCommand")
 	if is_changing_wieldables:  # Block action if currently in the process of changing wieldables
 		return
 	if equipped_wieldable_node == null:
 		print("Nothing equipped, but is_wielding was true. This shouldn't happen!")
 		return
 
-	#else:
 	equipped_wieldable_node.action_primary(equipped_wieldable_item, is_released)
 
 
 func attempt_action_secondary(is_released: bool):
+	# Use Command/Event Sourcing architecture
+	# CommandBus is an autoload singleton (registered in cogito_plugin.gd)
+	# Accessible directly as global variable at runtime
+	var player_id = -1
+	if PlayerManager and player:
+		player_id = PlayerManager.get_player_id(player)
+	
+	if player_id != -1:
+		const WieldableActionCommand = preload("res://addons/cogito/network/commands/wieldable/wieldable_action_command.gd")
+		var command = WieldableActionCommand.new(player_id, WieldableActionCommand.ActionType.SECONDARY, is_released)
+		var result = CommandBus.execute_command(command)
+		
+		if result.success:
+			# Command executed successfully, action handled by command
+			return
+		else:
+			# Command failed, don't perform action
+			push_warning("WieldableActionCommand (secondary) failed: %s" % result.error_message)
+			return
+	
+	# Fallback to old system if player_id not found
+	push_warning("PlayerInteractionComponent: Player ID not found, using fallback (old system) instead of WieldableActionCommand")
 	if is_changing_wieldables:  # Block action if currently in the process of changing wieldables
 		return
 	if equipped_wieldable_node == null:
 		print("Nothing equipped, but is_wielding was true. This shouldn't happen!")
 		return
-	else:
-		equipped_wieldable_node.action_secondary(is_released)
+	
+	equipped_wieldable_node.action_secondary(is_released)
 
 
 func attempt_reload():
+	# Use Command/Event Sourcing architecture
+	# CommandBus is an autoload singleton (registered in cogito_plugin.gd)
+	# Accessible directly as global variable at runtime
+	var player_id = -1
+	if PlayerManager and player:
+		player_id = PlayerManager.get_player_id(player)
+	
+	if player_id != -1:
+		const ReloadWieldableCommand = preload("res://addons/cogito/network/commands/wieldable/reload_wieldable_command.gd")
+		var command = ReloadWieldableCommand.new(player_id)
+		var result = CommandBus.execute_command(command)
+		
+		if result.success:
+			# Command executed successfully, reload handled by command
+			return
+		else:
+			# Command failed, don't reload
+			push_warning("ReloadWieldableCommand failed: %s" % result.error_message)
+			return
+	
+	# Fallback to old system if player_id not found
+	push_warning("PlayerInteractionComponent: Player ID not found, using fallback (old system) instead of ReloadWieldableCommand")
 	var inventory: CogitoInventory = get_parent().inventory_data
 	# Some safety checks if reload should even be triggered.
 	if inventory == null:

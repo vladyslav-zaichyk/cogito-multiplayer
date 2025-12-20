@@ -24,15 +24,17 @@ func _init(player_id_value: int, slot_data_value: InventorySlotPD, position: Vec
 
 ## Execute the command
 func execute() -> CommandResult:
-	var result = CommandResult.new()
-	
 	# Get player's inventory
 	var player = null
 	if PlayerManager:
 		player = PlayerManager.get_player(player_id)
 	
 	if not player or not player.inventory_data:
-		return CommandResult.new(false, "Player or inventory not found")
+		var error_result = CommandResult.new(false, "Player or inventory not found")
+		error_result.response_code = CommandResult.ResponseCode.PLAYER_NOT_FOUND
+		return error_result
+	
+	var result = CommandResult.new()
 	
 	# Try to pick up the item (call existing method)
 	var success = player.inventory_data.pick_up_slot_data(slot_data)
@@ -46,6 +48,7 @@ func execute() -> CommandResult:
 	else:
 		result.success = false
 		result.error_message = "Failed to pick up item (inventory full or other error)"
+		result.response_code = CommandResult.ResponseCode.INVENTORY_FULL
 	
 	return result
 
@@ -143,4 +146,3 @@ static func deserialize(data: Dictionary) -> Command:
 	command.executed = data.get("executed", false)
 	
 	return command
-

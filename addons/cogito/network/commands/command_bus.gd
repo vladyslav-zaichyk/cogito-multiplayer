@@ -8,8 +8,28 @@ extends Node
 ## 
 ## Commands and Events use class_name for static typing, so we can call them directly.
 
+## Preload command classes for static typing
+const PickupItemCommand = preload("res://addons/cogito/network/commands/inventory/pickup_item_command.gd")
+const DropItemCommand = preload("res://addons/cogito/network/commands/inventory/drop_item_command.gd")
+const UseItemCommand = preload("res://addons/cogito/network/commands/inventory/use_item_command.gd")
+const EquipWieldableCommand = preload("res://addons/cogito/network/commands/wieldable/equip_wieldable_command.gd")
+const UnequipWieldableCommand = preload("res://addons/cogito/network/commands/wieldable/unequip_wieldable_command.gd")
+const WieldableActionCommand = preload("res://addons/cogito/network/commands/wieldable/wieldable_action_command.gd")
+const ReloadWieldableCommand = preload("res://addons/cogito/network/commands/wieldable/reload_wieldable_command.gd")
+
+## Preload event classes for static typing
+const ItemPickedEvent = preload("res://addons/cogito/network/commands/events/item_picked_event.gd")
+const ItemDroppedEvent = preload("res://addons/cogito/network/commands/events/item_dropped_event.gd")
+const ItemUsedEvent = preload("res://addons/cogito/network/commands/events/item_used_event.gd")
+const WieldableEquippedEvent = preload("res://addons/cogito/network/commands/events/wieldable_equipped_event.gd")
+const WieldableUnequippedEvent = preload("res://addons/cogito/network/commands/events/wieldable_unequipped_event.gd")
+const WieldableActionEvent = preload("res://addons/cogito/network/commands/events/wieldable_action_event.gd")
+const WieldableReloadedEvent = preload("res://addons/cogito/network/commands/events/wieldable_reloaded_event.gd")
+
 ## Enable/disable logging
 var enable_logging: bool = false
+## Note: ResponseHandler is an autoload singleton (registered in cogito_plugin.gd)
+## Accessible directly as global variable at runtime (e.g., ResponseHandler.handle_result())
 
 ## Registry of command handlers (command_type -> handlers array)
 var _command_handlers: Dictionary = {}
@@ -20,7 +40,8 @@ var _pending_commands: Dictionary = {}
 
 
 func _ready() -> void:
-	# CommandBus initialized - no logging needed unless debugging
+	# CommandBus initialized - ResponseHandler is autoload singleton
+	# It will be available as global variable at runtime
 	pass
 
 
@@ -42,16 +63,32 @@ func register_event_handler(event_type: String, handler: Callable) -> void:
 	_event_handlers[event_type].append(handler)
 
 
-## Execute a command
+## Execute a command (local execution)
 ## Returns CommandResult with success status and events
-func execute_command(command: Command) -> CommandResult:
+func execute_command(command: Command, skip_validation: bool = false) -> CommandResult:
 	if not command:
-		push_error("CommandBus: Cannot execute null command")
-		return CommandResult.new(false, "Null command")
+		var error_result = CommandResult.new(false, "Null command")
+		error_result.response_code = CommandResult.ResponseCode.UNKNOWN_ERROR
+		if ResponseHandler:
+			ResponseHandler.handle_result(error_result, null, {"context": "null_command_check"})
+		return error_result
 	
 	if command.executed:
-		push_warning("CommandBus: Command %s already executed, skipping" % command.command_id)
-		return CommandResult.new(false, "Command already executed")
+		# Already executed - this is expected when syncing from network
+		var sync_result = CommandResult.new(true, "")
+		sync_result.response_code = CommandResult.ResponseCode.ALREADY_EXECUTED
+		return sync_result
+	
+	# Validate BEFORE execution (for optimistic execution, we validate first)
+	# This ensures validation checks the state before it's changed by execution
+	if NetworkManager and NetworkManager.is_multiplayer() and not skip_validation:
+		# Pre-validate command before execution
+		if not command.validate():
+			var error_result = CommandResult.new(false, "Command validation failed before execution")
+			error_result.response_code = CommandResult.ResponseCode.VALIDATION_FAILED
+			if ResponseHandler:
+				ResponseHandler.handle_result(error_result, command, {"context": "pre_validation"})
+			return error_result
 	
 	# Mark as executed
 	command.executed = true
@@ -59,9 +96,18 @@ func execute_command(command: Command) -> CommandResult:
 	# Execute command locally (optimistic execution)
 	var result = command.execute()
 	
-	# If multiplayer, send command for validation
-	if NetworkManager and NetworkManager.is_multiplayer():
-		_send_command_for_validation(command)
+	# Handle response centrally through ResponseHandler
+	if ResponseHandler:
+		ResponseHandler.handle_result(result, command, {
+			"skip_validation": skip_validation,
+			"is_multiplayer": NetworkManager and NetworkManager.is_multiplayer() if NetworkManager else false
+		})
+	
+	# If multiplayer and not skipping validation, send command for validation
+	# Include events in the serialized command so other clients can sync state
+	# Note: Validation already passed, so we just broadcast
+	if NetworkManager and NetworkManager.is_multiplayer() and not skip_validation:
+		_send_command_for_validation(command, result.events)
 	
 	# Emit events
 	for event in result.events:
@@ -71,33 +117,42 @@ func execute_command(command: Command) -> CommandResult:
 
 
 ## Send command for validation (host or client)
-func _send_command_for_validation(command: Command) -> void:
+## events: List of events that occurred during local execution
+func _send_command_for_validation(command: Command, events: Array[Event] = []) -> void:
 	if command.validation_type == Command.ValidationType.HOST_VALIDATION:
 		if NetworkManager.is_host():
 			# Host validates locally
-			_validate_and_broadcast(command)
+			_validate_and_broadcast(command, events)
 		else:
 			# Client sends to host for validation
-			NetworkManager.validate_command.rpc(command.serialize())
+			var command_data = command.serialize()
+			# Include events in serialized data
+			var events_data = []
+			for event in events:
+				events_data.append(event.serialize())
+			command_data["events"] = events_data
+			NetworkManager.validate_command.rpc(command_data)
 			# Store command as pending
 			_pending_commands[command.command_id] = command
 	else:
 		# CLIENT_VALIDATION - client validates locally
-		_validate_and_broadcast(command)
+		_validate_and_broadcast(command, events)
 
 
 ## Validate and broadcast command to all clients
-func _validate_and_broadcast(command: Command) -> void:
-	if command.validate():
-		# Broadcast command to all clients
-		NetworkManager.broadcast_command.rpc(command.serialize())
-	else:
-		push_warning("CommandBus: Command validation failed: %s (type: %s), rolling back" % [
-			command.command_id,
-			command.get_command_type()
-		])
-		# Validation failed - rollback local changes
-		_rollback_command(command)
+## events: List of events that occurred during local execution
+func _validate_and_broadcast(command: Command, events: Array[Event] = []) -> void:
+	# For optimistic execution, validation already happened BEFORE execution in execute_command()
+	# So we can skip validation here and just broadcast
+	# This prevents validation failures due to state changes from optimistic execution
+	# Broadcast command to all clients
+	var command_data = command.serialize()
+	# Include events in serialized data
+	var events_data = []
+	for event in events:
+		events_data.append(event.serialize())
+	command_data["events"] = events_data
+	NetworkManager.broadcast_command.rpc(command_data)
 
 
 ## Validate and broadcast command from network (called by NetworkManager RPC)
@@ -106,30 +161,33 @@ func _validate_and_broadcast_from_network(command_data: Dictionary, sender_peer_
 	# Deserialize command
 	var command = _deserialize_command(command_data)
 	if not command:
-		push_error("CommandBus: Failed to deserialize command from network for validation")
+		var error_result = CommandResult.new(false, "Failed to deserialize command from network for validation")
+		error_result.response_code = CommandResult.ResponseCode.DESERIALIZATION_ERROR
+		if ResponseHandler:
+			ResponseHandler.handle_result(error_result, null, {"context": "validate_from_network", "sender_peer_id": sender_peer_id})
 		return
 	
 	# Validate command
 	if command.validate():
-		# Broadcast to all clients (including sender)
-		NetworkManager.broadcast_command.rpc(command.serialize())
+		# Broadcast to all clients (including sender) with events included
+		# Events are already in command_data from the sender
+		NetworkManager.broadcast_command.rpc(command_data)
 	else:
-		push_warning("CommandBus: [HOST] Command validation failed from peer %d: %s (type: %s)" % [
-			sender_peer_id,
-			command.command_id,
-			command.get_command_type()
-		])
+		var error_result = CommandResult.new(false, "Command validation failed from peer")
+		error_result.response_code = CommandResult.ResponseCode.VALIDATION_FAILED
+		if ResponseHandler:
+			ResponseHandler.handle_result(error_result, command, {"context": "host_validation", "sender_peer_id": sender_peer_id})
 		# TODO: Send rejection to sender
 
 
 ## Rollback command (undo local changes)
 ## TODO: Implement proper rollback mechanism
 func _rollback_command(command: Command) -> void:
-	push_warning("CommandBus: Rolling back command: %s (type: %s) - rollback not yet implemented" % [
-		command.command_id,
-		command.get_command_type()
-	])
-	# For now, just warn - proper rollback will be implemented later
+	var error_result = CommandResult.new(false, "Rollback required - rollback not yet implemented")
+	error_result.response_code = CommandResult.ResponseCode.ROLLBACK_REQUIRED
+	if ResponseHandler:
+		ResponseHandler.handle_result(error_result, command, {"context": "rollback"})
+	# For now, just log - proper rollback will be implemented later
 	# This is a placeholder for future implementation
 
 
@@ -144,27 +202,50 @@ func _emit_event(event: Event) -> void:
 			if handler.is_valid():
 				handler.call(event)
 			else:
-				push_warning("CommandBus: Invalid event handler for type: %s" % event.event_type)
+				var error_result = CommandResult.new(false, "Invalid event handler")
+				error_result.response_code = CommandResult.ResponseCode.UNKNOWN_ERROR
+				if ResponseHandler:
+					ResponseHandler.handle_result(error_result, null, {"context": "event_handler", "event_type": event.event_type})
 
 
 ## Receive validated command from network (called by NetworkManager RPC)
+## This is for syncing state from other clients - no validation needed
 func receive_validated_command(command_data: Dictionary) -> void:
 	# Deserialize command
 	var command = _deserialize_command(command_data)
 	if not command:
-		push_error("CommandBus: Failed to deserialize command from network")
+		var error_result = CommandResult.new(false, "Failed to deserialize command from network")
+		error_result.response_code = CommandResult.ResponseCode.DESERIALIZATION_ERROR
+		if ResponseHandler:
+			ResponseHandler.handle_result(error_result, null, {"context": "receive_validated_command"})
 		return
 	
-	# If this is our own command, remove from pending
+	# If this is our own command, remove from pending (it was already executed locally)
 	if _pending_commands.has(command.command_id):
 		_pending_commands.erase(command.command_id)
+		# Our own command - already executed locally, just sync events
+		for event_data in command_data.get("events", []):
+			var event = _deserialize_event(event_data)
+			if event:
+				_emit_event(event)
+		return
 	
-	# Execute command (it was already executed locally, but we need to sync state)
-	# For now, we'll just emit events - actual state sync will be handled by event handlers
-	for event_data in command_data.get("events", []):
+	# This is a command from another player - DO NOT execute it again!
+	# The command was already executed on the sender's client.
+	# We only need to sync state through events, not re-execute the command.
+	# Re-executing would cause duplicate actions (e.g., picking up item twice).
+	
+	# Deserialize and emit events from the command data
+	# Events contain all the information needed to sync state
+	var events_data = command_data.get("events", [])
+	for event_data in events_data:
 		var event = _deserialize_event(event_data)
 		if event:
 			_emit_event(event)
+	
+	# Mark as synced (not executed, since we didn't execute it)
+	var sync_result = CommandResult.new(true, "")
+	sync_result.response_code = CommandResult.ResponseCode.SYNC_FROM_NETWORK
 
 
 ## Deserialize command from data (factory method)
@@ -181,8 +262,19 @@ func _deserialize_command(data: Dictionary) -> Command:
 			return DropItemCommand.deserialize(data)
 		"use_item_command":
 			return UseItemCommand.deserialize(data)
+		"equip_wieldable_command":
+			return EquipWieldableCommand.deserialize(data)
+		"unequip_wieldable_command":
+			return UnequipWieldableCommand.deserialize(data)
+		"wieldable_action_command":
+			return WieldableActionCommand.deserialize(data)
+		"reload_wieldable_command":
+			return ReloadWieldableCommand.deserialize(data)
 		_:
-			push_error("CommandBus: Unknown command type: %s" % command_type)
+			var error_result = CommandResult.new(false, "Unknown command type: %s" % command_type)
+			error_result.response_code = CommandResult.ResponseCode.DESERIALIZATION_ERROR
+			if ResponseHandler:
+				ResponseHandler.handle_result(error_result, null, {"context": "deserialize_command", "command_type": command_type})
 	
 	return null
 
@@ -201,8 +293,18 @@ func _deserialize_event(data: Dictionary) -> Event:
 			return ItemDroppedEvent.deserialize(data)
 		"item_used":
 			return ItemUsedEvent.deserialize(data)
+		"wieldable_equipped":
+			return WieldableEquippedEvent.deserialize(data)
+		"wieldable_unequipped":
+			return WieldableUnequippedEvent.deserialize(data)
+		"wieldable_action":
+			return WieldableActionEvent.deserialize(data)
+		"wieldable_reloaded":
+			return WieldableReloadedEvent.deserialize(data)
 		_:
-			push_error("CommandBus: Unknown event type: %s" % event_type)
+			var error_result = CommandResult.new(false, "Unknown event type: %s" % event_type)
+			error_result.response_code = CommandResult.ResponseCode.DESERIALIZATION_ERROR
+			if ResponseHandler:
+				ResponseHandler.handle_result(error_result, null, {"context": "deserialize_event", "event_type": event_type})
 	
 	return null
-
