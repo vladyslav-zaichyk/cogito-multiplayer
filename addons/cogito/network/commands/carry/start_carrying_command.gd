@@ -3,8 +3,7 @@ class_name StartCarryingCommand
 ## Command for starting to carry an object.
 ## This command handles the carry logic and emits CarryingStartedEvent on success.
 
-## Preload event class for static typing
-const CarryingStartedEvent = preload("res://addons/cogito/network/commands/events/carrying_started_event.gd")
+## Event class uses class_name for static typing, so we can call it directly
 
 ## Reference to the carryable component (for identification)
 ## Note: We serialize the parent object's path and network ID instead of the component itself

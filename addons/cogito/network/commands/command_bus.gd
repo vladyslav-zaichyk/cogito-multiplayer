@@ -8,27 +8,8 @@ extends Node
 ## 
 ## Commands and Events use class_name for static typing, so we can call them directly.
 
-## Preload command classes for static typing
-const PickupItemCommand = preload("res://addons/cogito/network/commands/inventory/pickup_item_command.gd")
-const DropItemCommand = preload("res://addons/cogito/network/commands/inventory/drop_item_command.gd")
-const UseItemCommand = preload("res://addons/cogito/network/commands/inventory/use_item_command.gd")
-const EquipWieldableCommand = preload("res://addons/cogito/network/commands/wieldable/equip_wieldable_command.gd")
-const UnequipWieldableCommand = preload("res://addons/cogito/network/commands/wieldable/unequip_wieldable_command.gd")
-const WieldableActionCommand = preload("res://addons/cogito/network/commands/wieldable/wieldable_action_command.gd")
-const ReloadWieldableCommand = preload("res://addons/cogito/network/commands/wieldable/reload_wieldable_command.gd")
-const StartCarryingCommand = preload("res://addons/cogito/network/commands/carry/start_carrying_command.gd")
-const StopCarryingCommand = preload("res://addons/cogito/network/commands/carry/stop_carrying_command.gd")
-
-## Preload event classes for static typing
-const ItemPickedEvent = preload("res://addons/cogito/network/commands/events/item_picked_event.gd")
-const ItemDroppedEvent = preload("res://addons/cogito/network/commands/events/item_dropped_event.gd")
-const ItemUsedEvent = preload("res://addons/cogito/network/commands/events/item_used_event.gd")
-const WieldableEquippedEvent = preload("res://addons/cogito/network/commands/events/wieldable_equipped_event.gd")
-const WieldableUnequippedEvent = preload("res://addons/cogito/network/commands/events/wieldable_unequipped_event.gd")
-const WieldableActionEvent = preload("res://addons/cogito/network/commands/events/wieldable_action_event.gd")
-const WieldableReloadedEvent = preload("res://addons/cogito/network/commands/events/wieldable_reloaded_event.gd")
-const CarryingStartedEvent = preload("res://addons/cogito/network/commands/events/carrying_started_event.gd")
-const CarryingStoppedEvent = preload("res://addons/cogito/network/commands/events/carrying_stopped_event.gd")
+## Commands and Events use class_name for static typing, so we can call them directly.
+## No need for preload - class_name provides compile-time type checking.
 
 ## Enable/disable logging
 var enable_logging: bool = false

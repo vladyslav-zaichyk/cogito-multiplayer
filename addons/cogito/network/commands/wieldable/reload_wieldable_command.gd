@@ -3,8 +3,7 @@ class_name ReloadWieldableCommand
 ## Command for reloading a wieldable item.
 ## This command handles the reload logic and emits WieldableReloadedEvent on success.
 
-## Preload event class for static typing
-const WieldableReloadedEvent = preload("res://addons/cogito/network/commands/events/wieldable_reloaded_event.gd")
+## Event class uses class_name for static typing, so we can call it directly
 
 
 func _init(player_id_value: int):

@@ -1,8 +1,7 @@
 extends Node3D
 class_name PlayerInteractionComponent
 
-## Preload command class for static typing
-const StopCarryingCommand = preload("res://addons/cogito/network/commands/carry/stop_carrying_command.gd")
+## Command class uses class_name for static typing, so we can call it directly
 
 # Signals for UI/HUD use
 signal interaction_prompt(interaction_text: String)
@@ -382,7 +381,7 @@ func attempt_action_primary(is_released: bool):
 		player_id = PlayerManager.get_player_id(player)
 	
 	if player_id != -1:
-		const WieldableActionCommand = preload("res://addons/cogito/network/commands/wieldable/wieldable_action_command.gd")
+		# Using class_name for static typing
 		var command = WieldableActionCommand.new(player_id, WieldableActionCommand.ActionType.PRIMARY, is_released)
 		var result = CommandBus.execute_command(command)
 		
@@ -414,7 +413,7 @@ func attempt_action_secondary(is_released: bool):
 		player_id = PlayerManager.get_player_id(player)
 	
 	if player_id != -1:
-		const WieldableActionCommand = preload("res://addons/cogito/network/commands/wieldable/wieldable_action_command.gd")
+		# Using class_name for static typing
 		var command = WieldableActionCommand.new(player_id, WieldableActionCommand.ActionType.SECONDARY, is_released)
 		var result = CommandBus.execute_command(command)
 		
@@ -446,7 +445,7 @@ func attempt_reload():
 		player_id = PlayerManager.get_player_id(player)
 	
 	if player_id != -1:
-		const ReloadWieldableCommand = preload("res://addons/cogito/network/commands/wieldable/reload_wieldable_command.gd")
+		# Using class_name for static typing
 		var command = ReloadWieldableCommand.new(player_id)
 		var result = CommandBus.execute_command(command)
 		

@@ -74,7 +74,7 @@ func use(target) -> bool:
 		# Create and execute command
 		if is_being_wielded:
 			# Unequip command
-			const UnequipWieldableCommand = preload("res://addons/cogito/network/commands/wieldable/unequip_wieldable_command.gd")
+			# Using class_name for static typing
 			var command = UnequipWieldableCommand.new(player_id, self)
 			var result = CommandBus.execute_command(command)
 			
@@ -86,7 +86,7 @@ func use(target) -> bool:
 				return false
 		else:
 			# Equip command
-			const EquipWieldableCommand = preload("res://addons/cogito/network/commands/wieldable/equip_wieldable_command.gd")
+			# Using class_name for static typing
 			var command = EquipWieldableCommand.new(player_id, self, slot_index)
 			var result = CommandBus.execute_command(command)
 			

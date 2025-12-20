@@ -1,8 +1,7 @@
 extends InteractionComponent
 class_name CogitoCarryableComponent
 
-## Preload command class for static typing
-const StartCarryingCommand = preload("res://addons/cogito/network/commands/carry/start_carrying_command.gd")
+## Command class uses class_name for static typing, so we can call it directly
 
 signal carry_state_changed(is_being_carried: bool)
 signal thrown(impulse)

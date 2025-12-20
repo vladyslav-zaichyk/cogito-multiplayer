@@ -3,8 +3,7 @@ class_name UseItemCommand
 ## Command for using an item from inventory.
 ## This command handles the use logic and emits ItemUsedEvent on success.
 
-## Preload event class for static typing
-const ItemUsedEvent = preload("res://addons/cogito/network/commands/events/item_used_event.gd")
+## Event class uses class_name for static typing, so we can call it directly
 
 ## Inventory slot index of the item to use
 var slot_index: int = -1

@@ -3,8 +3,7 @@ class_name StopCarryingCommand
 ## Command for stopping to carry an object.
 ## This command handles the stop carry logic and emits CarryingStoppedEvent on success.
 
-## Preload event class for static typing
-const CarryingStoppedEvent = preload("res://addons/cogito/network/commands/events/carrying_stopped_event.gd")
+## Event class uses class_name for static typing, so we can call it directly
 
 ## Reference to the carryable component (for identification)
 ## Note: We serialize the parent object's path and network ID instead of the component itself

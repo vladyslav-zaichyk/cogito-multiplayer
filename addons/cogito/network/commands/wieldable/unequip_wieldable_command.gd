@@ -3,8 +3,7 @@ class_name UnequipWieldableCommand
 ## Command for unequipping a wieldable item.
 ## This command handles the unequip logic and emits WieldableUnequippedEvent on success.
 
-## Preload event class for static typing
-const WieldableUnequippedEvent = preload("res://addons/cogito/network/commands/events/wieldable_unequipped_event.gd")
+## Event class uses class_name for static typing, so we can call it directly
 
 ## Wieldable item to unequip (can be null if unequipping current wieldable)
 var wieldable_item: WieldableItemPD

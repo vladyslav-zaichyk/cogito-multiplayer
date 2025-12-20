@@ -3,8 +3,7 @@ class_name EquipWieldableCommand
 ## Command for equipping a wieldable item.
 ## This command handles the equip logic and emits WieldableEquippedEvent on success.
 
-## Preload event class for static typing
-const WieldableEquippedEvent = preload("res://addons/cogito/network/commands/events/wieldable_equipped_event.gd")
+## Event class uses class_name for static typing, so we can call it directly
 
 ## Wieldable item to equip
 var wieldable_item: WieldableItemPD

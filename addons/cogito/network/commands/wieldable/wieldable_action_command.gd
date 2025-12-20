@@ -3,8 +3,7 @@ class_name WieldableActionCommand
 ## Command for performing a wieldable action (primary or secondary).
 ## This command handles the action logic and emits WieldableActionEvent on success.
 
-## Preload event class for static typing
-const WieldableActionEvent = preload("res://addons/cogito/network/commands/events/wieldable_action_event.gd")
+## Event class uses class_name for static typing, so we can call it directly
 
 enum ActionType { PRIMARY, SECONDARY }
 var action_type: ActionType
