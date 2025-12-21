@@ -23,11 +23,22 @@ var _event_handlers: Dictionary = {}
 ## Pending commands waiting for validation (command_id -> command)
 var _pending_commands: Dictionary = {}
 
+## Registry for command deserialization (replaces match block)
+var command_registry: CommandRegistry = CommandRegistry.new()
+## Registry for event deserialization (replaces match block)
+var event_registry: EventRegistry = EventRegistry.new()
+## Registry of event handlers for visual replication (event_type -> EventHandler)
+var _event_handlers_registry: Dictionary = {}  # event_type -> EventHandler
+
 
 func _ready() -> void:
 	# CommandBus initialized - ResponseHandler is autoload singleton
 	# It will be available as global variable at runtime
-	pass
+	# Register all commands and events for deserialization
+	_register_all_commands()
+	_register_all_events()
+	# Register all event handlers for visual replication
+	_register_all_event_handlers()
 
 
 ## Register a command handler
@@ -226,16 +237,9 @@ func receive_validated_command(command_data: Dictionary) -> void:
 	for event_data in events_data:
 		var event = _deserialize_event(event_data)
 		if event:
-			# Special handling for specific events - trigger visual replication
-			# Check event type by string (since class_name might not be available at compile time)
-			# Events are RefCounted objects, access properties directly
-			var event_type = event.event_type if "event_type" in event else ""
-			print("[COMMAND BUS DEBUG] receive_validated_command: Processing event type=%s" % event_type)
-			if event_type == "turnwheel_interacted":
-				print("[COMMAND BUS DEBUG] Calling _handle_turnwheel_event")
-				_handle_turnwheel_event(event)
-			elif event_type == "door_interacted":
-				_handle_door_event(event)
+			# Process event for visual replication using registered handlers
+			_process_event_for_replication(event)
+			# Emit event to registered event handlers
 			_emit_event(event)
 	
 	# Mark as synced (not executed, since we didn't execute it)
@@ -243,231 +247,125 @@ func receive_validated_command(command_data: Dictionary) -> void:
 	sync_result.response_code = CommandResult.ResponseCode.SYNC_FROM_NETWORK
 
 
-## Deserialize command from data (factory method)
+## Register all command types for deserialization.
+## This method registers all commands so they can be deserialized from network data.
+## New commands should be added here when created.
+func _register_all_commands() -> void:
+	# Inventory commands
+	command_registry.register_command_type("pickup_item_command", PickupItemCommand.deserialize)
+	command_registry.register_command_type("drop_item_command", DropItemCommand.deserialize)
+	command_registry.register_command_type("use_item_command", UseItemCommand.deserialize)
+	
+	# Wieldable commands
+	command_registry.register_command_type("equip_wieldable_command", EquipWieldableCommand.deserialize)
+	command_registry.register_command_type("unequip_wieldable_command", UnequipWieldableCommand.deserialize)
+	command_registry.register_command_type("wieldable_action_command", WieldableActionCommand.deserialize)
+	command_registry.register_command_type("reload_wieldable_command", ReloadWieldableCommand.deserialize)
+	
+	# Carry commands
+	command_registry.register_command_type("start_carrying_command", StartCarryingCommand.deserialize)
+	command_registry.register_command_type("stop_carrying_command", StopCarryingCommand.deserialize)
+	
+	# Interaction commands
+	command_registry.register_command_type("interact_with_door_command", InteractWithDoorCommand.deserialize)
+	command_registry.register_command_type("interact_with_switch_command", InteractWithSwitchCommand.deserialize)
+	command_registry.register_command_type("interact_with_container_command", InteractWithContainerCommand.deserialize)
+	command_registry.register_command_type("interact_with_turnwheel_command", InteractWithTurnwheelCommand.deserialize)
+
+
+## Deserialize command from data using registry.
+## This replaces the large match block with a registry-based approach,
+## enabling Open/Closed Principle - new commands can be registered without modifying this method.
 func _deserialize_command(data: Dictionary) -> Command:
-	var command_type = data.get("command_type", "")
-	
-	# Map command types to their classes (using class_name for static typing)
-	# Commands have class_name, so we can call them directly
-	# This will be expanded as we add more commands
-	match command_type:
-		"pickup_item_command":
-			return PickupItemCommand.deserialize(data)
-		"drop_item_command":
-			return DropItemCommand.deserialize(data)
-		"use_item_command":
-			return UseItemCommand.deserialize(data)
-		"equip_wieldable_command":
-			return EquipWieldableCommand.deserialize(data)
-		"unequip_wieldable_command":
-			return UnequipWieldableCommand.deserialize(data)
-		"wieldable_action_command":
-			return WieldableActionCommand.deserialize(data)
-		"reload_wieldable_command":
-			return ReloadWieldableCommand.deserialize(data)
-		"start_carrying_command":
-			return StartCarryingCommand.deserialize(data)
-		"stop_carrying_command":
-			return StopCarryingCommand.deserialize(data)
-		"interact_with_door_command":
-			return InteractWithDoorCommand.deserialize(data)
-		"interact_with_switch_command":
-			return InteractWithSwitchCommand.deserialize(data)
-		"interact_with_container_command":
-			return InteractWithContainerCommand.deserialize(data)
-		"interact_with_turnwheel_command":
-			return InteractWithTurnwheelCommand.deserialize(data)
-		_:
-			var error_result = CommandResult.new(false, "Unknown command type: %s" % command_type)
-			error_result.response_code = CommandResult.ResponseCode.DESERIALIZATION_ERROR
-			if ResponseHandler:
-				ResponseHandler.handle_result(error_result, null, {"context": "deserialize_command", "command_type": command_type})
-	
-	return null
+	var command = command_registry.deserialize(data)
+	if not command:
+		# Registry already logged the error, but we can add context here if needed
+		var command_type = data.get("command_type", "unknown")
+		var error_result = CommandResult.new(false, "Failed to deserialize command: %s" % command_type)
+		error_result.response_code = CommandResult.ResponseCode.DESERIALIZATION_ERROR
+		if ResponseHandler:
+			ResponseHandler.handle_result(error_result, null, {"context": "deserialize_command", "command_type": command_type})
+	return command
 
 
-## Handle Turnwheel event for visual replication on remote clients
-func _handle_turnwheel_event(event) -> void:
+## Register an EventHandler for visual replication.
+## This is different from register_event_handler() which registers Callable handlers.
+## 
+## handler: EventHandler instance to register
+func register_event_handler_instance(handler: EventHandler) -> void:
+	if not handler:
+		push_error("CommandBus: Cannot register null event handler")
+		return
+	
+	if handler.event_type.is_empty():
+		push_error("CommandBus: Cannot register event handler with empty event_type")
+		return
+	
+	_event_handlers_registry[handler.event_type] = handler
+
+
+## Register all event handlers for visual replication.
+## This method registers all handlers so they can process events for remote clients.
+## New handlers should be added here when created.
+func _register_all_event_handlers() -> void:
+	register_event_handler_instance(TurnwheelEventHandler.new())
+	register_event_handler_instance(DoorEventHandler.new())
+
+
+## Process event for visual replication on remote clients.
+## This method uses registered handlers to process events, enabling Open/Closed Principle.
+## 
+## event: Event to process for visual replication
+func _process_event_for_replication(event: Event) -> void:
 	if not event:
 		return
 	
-	# TurnwheelInteractedEvent is a RefCounted object, access properties directly
-	var turnwheel_path = event.turnwheel_path if "turnwheel_path" in event else ""
-	if turnwheel_path.is_empty():
-		return
-	
-	var interaction_type = event.interaction_type if "interaction_type" in event else ""
-	
-	var scene_tree = Engine.get_main_loop() as SceneTree
-	if not scene_tree or not scene_tree.current_scene:
-		return
-	
-	var turnwheel_node = scene_tree.current_scene.get_node_or_null(NodePath(turnwheel_path))
-	if not turnwheel_node:
-		return
-	
-	# Check if it's a turnwheel (try class_name first, then script path)
-	var is_turnwheel = false
-	if turnwheel_node is CogitoTurnwheel:
-		is_turnwheel = true
-	elif turnwheel_node.get_script() and turnwheel_node.get_script().resource_path.ends_with("cogito_turnwheel.gd"):
-		is_turnwheel = true
-	
-	if not is_turnwheel:
-		return
-	
-	print("[COMMAND BUS DEBUG] _handle_turnwheel_event: type=%s, path=%s" % [interaction_type, turnwheel_path])
-	
-	match interaction_type:
-		"start":
-			# Start visual rotation on remote clients
-			print("[COMMAND BUS DEBUG] Starting turnwheel rotation on remote client")
-			if turnwheel_node.has_method("start_visual_rotation"):
-				turnwheel_node.start_visual_rotation()
-			else:
-				# Fallback if method doesn't exist
-				if turnwheel_node.has_signal("turnwheel_interaction_started"):
-					turnwheel_node.turnwheel_interaction_started.emit()
-				if turnwheel_node.audio_stream_player_3d:
-					if not turnwheel_node.audio_stream_player_3d.playing:
-						turnwheel_node.audio_stream_player_3d.play()
-				turnwheel_node.is_currently_turning = true
-		
-		"stop":
-			# Stop visual rotation on remote clients (hold was cancelled early)
-			print("[COMMAND BUS DEBUG] Stopping turnwheel rotation on remote client (hold cancelled)")
-			if turnwheel_node.has_method("stop_visual_rotation"):
-				turnwheel_node.stop_visual_rotation()
-			else:
-				# Fallback if method doesn't exist
-				if turnwheel_node.audio_stream_player_3d:
-					turnwheel_node.audio_stream_player_3d.stop()
-				turnwheel_node.is_currently_turning = false
-				if turnwheel_node.has_signal("turnwheel_interaction_stopped"):
-					turnwheel_node.turnwheel_interaction_stopped.emit()
-		
-		"complete":
-			# Complete visual rotation on remote clients
-			# IMPORTANT: We need to sync state and trigger nodes for visual replication
-			# The event contains the correct state from the executing player
-			print("[COMMAND BUS DEBUG] Completing turnwheel on remote client - syncing state and triggering nodes")
-			
-			# Stop visual rotation
-			if turnwheel_node.has_method("stop_visual_rotation"):
-				turnwheel_node.stop_visual_rotation()
-			else:
-				# Fallback if method doesn't exist
-				if turnwheel_node.audio_stream_player_3d:
-					turnwheel_node.audio_stream_player_3d.stop()
-				turnwheel_node.is_currently_turning = false
-				if turnwheel_node.has_signal("turnwheel_interaction_stopped"):
-					turnwheel_node.turnwheel_interaction_stopped.emit()
-			
-			# Sync state from event (don't toggle, use the state from the event)
-			var event_has_been_turned = event.has_been_turned if "has_been_turned" in event else false
-			var state_changed = turnwheel_node.has_been_turned != event_has_been_turned
-			if state_changed:
-				turnwheel_node.has_been_turned = event_has_been_turned
-				print("[COMMAND BUS DEBUG] Synced has_been_turned=%s from event (was %s)" % [event_has_been_turned, not event_has_been_turned])
-				turnwheel_node.turnwheel_state_changed.emit(event_has_been_turned)
-			
-			# Trigger nodes for visual replication on remote clients
-			# This ensures that bridges, doors, etc. are visually synced
-			if state_changed and "nodes_to_trigger" in turnwheel_node:
-				print("[COMMAND BUS DEBUG] Triggering %s nodes for visual replication" % turnwheel_node.nodes_to_trigger.size())
-				for node in turnwheel_node.nodes_to_trigger:
-					if node and node.has_method("interact"):
-						print("[COMMAND BUS DEBUG] Triggering node on remote client: %s" % node.get_path())
-						node.interact(null)
+	var handler = _event_handlers_registry.get(event.event_type)
+	if handler:
+		handler.handle(event)
+	else:
+		# No handler registered for this event type - this is OK for events that don't need visual replication
+		# Only log if it's an event type that we expect to have a handler
+		if event.event_type in ["turnwheel_interacted", "door_interacted"]:
+			push_warning("CommandBus: No handler registered for event type: %s" % event.event_type)
 
 
-func _handle_door_event(event) -> void:
-	if not event:
-		return
+## Register all event types for deserialization.
+## This method registers all events so they can be deserialized from network data.
+## New events should be added here when created.
+func _register_all_events() -> void:
+	# Inventory events
+	event_registry.register_event_type("item_picked", ItemPickedEvent.deserialize)
+	event_registry.register_event_type("item_dropped", ItemDroppedEvent.deserialize)
+	event_registry.register_event_type("item_used", ItemUsedEvent.deserialize)
 	
-	# DoorInteractedEvent is a RefCounted object, access properties directly
-	var door_path = event.door_path
-	if door_path.is_empty():
-		return
+	# Wieldable events
+	event_registry.register_event_type("wieldable_equipped", WieldableEquippedEvent.deserialize)
+	event_registry.register_event_type("wieldable_unequipped", WieldableUnequippedEvent.deserialize)
+	event_registry.register_event_type("wieldable_action", WieldableActionEvent.deserialize)
+	event_registry.register_event_type("wieldable_reloaded", WieldableReloadedEvent.deserialize)
 	
-	var action = event.action
-	var is_open = event.is_open
-	var is_locked = event.is_locked
+	# Carry events
+	event_registry.register_event_type("carrying_started", CarryingStartedEvent.deserialize)
+	event_registry.register_event_type("carrying_stopped", CarryingStoppedEvent.deserialize)
 	
-	var scene_tree = Engine.get_main_loop() as SceneTree
-	if not scene_tree or not scene_tree.current_scene:
-		return
-	
-	var door_node = scene_tree.current_scene.get_node_or_null(NodePath(door_path))
-	if not door_node:
-		return
-	
-	# Apply door state changes for visual replication on remote clients
-	# Only apply if this is not the local player's action
-	var local_player_id = PlayerManager.get_local_player_id() if PlayerManager else -1
-	if event.player_id != local_player_id:
-		match action:
-			"toggle":
-				# Toggle door state
-				if is_open and not door_node.is_open:
-					# Door should be open but isn't - open it
-					if door_node.has_method("open_door"):
-						door_node.is_open = false  # Force animation
-						door_node.open_door(null)
-				elif not is_open and door_node.is_open:
-					# Door should be closed but isn't - close it
-					if door_node.has_method("close_door"):
-						door_node.close_door(null)
-			"unlock":
-				# Unlock door
-				if not is_locked and door_node.is_locked:
-					if door_node.has_method("unlock_door"):
-						door_node.unlock_door()
-			"lock":
-				# Lock door
-				if is_locked and not door_node.is_locked:
-					if door_node.has_method("lock_door"):
-						door_node.lock_door()
+	# Interaction events
+	event_registry.register_event_type("door_interacted", DoorInteractedEvent.deserialize)
+	event_registry.register_event_type("switch_interacted", SwitchInteractedEvent.deserialize)
+	event_registry.register_event_type("container_interacted", ContainerInteractedEvent.deserialize)
+	event_registry.register_event_type("turnwheel_interacted", TurnwheelInteractedEvent.deserialize)
 
 
-## Deserialize event from data (factory method)
+## Deserialize event from data using registry.
+## This replaces the large match block with a registry-based approach,
+## enabling Open/Closed Principle - new events can be registered without modifying this method.
 func _deserialize_event(data: Dictionary) -> Event:
-	var event_type = data.get("event_type", "")
-	
-	# Map event types to their classes (using class_name for static typing)
-	# Events have class_name, so we can call them directly
-	# This will be expanded as we add more events
-	match event_type:
-		"item_picked":
-			return ItemPickedEvent.deserialize(data)
-		"item_dropped":
-			return ItemDroppedEvent.deserialize(data)
-		"item_used":
-			return ItemUsedEvent.deserialize(data)
-		"wieldable_equipped":
-			return WieldableEquippedEvent.deserialize(data)
-		"wieldable_unequipped":
-			return WieldableUnequippedEvent.deserialize(data)
-		"wieldable_action":
-			return WieldableActionEvent.deserialize(data)
-		"wieldable_reloaded":
-			return WieldableReloadedEvent.deserialize(data)
-		"carrying_started":
-			return CarryingStartedEvent.deserialize(data)
-		"carrying_stopped":
-			return CarryingStoppedEvent.deserialize(data)
-		"door_interacted":
-			return DoorInteractedEvent.deserialize(data)
-		"switch_interacted":
-			return SwitchInteractedEvent.deserialize(data)
-		"container_interacted":
-			return ContainerInteractedEvent.deserialize(data)
-		"turnwheel_interacted":
-			return TurnwheelInteractedEvent.deserialize(data)
-		_:
-			var error_result = CommandResult.new(false, "Unknown event type: %s" % event_type)
-			error_result.response_code = CommandResult.ResponseCode.DESERIALIZATION_ERROR
-			if ResponseHandler:
-				ResponseHandler.handle_result(error_result, null, {"context": "deserialize_event", "event_type": event_type})
-	
-	return null
+	var event = event_registry.deserialize(data)
+	if not event:
+		# Registry already logged the error, but we can add context here if needed
+		var event_type = data.get("event_type", "unknown")
+		var error_result = CommandResult.new(false, "Failed to deserialize event: %s" % event_type)
+		error_result.response_code = CommandResult.ResponseCode.DESERIALIZATION_ERROR
+		if ResponseHandler:
+			ResponseHandler.handle_result(error_result, null, {"context": "deserialize_event", "event_type": event_type})
+	return event
