@@ -11,38 +11,32 @@ var enable_logging: bool = false
 var log_to_file: bool = false
 var log_file_path: String = "user://command_responses.log"
 
-## Response code to log level mapping
-var _log_levels: Dictionary = {
-	CommandResult.ResponseCode.SUCCESS: "INFO",
-	CommandResult.ResponseCode.ALREADY_EXECUTED: "DEBUG",
-	CommandResult.ResponseCode.SYNC_FROM_NETWORK: "DEBUG",
-	CommandResult.ResponseCode.VALIDATION_FAILED: "WARNING",
-	CommandResult.ResponseCode.EXECUTION_FAILED: "ERROR",
-	CommandResult.ResponseCode.PLAYER_NOT_FOUND: "ERROR",
-	CommandResult.ResponseCode.INVENTORY_FULL: "WARNING",
-	CommandResult.ResponseCode.ITEM_NOT_FOUND: "WARNING",
-	CommandResult.ResponseCode.INVALID_STATE: "WARNING",
-	CommandResult.ResponseCode.ROLLBACK_REQUIRED: "ERROR",
-	CommandResult.ResponseCode.NETWORK_ERROR: "ERROR",
-	CommandResult.ResponseCode.DESERIALIZATION_ERROR: "ERROR",
-	CommandResult.ResponseCode.UNKNOWN_ERROR: "ERROR"
-}
+## Response code configuration structure.
+## Combines log level and message to avoid duplication.
+class ResponseCodeConfig:
+	var log_level: String
+	var message: String
+	
+	func _init(level: String, msg: String):
+		log_level = level
+		message = msg
 
-## Response code to human-readable message mapping
-var _code_messages: Dictionary = {
-	CommandResult.ResponseCode.SUCCESS: "Command executed successfully",
-	CommandResult.ResponseCode.ALREADY_EXECUTED: "Command already executed (expected in sync)",
-	CommandResult.ResponseCode.SYNC_FROM_NETWORK: "Command synced from network (expected)",
-	CommandResult.ResponseCode.VALIDATION_FAILED: "Command validation failed",
-	CommandResult.ResponseCode.EXECUTION_FAILED: "Command execution failed",
-	CommandResult.ResponseCode.PLAYER_NOT_FOUND: "Player not found",
-	CommandResult.ResponseCode.INVENTORY_FULL: "Inventory is full",
-	CommandResult.ResponseCode.ITEM_NOT_FOUND: "Item not found",
-	CommandResult.ResponseCode.INVALID_STATE: "Invalid game state",
-	CommandResult.ResponseCode.ROLLBACK_REQUIRED: "Command rollback required",
-	CommandResult.ResponseCode.NETWORK_ERROR: "Network communication error",
-	CommandResult.ResponseCode.DESERIALIZATION_ERROR: "Failed to deserialize command",
-	CommandResult.ResponseCode.UNKNOWN_ERROR: "Unknown error occurred"
+## Response code configuration mapping.
+## Combines log_level and message in one structure to avoid duplication.
+var _code_configs: Dictionary = {
+	CommandResult.ResponseCode.SUCCESS: ResponseCodeConfig.new("INFO", "Command executed successfully"),
+	CommandResult.ResponseCode.ALREADY_EXECUTED: ResponseCodeConfig.new("DEBUG", "Command already executed (expected in sync)"),
+	CommandResult.ResponseCode.SYNC_FROM_NETWORK: ResponseCodeConfig.new("DEBUG", "Command synced from network (expected)"),
+	CommandResult.ResponseCode.VALIDATION_FAILED: ResponseCodeConfig.new("WARNING", "Command validation failed"),
+	CommandResult.ResponseCode.EXECUTION_FAILED: ResponseCodeConfig.new("ERROR", "Command execution failed"),
+	CommandResult.ResponseCode.PLAYER_NOT_FOUND: ResponseCodeConfig.new("ERROR", "Player not found"),
+	CommandResult.ResponseCode.INVENTORY_FULL: ResponseCodeConfig.new("WARNING", "Inventory is full"),
+	CommandResult.ResponseCode.ITEM_NOT_FOUND: ResponseCodeConfig.new("WARNING", "Item not found"),
+	CommandResult.ResponseCode.INVALID_STATE: ResponseCodeConfig.new("WARNING", "Invalid game state"),
+	CommandResult.ResponseCode.ROLLBACK_REQUIRED: ResponseCodeConfig.new("ERROR", "Command rollback required"),
+	CommandResult.ResponseCode.NETWORK_ERROR: ResponseCodeConfig.new("ERROR", "Network communication error"),
+	CommandResult.ResponseCode.DESERIALIZATION_ERROR: ResponseCodeConfig.new("ERROR", "Failed to deserialize command"),
+	CommandResult.ResponseCode.UNKNOWN_ERROR: ResponseCodeConfig.new("ERROR", "Unknown error occurred")
 }
 
 
@@ -55,7 +49,8 @@ func handle_result(result: CommandResult, command: Command, context: Dictionary 
 		return
 	
 	var category = result.get_category() if result else CommandResult.ResponseCategory.SERVER_ERROR
-	var log_level = _log_levels.get(result.response_code, "INFO")
+	var config = _code_configs.get(result.response_code)
+	var log_level = config.log_level if config else "INFO"
 	
 	# Only log unexpected errors (not expected flows)
 	if category != CommandResult.ResponseCategory.SUCCESS:
@@ -74,7 +69,8 @@ func handle_result(result: CommandResult, command: Command, context: Dictionary 
 ## Log response
 func _log_response(result: CommandResult, command: Command, context: Dictionary, level: String) -> void:
 	var command_type = command.get_command_type() if command else "unknown"
-	var code_message = _code_messages.get(result.response_code, "Unknown code")
+	var config = _code_configs.get(result.response_code)
+	var code_message = config.message if config else "Unknown code"
 	var error_msg = result.error_message if result.error_message else code_message
 	
 	var message = "[%s] Command: %s | Code: %d (%s) | Message: %s" % [
