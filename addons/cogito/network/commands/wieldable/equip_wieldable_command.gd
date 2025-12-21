@@ -58,8 +58,12 @@ func execute() -> CommandResult:
 	var result = CommandResult.new()
 	
 	# Execute equip logic (similar to WieldableItemPD.take_out())
+	# IMPORTANT: change_wieldable_to() must be called to set equipped_wieldable_item first.
+	# The change_wieldable_to() -> equip_wieldable() chain will call update_wieldable_data()
+	# at the end (in equip_wieldable(), line 496), which emits updated_wieldable_data signal
+	# with the correct new wieldable for network sync.
+	# We don't need to call update_wieldable_data() here because equip_wieldable() does it.
 	wieldable_item.is_being_wielded = true
-	wieldable_item.update_wieldable_data(player_interaction_component)
 	player_interaction_component.change_wieldable_to(wieldable_item)
 	
 	# Create event

@@ -106,7 +106,8 @@ func _on_wieldable_updated(wieldable_item: WieldableItemPD, ammo_count: int, amm
 	if not NetworkManager or not NetworkManager.is_multiplayer():
 		return
 	
-	# Get current wieldable item
+	# Get current wieldable item from player_interaction_component
+	# This is the source of truth for what's actually equipped
 	var current_wieldable = player_interaction_component.equipped_wieldable_item if player_interaction_component else null
 	
 	# Special handling for unequip
@@ -118,7 +119,10 @@ func _on_wieldable_updated(wieldable_item: WieldableItemPD, ammo_count: int, amm
 	if is_unequipping:
 		current_wieldable = null
 	
-	# Check if wieldable actually changed (not just data update)
+	# IMPORTANT: Check if wieldable actually changed by comparing current_wieldable with _last_wieldable_item
+	# The signal parameter (wieldable_item) might be from a previous wieldable (e.g., if pistol is still firing
+	# projectiles while switching to laser rifle), so we always use current_wieldable from player_interaction_component
+	# as the source of truth.
 	# But allow unequip to always sync
 	if not is_unequipping and current_wieldable == _last_wieldable_item:
 		# Same wieldable, just data update (ammo, charge, etc.)

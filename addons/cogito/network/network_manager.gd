@@ -681,6 +681,106 @@ func sync_projectile_spawn(projectile_data: Dictionary) -> void:
 		projectile.queue_free()
 
 
+## RPC: Sync hitscan shot (called when a player shoots with hitscan weapon like Laser Rifle)
+@rpc("any_peer", "reliable")
+func sync_hitscan_shot(hitscan_data: Dictionary) -> void:
+	# This RPC is only called on remote peers (not locally)
+	# The local peer processes the hitscan directly, then calls this RPC for others
+	
+	var shooter_peer_id = hitscan_data.get("shooter_peer_id", 0)
+	var shot_origin = hitscan_data.get("shot_origin", Vector3.ZERO)
+	var target_point = hitscan_data.get("target_point", Vector3.ZERO)
+	var has_hit = hitscan_data.get("has_hit", false)
+	var hit_position = hitscan_data.get("hit_position", Vector3.ZERO)
+	var hit_normal = hitscan_data.get("hit_normal", Vector3.UP)
+	var laser_ray_prefab_path = hitscan_data.get("laser_ray_prefab_path", "")
+	var collision_scene_path = hitscan_data.get("collision_scene_path", "")
+	var decal_texture_path = hitscan_data.get("decal_texture_path", "")
+	var decal_spawn = hitscan_data.get("decal_spawn", false)
+	var damage_amount = hitscan_data.get("damage_amount", 0)
+	
+	# Get shooter player to find their wieldable container
+	var shooter_player = null
+	if PlayerManager:
+		shooter_player = PlayerManager.get_player_by_peer_id(shooter_peer_id)
+	
+	# Spawn laser ray visual effect
+	if not laser_ray_prefab_path.is_empty():
+		var laser_ray_scene = load(laser_ray_prefab_path) as PackedScene
+		if laser_ray_scene:
+			var laser_ray = laser_ray_scene.instantiate()
+			if laser_ray and laser_ray.has_method("draw_ray"):
+				# Use actual hit position if there's a hit, otherwise use target_point
+				var ray_end = hit_position if has_hit else target_point
+				laser_ray.draw_ray(shot_origin, ray_end)
+				
+				# Add to current scene
+				var current_scene = get_tree().current_scene
+				if current_scene:
+					current_scene.add_child(laser_ray)
+				else:
+					laser_ray.queue_free()
+	
+	# Spawn hit decal if there's a hit
+	if has_hit and decal_spawn and not hit_position.is_zero_approx():
+		# Try to find the collider at hit position (for decal placement)
+		# We'll use a small raycast to find the surface
+		var current_scene = get_tree().current_scene
+		if not current_scene:
+			return
+		var space_state = current_scene.get_world_3d().direct_space_state
+		var query = PhysicsRayQueryParameters3D.create(
+			hit_position + hit_normal * 0.1,  # Start slightly above hit position
+			hit_position - hit_normal * 0.2   # End slightly below
+		)
+		var result = space_state.intersect_ray(query)
+		
+		if result:
+			var decal_texture = null
+			if not decal_texture_path.is_empty():
+				decal_texture = load(decal_texture_path) as Texture2D
+			
+			# Get basis from hit normal (for decal orientation)
+			var up = Vector3.UP
+			if hit_normal.dot(up) > 0.9:
+				up = Vector3.FORWARD
+			var right = hit_normal.cross(up).normalized()
+			var forward = right.cross(hit_normal).normalized()
+			var decal_basis = Basis(right, hit_normal, forward)
+			
+			BulletDecalPool.spawn_bullet_decal(
+				hit_position,
+				hit_normal,
+				result.collider,
+				decal_basis,
+				decal_texture
+			)
+	
+	# Spawn collision scene if there's a hit
+	if has_hit and not collision_scene_path.is_empty():
+		var collision_scene = load(collision_scene_path) as PackedScene
+		if collision_scene:
+			var hit_indicator = collision_scene.instantiate()
+			var current_scene = get_tree().current_scene
+			if current_scene:
+				current_scene.add_child(hit_indicator)
+				hit_indicator.global_position = hit_position
+			else:
+				hit_indicator.queue_free()
+	
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"NetworkManager",
+		"[%s] Received hitscan shot from peer %d: origin=%s, hit=%s at %s" % [
+			"HOST" if is_host() else "CLIENT",
+			shooter_peer_id,
+			shot_origin,
+			"yes" if has_hit else "no",
+			hit_position if has_hit else target_point
+		]
+	)
+
+
 ## RPC: Sync flashlight state (called when a player toggles flashlight)
 @rpc("any_peer", "reliable")
 func sync_flashlight_state(flashlight_data: Dictionary) -> void:

@@ -109,19 +109,27 @@ func action_secondary(is_released: bool):
 
 
 func hit_scan_collision(collision_point: Vector3):
+	var shot_origin = bullet_point.get_global_transform().origin
 	var bullet_direction = (
-		(collision_point - bullet_point.get_global_transform().origin).normalized()
+		(collision_point - shot_origin).normalized()
 	)
 	var new_intersection = PhysicsRayQueryParameters3D.create(
-		bullet_point.get_global_transform().origin, collision_point + bullet_direction * 2
+		shot_origin, collision_point + bullet_direction * 2
 	)
 	new_intersection.exclude = [player_rid]
 
 	var bullet_collision = get_world_3d().direct_space_state.intersect_ray(new_intersection)
 
-	# Spawning a laser ray
+	# Prepare hitscan data for network sync
+	var has_hit = bullet_collision != null
+	var hit_position = bullet_collision.position if has_hit else Vector3.ZERO
+	var hit_normal = bullet_collision.normal if has_hit else Vector3.UP
+	
+	# Spawning a laser ray locally
 	var instantiated_ray = laser_ray_prefab.instantiate()
-	instantiated_ray.draw_ray(bullet_point.get_global_transform().origin, collision_point)
+	# Use actual hit position if there's a hit, otherwise use target collision_point
+	var ray_end = hit_position if has_hit else collision_point
+	instantiated_ray.draw_ray(shot_origin, ray_end)
 	spawn_node.add_child(instantiated_ray)
 
 	if bullet_collision:
@@ -143,6 +151,48 @@ func hit_scan_collision(collision_point: Vector3):
 				bullet_global_basis,
 				decal_texture
 			)
+	
+	# Sync hitscan shot to other clients in multiplayer
+	if NetworkManager and NetworkManager.is_multiplayer():
+		# Only sync if this is the local player's wieldable
+		var player = player_interaction_component.get_parent() if player_interaction_component else null
+		if player and PlayerManager:
+			var player_id = PlayerManager.get_player_id(player)
+			var is_local = PlayerManager.has_local_player() and PlayerManager.get_local_player_id() == player_id
+			
+			if is_local:
+				# Get resource paths
+				var laser_ray_prefab_path = ""
+				if laser_ray_prefab and laser_ray_prefab.resource_path:
+					laser_ray_prefab_path = laser_ray_prefab.resource_path
+				
+				var collision_scene_path = ""
+				if collision_scene and collision_scene.resource_path:
+					collision_scene_path = collision_scene.resource_path
+				
+				var decal_texture_path = ""
+				if decal_texture and decal_texture.resource_path:
+					decal_texture_path = decal_texture.resource_path
+				
+				var damage_amount = 0
+				if item_reference:
+					damage_amount = item_reference.wieldable_damage
+				
+				var hitscan_data = {
+					"shooter_peer_id": NetworkManager.get_local_peer_id(),
+					"shot_origin": shot_origin,
+					"target_point": collision_point,
+					"has_hit": has_hit,
+					"hit_position": hit_position,
+					"hit_normal": hit_normal,
+					"laser_ray_prefab_path": laser_ray_prefab_path,
+					"collision_scene_path": collision_scene_path,
+					"decal_texture_path": decal_texture_path,
+					"decal_spawn": decal_spawn,
+					"damage_amount": damage_amount
+				}
+				
+				NetworkManager.sync_hitscan_shot.rpc(hitscan_data)
 
 
 func hit_scan_damage(collider, bullet_direction, bullet_position):
