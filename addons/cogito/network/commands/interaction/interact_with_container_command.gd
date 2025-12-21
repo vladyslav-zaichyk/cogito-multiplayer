@@ -65,7 +65,8 @@ func execute() -> CommandResult:
 	var is_open = false
 	if "interaction_text" in container:
 		# Check if interaction text indicates container is open
-		if container.has("text_when_open") and container.interaction_text == tr(container.text_when_open):
+		# Use 'in' operator instead of .has() - .has() is for Dictionary, not Node
+		if "text_when_open" in container and container.interaction_text == tr(container.text_when_open):
 			is_open = true
 	
 	# Create event
@@ -141,4 +142,3 @@ static func deserialize(data: Dictionary) -> Command:
 		container_node.queue_free()
 	
 	return command
-

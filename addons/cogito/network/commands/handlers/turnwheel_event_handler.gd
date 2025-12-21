@@ -38,12 +38,16 @@ func _process_turnwheel_event(event: TurnwheelInteractedEvent) -> void:
 		return
 	
 	# Check if it's a turnwheel using strict typing
+	# CogitoTurnwheel has class_name, so we can use strict type checking
 	if not turnwheel_node is CogitoTurnwheel:
-		# Fallback: check script path
+		# Fallback: check script path (for backwards compatibility)
+		# This should not be needed if all turnwheels use class_name CogitoTurnwheel
 		if not (turnwheel_node.get_script() and turnwheel_node.get_script().resource_path.ends_with("cogito_turnwheel.gd")):
 			return
 	
-	var turnwheel = turnwheel_node as CogitoTurnwheel
+	# Type assertion - safe because we checked with 'is' above
+	# Using explicit type annotation for compile-time checking
+	var turnwheel: CogitoTurnwheel = turnwheel_node as CogitoTurnwheel
 	
 	print("[TURNWHEEL HANDLER] Processing event: type=%s, path=%s" % [event.interaction_type, event.turnwheel_path])
 	

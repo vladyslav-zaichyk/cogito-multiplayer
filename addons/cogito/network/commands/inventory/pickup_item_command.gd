@@ -88,9 +88,35 @@ func serialize() -> Dictionary:
 		
 		# Serialize item
 		if slot_data.inventory_item:
+			# Try to get resource_path - prefer .tres files over .gd scripts
+			var resource_path = slot_data.inventory_item.resource_path
+			
+			# If resource_path is empty or points to a script (.gd), try to find the .tres file
+			if resource_path.is_empty() or resource_path.ends_with(".gd"):
+				var item_name = slot_data.inventory_item.name
+				if not item_name.is_empty():
+					# Try common resource paths (similar to network_wieldable_sync.gd)
+					var possible_paths = [
+						"res://addons/cogito/inventory_pd/Items/Cogito_%s.tres" % item_name.replace(" ", ""),
+						"res://addons/cogito/inventory_pd/Items/Cogito_%s.tres" % item_name.replace(" ", "_"),
+						"res://addons/cogito/inventory_pd/Items/%s.tres" % item_name.replace(" ", ""),
+						"res://addons/cogito/inventory_pd/Items/%s.tres" % item_name.replace(" ", "_"),
+					]
+					
+					# Special cases
+					if item_name == "Foam Pistol":
+						possible_paths.insert(0, "res://addons/cogito/inventory_pd/Items/Cogito_Pistol.tres")
+					
+					for path in possible_paths:
+						if ResourceLoader.exists(path):
+							var test_resource = load(path) as InventoryItemPD
+							if test_resource and test_resource.name == item_name:
+								resource_path = path
+								break
+			
 			slot_data_dict["item"] = {
 				"name": slot_data.inventory_item.name,
-				"resource_path": slot_data.inventory_item.resource_path if slot_data.inventory_item.resource_path else "",
+				"resource_path": resource_path,
 				"item_type": slot_data.inventory_item.get_script().get_path().get_file().get_basename() if slot_data.inventory_item.get_script() else ""
 			}
 	
@@ -125,8 +151,48 @@ static func deserialize(data: Dictionary) -> Command:
 	var item: InventoryItemPD = null
 	if slot_data_dict.has("item"):
 		var item_data = slot_data_dict["item"]
-		if item_data.has("resource_path") and not item_data.resource_path.is_empty():
-			item = load(item_data.resource_path) as InventoryItemPD
+		
+		# Try resource_path first (skip if it's a .gd script)
+		if item_data.has("resource_path") and not item_data["resource_path"].is_empty():
+			var resource_path = item_data["resource_path"]
+			# Skip .gd scripts - they're not loadable resources
+			if not resource_path.ends_with(".gd"):
+				item = load(resource_path) as InventoryItemPD
+				if not item:
+					push_warning("PickupItemCommand: Failed to load item from resource_path: %s, trying fallback" % resource_path)
+			else:
+				push_warning("PickupItemCommand: resource_path points to script (.gd), trying fallback: %s" % resource_path)
+		
+		# Fallback: try to find by name if resource_path failed or missing
+		if not item and item_data.has("name"):
+			var item_name = item_data["name"]
+			# Try common resource paths (similar to network_wieldable_sync.gd)
+			var possible_paths = [
+				"res://addons/cogito/inventory_pd/Items/Cogito_%s.tres" % item_name.replace(" ", ""),
+				"res://addons/cogito/inventory_pd/Items/Cogito_%s.tres" % item_name.replace(" ", "_"),
+				"res://addons/cogito/inventory_pd/Items/%s.tres" % item_name.replace(" ", ""),
+				"res://addons/cogito/inventory_pd/Items/%s.tres" % item_name.replace(" ", "_"),
+			]
+			
+			# Special cases
+			if item_name == "Foam Pistol":
+				possible_paths.insert(0, "res://addons/cogito/inventory_pd/Items/Cogito_Pistol.tres")
+			
+			for path in possible_paths:
+				if ResourceLoader.exists(path):
+					var test_resource = load(path) as InventoryItemPD
+					if test_resource and test_resource.name == item_name:
+						item = test_resource
+						break
+		
+		if not item:
+			var item_name = item_data.get("name", "unknown") if item_data.has("name") else "unknown"
+			push_error("PickupItemCommand: Failed to deserialize slot_data - cannot load item '%s' (resource_path missing or invalid)" % item_name)
+			return null
+	else:
+		# Item data missing
+		push_error("PickupItemCommand: Failed to deserialize slot_data - item data missing")
+		return null
 	
 	# Create slot data
 	var slot_data: InventorySlotPD = null
@@ -135,9 +201,9 @@ static func deserialize(data: Dictionary) -> Command:
 		slot_data.inventory_item = item
 		slot_data.quantity = slot_data_dict.get("quantity", 1)
 		slot_data.origin_index = slot_data_dict.get("origin_index", -1)
-	
-	if not slot_data:
-		push_error("PickupItemCommand: Failed to deserialize slot_data")
+	else:
+		# This should not happen due to checks above, but just in case
+		push_error("PickupItemCommand: Failed to deserialize slot_data - item is null after loading")
 		return null
 	
 	var command = PickupItemCommand.new(player_id, slot_data, position, network_id, scene_path)

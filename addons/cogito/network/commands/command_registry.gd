@@ -56,8 +56,15 @@ func deserialize(data: Dictionary) -> Command:
 		return null
 	
 	var command = deserializer.call(data)
+	
+	# Check if deserialization failed (null is valid - means deserialization failed gracefully)
+	if command == null:
+		# Deserializer already logged the error, just return null
+		return null
+	
+	# Check if deserializer returned wrong type (should be Command)
 	if not command is Command:
-		push_error("CommandRegistry: Deserializer returned non-Command object for type: %s" % command_type)
+		push_error("CommandRegistry: Deserializer returned non-Command object for type: %s (got: %s)" % [command_type, command.get_class()])
 		return null
 	
 	return command as Command
@@ -78,4 +85,3 @@ func get_registered_types() -> Array[String]:
 	for type in _deserializers.keys():
 		types.append(type)
 	return types
-

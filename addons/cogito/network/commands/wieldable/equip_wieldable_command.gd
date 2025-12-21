@@ -106,9 +106,35 @@ func serialize() -> Dictionary:
 	# Serialize wieldable item data
 	var item_data = {}
 	if wieldable_item:
+		# Try to get resource_path - prefer .tres files over .gd scripts
+		var resource_path = wieldable_item.resource_path
+		
+		# If resource_path is empty or points to a script (.gd), try to find the .tres file
+		if resource_path.is_empty() or resource_path.ends_with(".gd"):
+			var item_name = wieldable_item.name
+			if not item_name.is_empty():
+				# Try common resource paths (similar to network_wieldable_sync.gd)
+				var possible_paths = [
+					"res://addons/cogito/inventory_pd/Items/Cogito_%s.tres" % item_name.replace(" ", ""),
+					"res://addons/cogito/inventory_pd/Items/Cogito_%s.tres" % item_name.replace(" ", "_"),
+					"res://addons/cogito/inventory_pd/Items/%s.tres" % item_name.replace(" ", ""),
+					"res://addons/cogito/inventory_pd/Items/%s.tres" % item_name.replace(" ", "_"),
+				]
+				
+				# Special cases
+				if item_name == "Foam Pistol":
+					possible_paths.insert(0, "res://addons/cogito/inventory_pd/Items/Cogito_Pistol.tres")
+				
+				for path in possible_paths:
+					if ResourceLoader.exists(path):
+						var test_resource = load(path) as WieldableItemPD
+						if test_resource and test_resource.name == item_name:
+							resource_path = path
+							break
+		
 		item_data = {
 			"name": wieldable_item.name,
-			"resource_path": wieldable_item.resource_path if wieldable_item.resource_path else "",
+			"resource_path": resource_path,
 			"item_type": wieldable_item.get_script().get_path().get_file().get_basename() if wieldable_item.get_script() else "",
 			"charge_current": wieldable_item.charge_current,
 			"charge_max": wieldable_item.charge_max
@@ -127,15 +153,55 @@ static func deserialize(data: Dictionary) -> Command:
 	
 	# Try to load wieldable from resource path
 	var wieldable: WieldableItemPD = null
-	if item_data.has("resource_path") and not item_data.resource_path.is_empty():
-		wieldable = load(item_data.resource_path) as WieldableItemPD
-		if wieldable:
-			# Restore charge state
-			wieldable.charge_current = item_data.get("charge_current", 0.0)
-			wieldable.charge_max = item_data.get("charge_max", 0.0)
+	
+	# Check if item_data exists
+	if item_data.is_empty():
+		push_error("EquipWieldableCommand: Failed to deserialize wieldable_item - item_data is empty")
+		return null
+	
+	# Try resource_path first (skip if it's a .gd script)
+	if item_data.has("resource_path") and not item_data["resource_path"].is_empty():
+		var resource_path = item_data["resource_path"]
+		# Skip .gd scripts - they're not loadable resources
+		if not resource_path.ends_with(".gd"):
+			wieldable = load(resource_path) as WieldableItemPD
+			if wieldable:
+				# Restore charge state
+				wieldable.charge_current = item_data.get("charge_current", 0.0)
+				wieldable.charge_max = item_data.get("charge_max", 0.0)
+			else:
+				push_warning("EquipWieldableCommand: Failed to load wieldable from resource_path: %s, trying fallback" % resource_path)
+		else:
+			push_warning("EquipWieldableCommand: resource_path points to script (.gd), trying fallback: %s" % resource_path)
+	
+	# Fallback: try to find by name if resource_path failed or missing
+	if not wieldable and item_data.has("name"):
+		var item_name = item_data["name"]
+		# Try common resource paths (similar to network_wieldable_sync.gd)
+		var possible_paths = [
+			"res://addons/cogito/inventory_pd/Items/Cogito_%s.tres" % item_name.replace(" ", ""),
+			"res://addons/cogito/inventory_pd/Items/Cogito_%s.tres" % item_name.replace(" ", "_"),
+			"res://addons/cogito/inventory_pd/Items/%s.tres" % item_name.replace(" ", ""),
+			"res://addons/cogito/inventory_pd/Items/%s.tres" % item_name.replace(" ", "_"),
+		]
+		
+		# Special cases (like in network_wieldable_sync.gd)
+		if item_name == "Foam Pistol":
+			possible_paths.insert(0, "res://addons/cogito/inventory_pd/Items/Cogito_Pistol.tres")
+		
+		for path in possible_paths:
+			if ResourceLoader.exists(path):
+				var test_resource = load(path) as WieldableItemPD
+				if test_resource and test_resource.name == item_name:
+					wieldable = test_resource
+					# Restore charge state
+					wieldable.charge_current = item_data.get("charge_current", 0.0)
+					wieldable.charge_max = item_data.get("charge_max", 0.0)
+					break
 	
 	if not wieldable:
-		push_error("EquipWieldableCommand: Failed to deserialize wieldable_item")
+		var item_name = item_data.get("name", "unknown") if item_data.has("name") else "unknown"
+		push_error("EquipWieldableCommand: Failed to deserialize wieldable_item - cannot load wieldable '%s' (resource_path missing or invalid)" % item_name)
 		return null
 	
 	var command = EquipWieldableCommand.new(player_id, wieldable, slot_index)

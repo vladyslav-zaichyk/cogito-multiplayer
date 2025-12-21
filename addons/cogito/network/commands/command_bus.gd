@@ -315,12 +315,14 @@ func _register_all_event_handlers() -> void:
 ## Process event for visual replication on remote clients.
 ## This method uses registered handlers to process events, enabling Open/Closed Principle.
 ## 
-## event: Event to process for visual replication
+## event: Event to process for visual replication (must have event_type property from base Event class)
 func _process_event_for_replication(event: Event) -> void:
 	if not event:
 		return
 	
-	var handler = _event_handlers_registry.get(event.event_type)
+	# event.event_type is a property of the base Event class, so it's always available
+	# No runtime check needed - this is compile-time safe
+	var handler = _event_handlers_registry.get(event.event_type) as EventHandler
 	if handler:
 		handler.handle(event)
 	else:

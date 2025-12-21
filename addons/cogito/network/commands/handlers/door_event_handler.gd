@@ -38,10 +38,13 @@ func _process_door_event(event: DoorInteractedEvent) -> void:
 		return
 	
 	# Check if it's a door using strict typing
+	# CogitoDoor has class_name, so we can use strict type checking
 	if not door_node is CogitoDoor:
 		return
 	
-	var door = door_node as CogitoDoor
+	# Type assertion - safe because we checked with 'is' above
+	# Using explicit type annotation for compile-time checking
+	var door: CogitoDoor = door_node as CogitoDoor
 	
 	# Apply door state changes for visual replication on remote clients
 	# Only apply if this is not the local player's action
