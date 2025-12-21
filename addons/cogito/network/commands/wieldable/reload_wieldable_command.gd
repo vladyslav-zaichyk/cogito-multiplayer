@@ -23,13 +23,15 @@ func execute() -> CommandResult:
 		error_result.response_code = CommandResult.ResponseCode.PLAYER_NOT_FOUND
 		return error_result
 	
-	var player_interaction_component = player.player_interaction_component if "player_interaction_component" in player else null
+	# Use strict typing - CogitoPlayer has player_interaction_component property
+	var player_interaction_component: PlayerInteractionComponent = player.player_interaction_component
 	if not player_interaction_component:
 		var error_result = CommandResult.new(false, "Player interaction component not found")
 		error_result.response_code = CommandResult.ResponseCode.EXECUTION_FAILED
 		return error_result
 	
-	var inventory: CogitoInventory = player.inventory_data if "inventory_data" in player else null
+	# Use strict typing - CogitoPlayer has inventory_data property
+	var inventory: CogitoInventory = player.inventory_data
 	if not inventory:
 		var error_result = CommandResult.new(false, "Player inventory not found")
 		error_result.response_code = CommandResult.ResponseCode.PLAYER_NOT_FOUND
@@ -126,11 +128,13 @@ func validate() -> bool:
 	if not player:
 		return false
 	
-	var player_interaction_component = player.player_interaction_component if "player_interaction_component" in player else null
+	# Use strict typing - CogitoPlayer has player_interaction_component property
+	var player_interaction_component: PlayerInteractionComponent = player.player_interaction_component
 	if not player_interaction_component:
 		return false
 	
-	var inventory: CogitoInventory = player.inventory_data if "inventory_data" in player else null
+	# Use strict typing - CogitoPlayer has inventory_data property
+	var inventory: CogitoInventory = player.inventory_data
 	if not inventory:
 		return false
 	

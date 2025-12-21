@@ -25,8 +25,8 @@ func _init(player_id_value: int = -1):
 
 ## Generate unique ID for command
 func _generate_id() -> String:
-	# Simple ID generator (can be replaced with more robust UUID)
-	return "%s_%d" % [str(Time.get_ticks_msec()), randi()]
+	# Use centralized ID generator for better uniqueness
+	return IDGenerator.generate_id()
 
 
 ## Execute the command (must be overridden in subclasses)

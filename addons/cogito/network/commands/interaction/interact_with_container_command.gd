@@ -25,17 +25,18 @@ func _init(player_id_value: int, container_node: Node):
 
 ## Execute the command
 func execute() -> CommandResult:
-	# Get player
-	var player = null
+	# Get player with strict typing
+	var player: CogitoPlayer = null
 	if PlayerManager:
-		player = PlayerManager.get_player(player_id)
+		player = PlayerManager.get_player(player_id) as CogitoPlayer
 	
 	if not player:
 		var error_result = CommandResult.new(false, "Player not found")
 		error_result.response_code = CommandResult.ResponseCode.PLAYER_NOT_FOUND
 		return error_result
 	
-	var player_interaction_component = player.player_interaction_component if "player_interaction_component" in player else null
+	# Use strict typing - CogitoPlayer has player_interaction_component property
+	var player_interaction_component: PlayerInteractionComponent = player.player_interaction_component
 	if not player_interaction_component:
 		var error_result = CommandResult.new(false, "Player interaction component not found")
 		error_result.response_code = CommandResult.ResponseCode.PLAYER_NOT_FOUND
@@ -62,12 +63,10 @@ func execute() -> CommandResult:
 		container.interact(player_interaction_component)
 	
 	# Get current state for event (check if inventory is open by checking interaction text)
+	# CogitoContainer has interaction_text and text_when_open properties - use strict typing
 	var is_open = false
-	if "interaction_text" in container:
-		# Check if interaction text indicates container is open
-		# Use 'in' operator instead of .has() - .has() is for Dictionary, not Node
-		if "text_when_open" in container and container.interaction_text == tr(container.text_when_open):
-			is_open = true
+	if container.interaction_text == tr(container.text_when_open):
+		is_open = true
 	
 	# Create event
 	var event = ContainerInteractedEvent.new(player_id, container_path, container_network_id, is_open)

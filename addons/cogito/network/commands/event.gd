@@ -22,8 +22,8 @@ func _init(player_id_value: int = -1, event_type_value: String = ""):
 
 ## Generate unique ID for event
 func _generate_id() -> String:
-	# Simple ID generator (can be replaced with more robust UUID)
-	return "%s_%d" % [str(Time.get_ticks_msec()), randi()]
+	# Use centralized ID generator for better uniqueness
+	return IDGenerator.generate_id()
 
 
 ## Serialize event for network transmission

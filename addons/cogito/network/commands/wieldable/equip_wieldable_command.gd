@@ -20,17 +20,18 @@ func _init(player_id_value: int, wieldable_value: WieldableItemPD, slot_index_va
 
 ## Execute the command
 func execute() -> CommandResult:
-	# Get player
-	var player = null
+	# Get player with strict typing
+	var player: CogitoPlayer = null
 	if PlayerManager:
-		player = PlayerManager.get_player(player_id)
+		player = PlayerManager.get_player(player_id) as CogitoPlayer
 	
 	if not player:
 		var error_result = CommandResult.new(false, "Player not found")
 		error_result.response_code = CommandResult.ResponseCode.PLAYER_NOT_FOUND
 		return error_result
 	
-	var player_interaction_component = player.player_interaction_component if "player_interaction_component" in player else null
+	# Use strict typing - CogitoPlayer has player_interaction_component property
+	var player_interaction_component: PlayerInteractionComponent = player.player_interaction_component
 	if not player_interaction_component:
 		var error_result = CommandResult.new(false, "Player interaction component not found")
 		error_result.response_code = CommandResult.ResponseCode.EXECUTION_FAILED
@@ -76,11 +77,12 @@ func validate() -> bool:
 	if not PlayerManager:
 		return false
 	
-	var player = PlayerManager.get_player(player_id)
+	var player: CogitoPlayer = PlayerManager.get_player(player_id) as CogitoPlayer
 	if not player:
 		return false
 	
-	var player_interaction_component = player.player_interaction_component if "player_interaction_component" in player else null
+	# Use strict typing - CogitoPlayer has player_interaction_component property
+	var player_interaction_component: PlayerInteractionComponent = player.player_interaction_component
 	if not player_interaction_component:
 		return false
 	

@@ -31,17 +31,18 @@ func _init(player_id_value: int, door_node: Node, action_value: String = "toggle
 
 ## Execute the command
 func execute() -> CommandResult:
-	# Get player
-	var player = null
+	# Get player with strict typing
+	var player: CogitoPlayer = null
 	if PlayerManager:
-		player = PlayerManager.get_player(player_id)
+		player = PlayerManager.get_player(player_id) as CogitoPlayer
 	
 	if not player:
 		var error_result = CommandResult.new(false, "Player not found")
 		error_result.response_code = CommandResult.ResponseCode.PLAYER_NOT_FOUND
 		return error_result
 	
-	var player_interaction_component = player.player_interaction_component if "player_interaction_component" in player else null
+	# Use strict typing - CogitoPlayer has player_interaction_component property
+	var player_interaction_component: PlayerInteractionComponent = player.player_interaction_component
 	if not player_interaction_component:
 		var error_result = CommandResult.new(false, "Player interaction component not found")
 		error_result.response_code = CommandResult.ResponseCode.PLAYER_NOT_FOUND
@@ -74,7 +75,8 @@ func execute() -> CommandResult:
 				var has_lockpick = false
 				
 				if door.key:
-					var inventory = player.inventory_data if "inventory_data" in player else null
+					# Use strict typing - CogitoPlayer has inventory_data property
+					var inventory: CogitoInventory = player.inventory_data
 					if inventory:
 						for slot_data in inventory.inventory_slots:
 							if slot_data != null and slot_data.inventory_item == door.key:
@@ -86,7 +88,8 @@ func execute() -> CommandResult:
 								break
 				
 				if door.lockpick:
-					var inventory = player.inventory_data if "inventory_data" in player else null
+					# Use strict typing - CogitoPlayer has inventory_data property
+					var inventory: CogitoInventory = player.inventory_data
 					if inventory:
 						for slot_data in inventory.inventory_slots:
 							if slot_data != null and slot_data.inventory_item == door.lockpick:
