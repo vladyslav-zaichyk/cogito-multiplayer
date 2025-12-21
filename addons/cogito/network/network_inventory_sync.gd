@@ -195,6 +195,22 @@ func _on_item_picked(slot_data: InventorySlotPD) -> void:
 	# Also include quantity from slot_data
 	item_data["quantity"] = slot_data.quantity
 	
+	# If this is a WieldableItemPD, ensure charge_current is included
+	# (it should already be in _serialize_item, but double-check)
+	if slot_data.inventory_item is WieldableItemPD:
+		var wieldable_item = slot_data.inventory_item as WieldableItemPD
+		item_data["charge_current"] = wieldable_item.charge_current
+		item_data["charge_max"] = wieldable_item.charge_max
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkInventorySync",
+			"[_on_item_picked] Serialized charge_current: %s / %s for %s" % [
+				wieldable_item.charge_current,
+				wieldable_item.charge_max,
+				slot_data.inventory_item.name
+			]
+		)
+	
 	# Find the picked up item in the world to get its position, network_id, and scene path
 	# Note: instance_id is not used anymore (not reliable in multiplayer, local to each client)
 	var pickup_position = Vector3.ZERO
@@ -267,23 +283,24 @@ func _on_item_dropped(player_id: int, item: InventoryItemPD, position: Vector3) 
 	if not item:
 		return
 	
-	# Try to get the original resource path before serializing
-	# When item is used, resource_path might be lost, so we need to find it from the inventory
+	# Try to find slot_data in inventory to get charge_current and resource_path
+	# This is important for WieldableItemPD to preserve ammo state
+	var found_slot_data: InventorySlotPD = null
 	var original_resource_path = item.resource_path
-	if original_resource_path.is_empty() or original_resource_path == "unknown":
-		# Try to find the item in inventory to get its original resource_path
-		if player_inventory:
-			for slot_data in player_inventory.inventory_slots:
-				if slot_data and slot_data.inventory_item == item:
-					# Found the slot, try to get resource_path from the slot's item
-					if slot_data.inventory_item.resource_path != "":
-						original_resource_path = slot_data.inventory_item.resource_path
-						CogitoGlobals.debug_log(
-							true,
-							"NetworkInventorySync",
-							"[_on_item_dropped] Found resource_path from inventory slot: %s" % original_resource_path
-						)
-					break
+	
+	if player_inventory:
+		for slot_data in player_inventory.inventory_slots:
+			if slot_data and slot_data.inventory_item == item:
+				found_slot_data = slot_data
+				# Found the slot, try to get resource_path from the slot's item
+				if slot_data.inventory_item.resource_path != "":
+					original_resource_path = slot_data.inventory_item.resource_path
+					CogitoGlobals.debug_log(
+						true,
+						"NetworkInventorySync",
+						"[_on_item_dropped] Found resource_path from inventory slot: %s" % original_resource_path
+					)
+				break
 	
 	# Sync item drop to all clients
 	var item_data = _serialize_item(item)
@@ -296,6 +313,35 @@ func _on_item_dropped(player_id: int, item: InventoryItemPD, position: Vector3) 
 			"NetworkInventorySync",
 			"[_on_item_dropped] Overriding resource_path with found path: %s" % original_resource_path
 		)
+	
+	# If this is a WieldableItemPD, get charge_current from found_slot_data or item directly
+	if item is WieldableItemPD:
+		var wieldable_item = item as WieldableItemPD
+		# Prefer charge_current from slot_data (more reliable)
+		if found_slot_data and found_slot_data.inventory_item is WieldableItemPD:
+			var slot_wieldable = found_slot_data.inventory_item as WieldableItemPD
+			item_data["charge_current"] = slot_wieldable.charge_current
+			item_data["charge_max"] = slot_wieldable.charge_max
+			CogitoGlobals.debug_log(
+				true,
+				"NetworkInventorySync",
+				"[_on_item_dropped] Serialized charge_current from slot_data: %s / %s" % [
+					slot_wieldable.charge_current,
+					slot_wieldable.charge_max
+				]
+			)
+		# Fallback to item directly (if slot_data not found)
+		elif wieldable_item.charge_current >= 0:
+			item_data["charge_current"] = wieldable_item.charge_current
+			item_data["charge_max"] = wieldable_item.charge_max
+			CogitoGlobals.debug_log(
+				true,
+				"NetworkInventorySync",
+				"[_on_item_dropped] Serialized charge_current from item: %s / %s" % [
+					wieldable_item.charge_current,
+					wieldable_item.charge_max
+				]
+			)
 	
 	CogitoGlobals.debug_log(
 		true,  # Always log for debugging
@@ -390,11 +436,19 @@ func _serialize_item(item: InventoryItemPD) -> Dictionary:
 		"[_serialize_item] Serialized item: name='%s', resource_path='%s'" % [item_name, item_path]
 	)
 	
-	return {
+	var item_dict = {
 		"resource_path": item_path,
 		"name": item_name,
 		"quantity": item_quantity
 	}
+	
+	# If this is a WieldableItemPD, serialize ammo state (charge_current and charge_max)
+	if item is WieldableItemPD:
+		var wieldable_item = item as WieldableItemPD
+		item_dict["charge_current"] = wieldable_item.charge_current
+		item_dict["charge_max"] = wieldable_item.charge_max
+	
+	return item_dict
 
 
 ## Called by RPC when a player picks up an item
@@ -747,6 +801,9 @@ func _spawn_pickup_in_world(item_data: Dictionary, position: Vector3) -> void:
 		)
 		return
 	
+	# Note: We don't modify item_resource here because it's a shared resource
+	# Instead, we'll restore charge_current on slot_data.inventory_item after it's created
+	
 	# Check if item has a drop_scene
 	if not item_resource.drop_scene or item_resource.drop_scene.is_empty():
 		CogitoGlobals.debug_log(
@@ -796,6 +853,32 @@ func _spawn_pickup_in_world(item_data: Dictionary, position: Vector3) -> void:
 				var quantity = item_data.get("quantity", 1)
 				if quantity > 1:
 					pickup.slot_data.quantity = quantity
+				
+				# If this is a WieldableItemPD, restore ammo state (charge_current and charge_max)
+				# Duplicate the resource to avoid modifying the shared resource
+				if pickup.slot_data.inventory_item is WieldableItemPD and item_data.has("charge_current"):
+					var original_item = pickup.slot_data.inventory_item as WieldableItemPD
+					var original_charge = original_item.charge_current
+					var duplicated_item = original_item.duplicate() as WieldableItemPD
+					var restored_charge = item_data.get("charge_current", 0.0)
+					var restored_max = item_data.get("charge_max", 0.0)
+					duplicated_item.charge_current = restored_charge
+					duplicated_item.charge_max = restored_max
+					pickup.slot_data.inventory_item = duplicated_item
+					
+					# Verify that charge_current was set correctly
+					var verify_item = pickup.slot_data.inventory_item as WieldableItemPD
+					CogitoGlobals.debug_log(
+						true,
+						"NetworkInventorySync",
+						"[_spawn_pickup_in_world] Restored charge_current: %s / %s for %s (original: %s, verified: %s)" % [
+							restored_charge,
+							restored_max,
+							item_name,
+							original_charge,
+							verify_item.charge_current
+						]
+					)
 			break
 	
 	# Add NetworkPickupID component if in multiplayer (for proper synchronization)

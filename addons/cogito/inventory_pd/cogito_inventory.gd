@@ -316,6 +316,18 @@ func pick_up_slot_data(slot_data: InventorySlotPD) -> bool:
 	for index in inventory_slots.size():
 		slot_data.origin_index = index
 		if not inventory_slots[index] and is_enough_space(slot_data, index, true):
+			# Log charge_current for WieldableItemPD before adding to inventory
+			if slot_data.inventory_item is WieldableItemPD:
+				var wieldable_item = slot_data.inventory_item as WieldableItemPD
+				CogitoGlobals.debug_log(
+					true,
+					"cogito_inventory.gd",
+					"[pick_up_slot_data] Adding WieldableItemPD with charge_current: %s / %s" % [
+						wieldable_item.charge_current,
+						wieldable_item.charge_max
+					]
+				)
+			
 			inventory_slots[index] = slot_data
 			add_adjacent_slots(index)
 			_emit_inventory_updated()

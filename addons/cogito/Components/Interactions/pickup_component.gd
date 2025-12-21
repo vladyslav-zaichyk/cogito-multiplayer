@@ -91,6 +91,32 @@ func pick_up(_player_interaction_component: PlayerInteractionComponent):
 	if parent_obj.is_inside_tree():
 		scene_path = str(parent_obj.get_path())
 	
+	# Log charge_current before creating command (for debugging)
+	# Also verify that slot_data.inventory_item is not a shared resource
+	if slot_data.inventory_item is WieldableItemPD:
+		var wieldable_item = slot_data.inventory_item as WieldableItemPD
+		var resource_path = wieldable_item.resource_path
+		var is_shared = resource_path != "" and not resource_path.ends_with(".gd")
+		CogitoGlobals.debug_log(
+			true,
+			"PickupComponent",
+			"[pick_up] Creating PickupItemCommand with charge_current: %s / %s (resource_path: %s, is_shared: %s)" % [
+				wieldable_item.charge_current,
+				wieldable_item.charge_max,
+				resource_path,
+				is_shared
+			]
+		)
+		
+		# If this is a shared resource with default charge_current, try to find the correct value
+		# This shouldn't happen, but it's a safety check
+		if is_shared and wieldable_item.charge_current >= wieldable_item.charge_max:
+			CogitoGlobals.debug_log(
+				true,
+				"PickupComponent",
+				"[pick_up] WARNING: slot_data.inventory_item appears to be a shared resource with default charge_current!"
+			)
+	
 	# Create and execute command (using class_name for static typing)
 	var command = PickupItemCommand.new(player_id, slot_data, item_position, network_id, scene_path)
 	var result = CommandBus.execute_command(command)

@@ -52,6 +52,12 @@ func serialize() -> Dictionary:
 			"resource_path": resource_path,
 			"item_type": item.get_script().get_path().get_file().get_basename() if item.get_script() else ""
 		}
+		
+		# If this is a WieldableItemPD, serialize ammo state (charge_current and charge_max)
+		if item is WieldableItemPD:
+			var wieldable_item = item as WieldableItemPD
+			item_data["charge_current"] = wieldable_item.charge_current
+			item_data["charge_max"] = wieldable_item.charge_max
 	
 	# Serialize slot data
 	var slot_data_dict = {}
@@ -120,13 +126,24 @@ static func deserialize(data: Dictionary) -> Event:
 					item = test_resource
 					break
 	
+	# If this is a WieldableItemPD and we need to restore ammo state, duplicate the resource
+	# to avoid modifying the shared resource
+	var item_to_use = item
+	if item is WieldableItemPD and item_data.has("charge_current"):
+		# Duplicate the resource to avoid modifying the shared resource
+		item_to_use = item.duplicate() as WieldableItemPD
+		var wieldable_item = item_to_use as WieldableItemPD
+		wieldable_item.charge_current = item_data.get("charge_current", 0.0)
+		if item_data.has("charge_max"):
+			wieldable_item.charge_max = item_data.get("charge_max", 0.0)
+	
 	# Create slot data
 	var slot_data: InventorySlotPD = null
-	if item and slot_data_dict.size() > 0:
+	if item_to_use and slot_data_dict.size() > 0:
 		slot_data = InventorySlotPD.new()
-		slot_data.inventory_item = item
+		slot_data.inventory_item = item_to_use
 		slot_data.quantity = slot_data_dict.get("quantity", 1)
 		slot_data.origin_index = slot_data_dict.get("origin_index", -1)
 	
-	return ItemDroppedEvent.new(player_id, item, slot_data, position)
+	return ItemDroppedEvent.new(player_id, item_to_use, slot_data, position)
 
