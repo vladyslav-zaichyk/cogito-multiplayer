@@ -38,6 +38,7 @@ WorldLoadingManager="*res://addons/cogito/network/world_loading_manager.gd"
 PlayerSpawner="*res://addons/cogito/network/player_spawner.gd"
 CommandBus="*res://addons/cogito/network/commands/command_bus.gd"
 ResponseHandler="*res://addons/cogito/network/commands/response_handler.gd"
+NetworkRigidSyncManager="*res://addons/cogito/network/network_rigid_sync_manager.gd"
 
 [display]
 

@@ -156,6 +156,26 @@ func _receive_item_used(using_peer_id: int, item_data: Dictionary) -> void:
 	)
 
 
+## Called by RPC when a remote player removes/consumes a pickup item from world
+func _receive_pickup_removed(removing_peer_id: int, item_data: Dictionary) -> void:
+	# Only process if this is about a remote player
+	if is_local and removing_peer_id == peer_id:
+		# This is about ourselves, but we already handled it locally
+		return
+	
+	CogitoGlobals.debug_log(
+		true,
+		"NetworkInventorySync",
+		"[REMOTE PICKUP REMOVED] Peer %d removed/consumed item from world: %s" % [
+			removing_peer_id,
+			item_data.get("name", "unknown")
+		]
+	)
+	
+	# Remove the item from world using the same method as pickup
+	_remove_pickup_from_world(item_data)
+
+
 ## Called when local player picks up an item
 func _on_item_picked(slot_data: InventorySlotPD) -> void:
 	CogitoGlobals.debug_log(
@@ -236,16 +256,22 @@ func _on_item_picked(slot_data: InventorySlotPD) -> void:
 							pickup_scene_path = str(interactable.get_path())
 						
 						# Try to get network_id from NetworkPickupID component
+						# Note: Check specifically for NetworkPickupID to avoid NetworkRigidSync (which returns String)
 						for child2 in interactable.get_children():
 							if child2.has_method("get_network_id"):
-								pickup_network_id = child2.get_network_id()
-								break
+								var script_path = child2.get_script().resource_path if child2.get_script() else ""
+								# NetworkPickupID returns int, NetworkRigidSync returns String
+								if script_path.ends_with("network_pickup_id.gd"):
+									pickup_network_id = child2.get_network_id()
+									break
 						
 						# If network_id is 0, try to find NetworkPickupID by name
 						if pickup_network_id == 0:
 							var network_id_node = interactable.get_node_or_null("NetworkPickupID")
 							if network_id_node and network_id_node.has_method("get_network_id"):
-								pickup_network_id = network_id_node.get_network_id()
+								var script_path = network_id_node.get_script().resource_path if network_id_node.get_script() else ""
+								if script_path.ends_with("network_pickup_id.gd"):
+									pickup_network_id = network_id_node.get_network_id()
 						
 						break
 	
@@ -585,11 +611,15 @@ func _remove_pickup_from_world(item_data: Dictionary) -> void:
 				continue
 			
 			# Check if this node has a NetworkPickupID component with matching network_id
+			# Note: Check specifically for NetworkPickupID to avoid NetworkRigidSync (which returns String)
 			for child in node.get_children():
 				if child.has_method("get_network_id"):
-					var child_network_id = child.get_network_id()
-					if child_network_id == pickup_network_id:
-						found_count += 1
+					var script_path = child.get_script().resource_path if child.get_script() else ""
+					# Only check NetworkPickupID (returns int), not NetworkRigidSync (returns String)
+					if script_path.ends_with("network_pickup_id.gd"):
+						var child_network_id = child.get_network_id()
+						if child_network_id == pickup_network_id:
+							found_count += 1
 						CogitoGlobals.debug_log(
 							true,
 							"NetworkInventorySync",

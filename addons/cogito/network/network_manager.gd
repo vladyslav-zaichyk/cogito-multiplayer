@@ -418,6 +418,18 @@ func sync_inventory_item_used(peer_id: int, item_data: Dictionary) -> void:
 				inventory_sync._receive_item_used(peer_id, item_data)
 
 
+## RPC: Sync pickup item removed from world (called when item is used/consumed from world)
+@rpc("any_peer", "call_local", "reliable")
+func sync_pickup_item_removed(peer_id: int, item_data: Dictionary) -> void:
+	# Route to the correct player's NetworkInventorySync component
+	if PlayerManager:
+		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		if player_node:
+			var inventory_sync = player_node.get_node_or_null("NetworkInventorySync")
+			if inventory_sync and inventory_sync.has_method("_receive_pickup_removed"):
+				inventory_sync._receive_pickup_removed(peer_id, item_data)
+
+
 ## RPC: Sync wieldable change (called from NetworkWieldableSync)
 @rpc("any_peer", "call_local", "reliable")
 func sync_wieldable_change(peer_id: int, wieldable_data: Dictionary) -> void:

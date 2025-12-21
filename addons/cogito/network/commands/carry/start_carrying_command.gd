@@ -21,10 +21,14 @@ func _init(player_id_value: int, carryable_component: CogitoCarryableComponent):
 			carryable_position = parent_obj.global_position if parent_obj is Node3D else Vector3.ZERO
 			
 			# Try to get network_id from NetworkPickupID component
+			# Note: Check specifically for NetworkPickupID to avoid NetworkRigidSync (which returns String)
 			for child in parent_obj.get_children():
 				if child.has_method("get_network_id"):
-					carryable_network_id = child.get_network_id()
-					break
+					var script_path = child.get_script().resource_path if child.get_script() else ""
+					# NetworkPickupID returns int, NetworkRigidSync returns String
+					if script_path.ends_with("network_pickup_id.gd"):
+						carryable_network_id = child.get_network_id()
+						break
 	validation_type = ValidationType.CLIENT_VALIDATION  # Client validates carrying (can be changed to HOST_VALIDATION if needed)
 
 
@@ -191,4 +195,3 @@ static func deserialize(data: Dictionary) -> Command:
 	dummy_component.queue_free()
 	
 	return command
-

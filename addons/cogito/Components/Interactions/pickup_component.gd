@@ -82,10 +82,16 @@ func pick_up(_player_interaction_component: PlayerInteractionComponent):
 		item_position = (parent_obj as Node3D).global_position
 	
 	# Try to get network_id from NetworkPickupID component
+	# Note: Check specifically for NetworkPickupID to avoid NetworkRigidSync (which returns String)
 	for child in parent_obj.get_children():
+		# Check if this is NetworkPickupID (not NetworkRigidSync which also has get_network_id but returns String)
 		if child.has_method("get_network_id"):
-			network_id = child.get_network_id()
-			break
+			var script_path = child.get_script().resource_path if child.get_script() else ""
+			# NetworkPickupID returns int, NetworkRigidSync returns String
+			# Check by script path or by checking return type
+			if script_path.ends_with("network_pickup_id.gd"):
+				network_id = child.get_network_id()
+				break
 	
 	# Get scene path if available
 	if parent_obj.is_inside_tree():

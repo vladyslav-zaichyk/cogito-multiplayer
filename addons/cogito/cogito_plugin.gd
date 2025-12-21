@@ -25,6 +25,7 @@ func _enter_tree():
 	add_autoload_singleton("PlayerSpawner", "/network/player_spawner.gd")
 	add_autoload_singleton("CommandBus", "/network/commands/command_bus.gd")
 	add_autoload_singleton("ResponseHandler", "/network/commands/response_handler.gd")
+	add_autoload_singleton("NetworkRigidSyncManager", "/network/network_rigid_sync_manager.gd")
 
 	# Initialization of the plugin goes here.
 	parser_plugin = load("res://addons/cogito/Localization/scripts/loc_resource_parser.gd").new()
@@ -50,6 +51,7 @@ func _exit_tree():
 	remove_autoload_singleton("PlayerSpawner")
 	remove_autoload_singleton("CommandBus")
 	remove_autoload_singleton("ResponseHandler")
+	remove_autoload_singleton("NetworkRigidSyncManager")
 
 	remove_translation_parser_plugin(parser_plugin)
 

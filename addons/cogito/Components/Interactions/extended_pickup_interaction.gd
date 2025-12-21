@@ -105,11 +105,48 @@ func set_disabled(player: CogitoPlayer) -> bool:
 #region Consumables
 ## Called if the PickupComponent item is a ConsumableItem type
 func consume(consumable: ConsumableItemPD) -> void:
+	# Sync removal to other peers before deleting
+	_sync_pickup_removal(consumable)
 	consumable.use(player_interaction_component.player)
 	player_interaction_component.interaction_raycast._set_interactable(null)
 	was_interacted_with.emit(interaction_text, input_map_action)
 	Audio.play_sound(consumable.sound_pickup)
 	get_parent().queue_free()
+
+
+## Helper: Sync pickup removal to other peers
+func _sync_pickup_removal(item: InventoryItemPD) -> void:
+	if not NetworkManager or not NetworkManager.is_multiplayer() or not PlayerManager:
+		return
+	
+	var player_id = PlayerManager.get_player_id(player_interaction_component.player)
+	if player_id == -1:
+		return
+	
+	var peer_id = PlayerManager.get_player_peer_id(player_id)
+	if peer_id <= 0:
+		return
+	
+	# Collect item data for sync
+	var parent_obj = get_parent()
+	var item_data = {
+		"name": item.name,
+		"resource_path": item.resource_path if item.resource_path else "",
+		"pickup_position": parent_obj.global_position if parent_obj is Node3D else Vector3.ZERO,
+		"pickup_network_id": 0,
+		"pickup_scene_path": str(parent_obj.get_path()) if parent_obj.is_inside_tree() else ""
+	}
+	
+	# Try to get network_id from NetworkPickupID component
+	for child in parent_obj.get_children():
+		if child.has_method("get_network_id"):
+			var script_path = child.get_script().resource_path if child.get_script() else ""
+			if script_path.ends_with("network_pickup_id.gd"):
+				item_data["pickup_network_id"] = child.get_network_id()
+				break
+	
+	# Send RPC to sync removal
+	NetworkManager.sync_pickup_item_removed.rpc(peer_id, item_data)
 
 
 #endregion
@@ -180,6 +217,8 @@ func attempt_reload_current_wieldable(ammo: AmmoItemPD) -> void:
 	Audio.play_sound(ammo.sound_pickup)
 
 	if free_ammo:
+		# Sync removal to other peers before deleting
+		_sync_pickup_removal(ammo)
 		player_interaction_component.interaction_raycast._set_interactable(null)
 		get_parent().queue_free()
 
@@ -211,6 +250,8 @@ func attempt_wield(wieldable: WieldableItemPD) -> void:
 		wieldable.use(player_interaction_component.player)
 		was_interacted_with.emit(interaction_text, input_map_action)
 		Audio.play_sound(wieldable.sound_pickup)
+		# Sync removal to other peers before deleting
+		_sync_pickup_removal(wieldable)
 		player_interaction_component.interaction_raycast._set_interactable(null)
 		get_parent().queue_free()
 	else:
