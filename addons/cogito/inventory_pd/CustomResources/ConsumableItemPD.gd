@@ -47,6 +47,7 @@ func use(target) -> bool:
 		return false
 
 
-# Function to check for consumables and reducing quantity.
-func is_consumable():
-	pass
+## Check if this item is consumable.
+## Returns true for consumable items (items that should be removed from inventory after use).
+func is_consumable() -> bool:
+	return true

@@ -42,18 +42,45 @@ func execute() -> CommandResult:
 		return error_result
 	
 	# Use the item directly (don't call use_slot_data to avoid recursion)
-	var use_successful: bool = slot_data.inventory_item.use(player.inventory_data.owner)
+	# Pass player directly (not inventory_data.owner) to avoid issues with external_inventory check
+	var use_successful: bool = slot_data.inventory_item.use(player)
 	
+	# Check if item is consumable
+	var is_consumable_item: bool = false
+	if slot_data.inventory_item.has_method("is_consumable"):
+		is_consumable_item = slot_data.inventory_item.is_consumable()
+	
+	# For consumable items, even if use() returns false (e.g., attribute already maxed),
+	# we should still consume the item if the attempt was made
+	# For non-consumable items, use() returning false is an error
 	if not use_successful:
-		var error_result = CommandResult.new(false, "Failed to use item")
-		error_result.response_code = CommandResult.ResponseCode.EXECUTION_FAILED
-		return error_result
+		if is_consumable_item:
+			# Consumable item failed to apply effect (e.g., attribute already maxed)
+			# This is not an error - the item was attempted to be used
+			# Still consume the item if it's consumable
+			slot_data.quantity -= 1
+			if slot_data.quantity < 1:
+				player.inventory_data.null_out_slots(slot_data)
+			player.inventory_data._emit_inventory_updated()
+			
+			# Create event even though effect wasn't applied
+			var event = ItemUsedEvent.new(player_id, slot_data.inventory_item, slot_index)
+			result.add_event(event)
+			result.success = true
+			result.data["slot_index"] = slot_index
+			return result
+		else:
+			# Non-consumable item failed - this is an error
+			var error_result = CommandResult.new(false, "Failed to use item")
+			error_result.response_code = CommandResult.ResponseCode.EXECUTION_FAILED
+			return error_result
 	
-	# Handle consumable logic
-	if slot_data.inventory_item.has_method("is_consumable") and slot_data.inventory_item.is_consumable():
+	# Handle consumable logic (item was used successfully)
+	if is_consumable_item:
 		slot_data.quantity -= 1
 		if slot_data.quantity < 1:
 			player.inventory_data.null_out_slots(slot_data)
+	
 	player.inventory_data._emit_inventory_updated()
 	
 	# Create event
