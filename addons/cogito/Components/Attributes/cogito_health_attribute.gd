@@ -56,6 +56,43 @@ func on_death(_attribute_name: String, _value_current: float, _value_max: float)
 			spawned_object.position = parent_position
 			get_tree().current_scene.add_child(spawned_object)
 
+	# Sync object destruction to other clients in multiplayer
+	# Only sync if we're in multiplayer and this is a local destruction
+	var should_sync_destruction = false
+	var destroyer_peer_id = 0
+	
+	if NetworkManager and NetworkManager.is_multiplayer():
+		# Check if this is a player's health attribute (player death)
+		var parent_node = get_parent()
+		if parent_node and PlayerManager:
+			var player_id = PlayerManager.get_player_id(parent_node)
+			if player_id != -1:
+				# This is a player - check if it's the local player
+				var is_local = PlayerManager.has_local_player() and PlayerManager.get_local_player_id() == player_id
+				if is_local:
+					should_sync_destruction = true
+					destroyer_peer_id = NetworkManager.get_local_peer_id()
+		else:
+			# This is not a player (e.g., a target) - sync destruction from host
+			# In multiplayer, only host should trigger destruction for non-player objects
+			if NetworkManager.is_host():
+				should_sync_destruction = true
+				destroyer_peer_id = NetworkManager.get_local_peer_id()
+	
+	# Destroy objects locally
 	for nodepath in destroy_on_death:
-		if get_node(nodepath):
-			get_node(nodepath).queue_free()
+		var node_to_destroy = get_node(nodepath) if nodepath else null
+		if node_to_destroy and is_instance_valid(node_to_destroy):
+			# Get object path for network sync
+			var object_path = str(node_to_destroy.get_path())
+			
+			# Sync destruction to other clients if needed
+			if should_sync_destruction and NetworkManager:
+				var destruction_data = {
+					"object_path": object_path,
+					"destroyer_peer_id": destroyer_peer_id
+				}
+				NetworkManager.sync_object_destroyed.rpc(destruction_data)
+			
+			# Destroy the object
+			node_to_destroy.queue_free()

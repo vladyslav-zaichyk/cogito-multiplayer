@@ -124,6 +124,9 @@ func hit_scan_collision(collision_point: Vector3):
 	var has_hit = bullet_collision != null
 	var hit_position = bullet_collision.position if has_hit else Vector3.ZERO
 	var hit_normal = bullet_collision.normal if has_hit else Vector3.UP
+	# Update bullet_direction based on actual hit position if there's a hit
+	if has_hit and bullet_collision:
+		bullet_direction = (hit_position - shot_origin).normalized()
 	
 	# Spawning a laser ray locally
 	var instantiated_ray = laser_ray_prefab.instantiate()
@@ -185,6 +188,7 @@ func hit_scan_collision(collision_point: Vector3):
 					"has_hit": has_hit,
 					"hit_position": hit_position,
 					"hit_normal": hit_normal,
+					"bullet_direction": bullet_direction,
 					"laser_ray_prefab_path": laser_ray_prefab_path,
 					"collision_scene_path": collision_scene_path,
 					"decal_texture_path": decal_texture_path,

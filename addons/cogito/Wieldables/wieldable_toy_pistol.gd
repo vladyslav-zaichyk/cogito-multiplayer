@@ -76,6 +76,14 @@ func action_primary(_passed_item_reference: InventoryItemPD, _is_released: bool)
 	var projectile_velocity_vector = Direction * projectile_velocity
 	Projectile.set_linear_velocity(projectile_velocity_vector)
 	Projectile.Direction = Direction
+	# Set shooter_peer_id for multiplayer damage sync (only for local player's projectiles)
+	if NetworkManager and NetworkManager.is_multiplayer():
+		var player = player_interaction_component.get_parent() if player_interaction_component else null
+		if player and PlayerManager:
+			var player_id = PlayerManager.get_player_id(player)
+			var is_local = PlayerManager.has_local_player() and PlayerManager.get_local_player_id() == player_id
+			if is_local:
+				Projectile.shooter_peer_id = NetworkManager.get_local_peer_id()
 	Projectile.reparent(get_tree().get_current_scene())
 	
 	# Sync projectile spawn to other clients in multiplayer

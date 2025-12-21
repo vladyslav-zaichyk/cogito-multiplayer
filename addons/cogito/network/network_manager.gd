@@ -659,6 +659,12 @@ func sync_projectile_spawn(projectile_data: Dictionary) -> void:
 				projectile.Direction = direction
 			elif projectile.has_method("set"):
 				projectile.set("Direction", direction)
+		
+		# Set shooter_peer_id for damage sync (only for remote projectiles)
+		if "shooter_peer_id" in projectile:
+			projectile.shooter_peer_id = shooter_peer_id
+		elif projectile.has_method("set"):
+			projectile.set("shooter_peer_id", shooter_peer_id)
 	
 	# Add to current scene
 	var current_scene = get_tree().current_scene
@@ -768,6 +774,38 @@ func sync_hitscan_shot(hitscan_data: Dictionary) -> void:
 			else:
 				hit_indicator.queue_free()
 	
+	# Apply damage to hit object on remote clients
+	# The local client already applied damage, so we only do this for remote clients
+	if has_hit and damage_amount > 0:
+		# Find the object that was hit by doing a raycast at the hit position
+		# This ensures we hit the same object that was hit on the shooter's client
+		var current_scene = get_tree().current_scene
+		if current_scene:
+			var space_state = current_scene.get_world_3d().direct_space_state
+			# Do a small raycast to find the object at hit position
+			var query = PhysicsRayQueryParameters3D.create(
+				hit_position + hit_normal * 0.1,  # Start slightly above hit position
+				hit_position - hit_normal * 0.2   # End slightly below
+			)
+			var result = space_state.intersect_ray(query)
+			
+			if result and result.collider:
+				var hit_collider = result.collider
+				var bullet_direction = hitscan_data.get("bullet_direction", Vector3.ZERO)
+				
+				# Apply damage to the hit object
+				if hit_collider.has_signal("damage_received"):
+					hit_collider.damage_received.emit(damage_amount, bullet_direction, hit_position)
+					CogitoGlobals.debug_log(
+						enable_logging,
+						"NetworkManager",
+						"[%s] Applied hitscan damage to %s: %d damage" % [
+							"HOST" if is_host() else "CLIENT",
+							hit_collider.name,
+							damage_amount
+						]
+					)
+	
 	CogitoGlobals.debug_log(
 		enable_logging,
 		"NetworkManager",
@@ -777,6 +815,107 @@ func sync_hitscan_shot(hitscan_data: Dictionary) -> void:
 			shot_origin,
 			"yes" if has_hit else "no",
 			hit_position if has_hit else target_point
+		]
+	)
+
+
+## RPC: Sync damage dealt (called when a projectile hits a target)
+@rpc("any_peer", "reliable")
+func sync_damage_dealt(damage_data: Dictionary) -> void:
+	# This RPC is called when a local projectile hits a target
+	# Remote clients receive this and apply damage to the target
+	
+	var shooter_peer_id = damage_data.get("shooter_peer_id", 0)
+	var collider_path = damage_data.get("collider_path", "")
+	var damage_amount = damage_data.get("damage_amount", 0)
+	var bullet_direction = damage_data.get("bullet_direction", Vector3.ZERO)
+	var bullet_position = damage_data.get("bullet_position", Vector3.ZERO)
+	
+	# Don't apply damage if this is from ourselves (already applied locally)
+	var local_peer_id = NetworkManager.get_local_peer_id() if NetworkManager else 0
+	if shooter_peer_id == local_peer_id:
+		return
+	
+	# Find the collider by path
+	if collider_path.is_empty():
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkManager",
+			"sync_damage_dealt: collider_path is empty, cannot apply damage"
+		)
+		return
+	
+	var collider = get_tree().root.get_node_or_null(NodePath(collider_path))
+	if not collider or not is_instance_valid(collider):
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkManager",
+			"sync_damage_dealt: Could not find collider at path: %s" % collider_path
+		)
+		return
+	
+	# Apply damage to the collider
+	if collider.has_signal("damage_received"):
+		collider.damage_received.emit(damage_amount, bullet_direction, bullet_position)
+		CogitoGlobals.debug_log(
+			enable_logging,
+			"NetworkManager",
+			"[%s] Applied damage from peer %d to %s: %d damage" % [
+				"HOST" if is_host() else "CLIENT",
+				shooter_peer_id,
+				collider.name,
+				damage_amount
+			]
+		)
+	else:
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkManager",
+			"sync_damage_dealt: Collider %s does not have damage_received signal" % collider.name
+		)
+
+
+## RPC: Sync object destruction (called when an object is destroyed)
+@rpc("any_peer", "reliable")
+func sync_object_destroyed(destruction_data: Dictionary) -> void:
+	# This RPC is called when an object is destroyed (e.g., target destroyed by damage)
+	# Remote clients receive this and destroy the object locally
+	
+	var object_path = destruction_data.get("object_path", "")
+	var destroyer_peer_id = destruction_data.get("destroyer_peer_id", 0)
+	
+	# Don't destroy if this is from ourselves (already destroyed locally)
+	var local_peer_id = NetworkManager.get_local_peer_id() if NetworkManager else 0
+	if destroyer_peer_id == local_peer_id:
+		return
+	
+	if object_path.is_empty():
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkManager",
+			"sync_object_destroyed: object_path is empty, cannot destroy object"
+		)
+		return
+	
+	# Find the object by path
+	var object = get_tree().root.get_node_or_null(NodePath(object_path))
+	if not object or not is_instance_valid(object):
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkManager",
+			"sync_object_destroyed: Could not find object at path: %s" % object_path
+		)
+		return
+	
+	# Destroy the object
+	object.queue_free()
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"NetworkManager",
+		"[%s] Destroyed object %s (destroyed by peer %d)" % [
+			"HOST" if is_host() else "CLIENT",
+			object.name,
+			destroyer_peer_id
 		]
 	)
 
