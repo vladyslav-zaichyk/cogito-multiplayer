@@ -705,21 +705,45 @@ func _spawn_pickup_in_world(item_data: Dictionary, position: Vector3) -> void:
 		"[SPAWN ATTEMPT] Trying to spawn item: %s | Resource Path: %s | Position: %s" % [item_name, item_path, position]
 	)
 	
-	if item_path.is_empty() or item_path == "unknown":
-		CogitoGlobals.debug_log(
-			true,
-			"NetworkInventorySync",
-			"[SPAWN FAIL] Cannot spawn item '%s': invalid resource path '%s'" % [item_name, item_path]
-		)
-		return
-	
 	# Try to load the item resource
-	var item_resource = load(item_path) as InventoryItemPD
+	var item_resource: InventoryItemPD = null
+	
+	# Try resource_path first (skip if it's a .gd script or empty/unknown)
+	if not item_path.is_empty() and item_path != "unknown" and not item_path.ends_with(".gd"):
+		item_resource = load(item_path) as InventoryItemPD
+		if not item_resource:
+			CogitoGlobals.debug_log(
+				true,
+				"NetworkInventorySync",
+				"[SPAWN] Failed to load item from resource_path: %s, trying fallback" % item_path
+			)
+	
+	# Fallback: try to find by name if resource_path failed or missing
+	if not item_resource and not item_name.is_empty() and item_name != "unknown":
+		# Try common resource paths (similar to network_wieldable_sync.gd)
+		var possible_paths = [
+			"res://addons/cogito/inventory_pd/Items/Cogito_%s.tres" % item_name.replace(" ", ""),
+			"res://addons/cogito/inventory_pd/Items/Cogito_%s.tres" % item_name.replace(" ", "_"),
+			"res://addons/cogito/inventory_pd/Items/%s.tres" % item_name.replace(" ", ""),
+			"res://addons/cogito/inventory_pd/Items/%s.tres" % item_name.replace(" ", "_"),
+		]
+		
+		# Special cases
+		if item_name == "Foam Pistol":
+			possible_paths.insert(0, "res://addons/cogito/inventory_pd/Items/Cogito_Pistol.tres")
+		
+		for path in possible_paths:
+			if ResourceLoader.exists(path):
+				var test_resource = load(path) as InventoryItemPD
+				if test_resource and test_resource.name == item_name:
+					item_resource = test_resource
+					break
+	
 	if not item_resource:
 		CogitoGlobals.debug_log(
 			true,
 			"NetworkInventorySync",
-			"[SPAWN FAIL] Cannot spawn item '%s': failed to load resource at '%s'" % [item_name, item_path]
+			"[SPAWN FAIL] Cannot spawn item '%s': failed to load resource (path: '%s')" % [item_name, item_path]
 		)
 		return
 	
