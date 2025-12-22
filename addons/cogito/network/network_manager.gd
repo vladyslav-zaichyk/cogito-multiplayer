@@ -430,6 +430,14 @@ func sync_pickup_item_removed(peer_id: int, item_data: Dictionary) -> void:
 				inventory_sync._receive_pickup_removed(peer_id, item_data)
 
 
+## RPC: Sync rigid body state (called from NetworkRigidSync)
+@rpc("any_peer", "call_local", "unreliable")
+func sync_rigid_body_state(state_data: Dictionary) -> void:
+	# Route to NetworkRigidSyncManager
+	if NetworkRigidSyncManager:
+		NetworkRigidSyncManager._receive_rigid_state(state_data)
+
+
 ## RPC: Sync wieldable change (called from NetworkWieldableSync)
 @rpc("any_peer", "call_local", "reliable")
 func sync_wieldable_change(peer_id: int, wieldable_data: Dictionary) -> void:

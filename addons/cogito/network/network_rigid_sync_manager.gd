@@ -9,16 +9,24 @@ var enable_logging: bool = true
 ## Registry of all registered rigid bodies (network_id -> NetworkRigidSync)
 var registered_bodies: Dictionary = {}
 
-## Filter groups for synchronization
-## Objects in "network_sync" group will be synced
-## Objects in "network_no_sync" group will NOT be synced
-## If both groups are empty, all RigidBody3D will be synced
-var sync_group_name: String = ""  # Optional: only sync objects in this group (empty = sync all)
-var no_sync_group_name: String = "network_no_sync"  # Optional: exclude objects in this group
+## Auto-enable sync for all objects in Phase 1 (for testing)
+## Set to false to require manual enable_sync_for_group() call
+var auto_enable_sync: bool = true
+
+## Phase 1: Simple version - sync ALL RigidBody3D (no filters)
+## Filters will be added in later phases
+var sync_group_name: String = ""  # Empty = sync all (Phase 1)
+var no_sync_group_name: String = ""  # Empty = no exclusions (Phase 1)
 
 ## Component name to inject
 const COMPONENT_NAME = "NetworkRigidSync"
 const COMPONENT_SCRIPT = preload("res://addons/cogito/network/network_rigid_sync.gd")
+
+## Helper script for _integrate_forces (optional)
+const HELPER_SCRIPT = preload("res://addons/cogito/network/rigid_body_sync_helper.gd")
+
+## Auto-add helper script to RigidBody3D that don't have scripts (for _integrate_forces)
+var auto_add_helper_script: bool = true
 
 
 func _ready() -> void:
@@ -42,6 +50,11 @@ func _ready() -> void:
 	
 	# Find and inject components into existing RigidBody3D nodes
 	_find_and_inject_rigid_bodies()
+	
+	# Phase 1: Auto-enable sync for all objects if enabled (for testing)
+	if auto_enable_sync and NetworkManager and NetworkManager.is_multiplayer():
+		await get_tree().create_timer(1.5).timeout  # Wait for all components to initialize and be ready
+		_enable_sync_for_all_registered()
 
 
 ## Called when a new node is added to the scene tree
@@ -137,6 +150,15 @@ func _inject_component_if_needed(rigid_body: RigidBody3D) -> void:
 	component.name = COMPONENT_NAME
 	rigid_body.add_child(component)
 	
+	# Optionally add helper script if RigidBody3D doesn't have a script
+	if auto_add_helper_script and not rigid_body.get_script():
+		rigid_body.set_script(HELPER_SCRIPT)
+		CogitoGlobals.debug_log(
+			enable_logging,
+			"NetworkRigidSyncManager",
+			"Added helper script to %s (no existing script)" % rigid_body.name
+		)
+	
 	CogitoGlobals.debug_log(
 		enable_logging,
 		"NetworkRigidSyncManager",
@@ -145,16 +167,10 @@ func _inject_component_if_needed(rigid_body: RigidBody3D) -> void:
 
 
 ## Check if object should be synced based on groups
+## Phase 1: Simple version - sync ALL RigidBody3D (no filters)
 func _should_sync_object(rigid_body: RigidBody3D) -> bool:
-	# If object is in no_sync group, don't sync
-	if not no_sync_group_name.is_empty() and rigid_body.is_in_group(no_sync_group_name):
-		return false
-	
-	# If sync_group_name is set, only sync objects in that group
-	if not sync_group_name.is_empty():
-		return rigid_body.is_in_group(sync_group_name)
-	
-	# Default: sync all (if no groups are configured)
+	# Phase 1: Sync ALL RigidBody3D (no filters)
+	# Filters will be added in later phases
 	return true
 
 
@@ -176,6 +192,12 @@ func register_rigid_body(component: Node) -> void:
 		"NetworkRigidSyncManager",
 		"Registered rigid body: %s" % network_id
 	)
+	
+	# Phase 1: Auto-enable sync if enabled and in multiplayer
+	# Note: Don't use await here as it can block registration
+	# Instead, use call_deferred to enable sync after component is ready
+	if auto_enable_sync and NetworkManager and NetworkManager.is_multiplayer():
+		call_deferred("_enable_sync_for_component", component, network_id)
 
 
 ## Unregister a rigid body sync component
@@ -208,8 +230,19 @@ func enable_sync_for_group(group_name: String) -> void:
 		"Sync enabled for group: %s" % group_name
 	)
 	
-	# Re-inject components with new filter
-	_find_and_inject_rigid_bodies()
+	# Enable sync for all registered bodies in this group
+	for network_id in registered_bodies:
+		var component = registered_bodies[network_id]
+		if component and component.has_method("get_parent_rigid_body"):
+			var rigid_body = component.get_parent_rigid_body()
+			if rigid_body and rigid_body.is_in_group(group_name):
+				if component.has_method("set_sync_enabled"):
+					component.set_sync_enabled(true)
+					CogitoGlobals.debug_log(
+						enable_logging,
+						"NetworkRigidSyncManager",
+						"Enabled sync for %s (group: %s)" % [network_id, group_name]
+					)
 
 
 ## Enable sync for a specific network ID (will be used in Phase 1)
@@ -222,6 +255,70 @@ func enable_sync_for_network_id(network_id: String) -> void:
 			"NetworkRigidSyncManager",
 			"Sync enabled for network_id: %s" % network_id
 		)
+
+
+## Enable sync for all registered bodies (Phase 1 testing)
+func _enable_sync_for_all_registered() -> void:
+	var count = 0
+	for network_id in registered_bodies:
+		var component = registered_bodies[network_id]
+		if component and component.has_method("set_sync_enabled"):
+			component.set_sync_enabled(true)
+			count += 1
+	
+	CogitoGlobals.debug_log(
+		true,  # Always log this
+		"NetworkRigidSyncManager",
+		"Auto-enabled sync for %d rigid bodies (Phase 1 testing)" % count
+	)
+
+
+## Enable sync for a single component (deferred call)
+func _enable_sync_for_component(component: Node, network_id: String) -> void:
+	# Wait a bit for component to be ready
+	await get_tree().create_timer(0.6).timeout  # Slightly longer than is_ready_for_sync delay
+	if component and is_instance_valid(component) and component.has_method("set_sync_enabled"):
+		component.set_sync_enabled(true)
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkRigidSyncManager",
+			"Auto-enabled sync for newly registered: %s" % network_id
+		)
+
+
+## Receive rigid body state from network (called by NetworkManager RPC)
+func _receive_rigid_state(state_data: Dictionary) -> void:
+	var network_id = state_data.get("network_id", "")
+	if network_id.is_empty():
+		return
+	
+	# Find the component and apply state
+	var component = get_rigid_body(network_id)
+	if not component or not component.has_method("_receive_state_update"):
+		return
+	
+	# Phase 1: Don't apply if we're the host (host is authority, only sends)
+	# Check if we're the host (peer 1)
+	if NetworkManager and NetworkManager.is_multiplayer():
+		var local_peer_id = NetworkManager.get_local_peer_id()
+		if local_peer_id == 1:  # Host doesn't apply states
+			return
+	
+	# Check if this component sent the state (by comparing with last_sent_state)
+	# This prevents applying our own state when call_local is used
+	if "last_sent_state" in component:
+		var sent_state = component.last_sent_state
+		if not sent_state.is_empty():
+			var received_timestamp = state_data.get("timestamp", 0.0)
+			var sent_timestamp = sent_state.get("timestamp", 0.0)
+			
+			# If timestamps match closely (within 0.05s), this is likely our own state
+			# Use larger threshold because of network delay
+			if abs(received_timestamp - sent_timestamp) < 0.05:
+				# This is our own state, don't apply it
+				return
+	
+	component._receive_state_update(state_data)
 
 
 ## Enable logging for debugging
