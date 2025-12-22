@@ -162,6 +162,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	# Only send updates in _process (not physics-critical)
 	if not parent_body or not body_node:
 		return
 	
@@ -176,10 +177,19 @@ func _process(delta: float) -> void:
 		if sync_timer >= sync_interval:
 			sync_timer = 0.0
 			_send_rotation_update()
+
+
+func _physics_process(_delta: float) -> void:
+	# Remote player: apply rotation in _physics_process (for consistency with position sync)
+	if not parent_body or not body_node:
+		return
+	
+	if not NetworkManager or not NetworkManager.is_multiplayer():
+		return
 	
 	# Remote player: interpolate to target rotation
-	else:
-		_interpolate_rotation(delta)
+	if not is_local:
+		_interpolate_rotation(_delta)
 
 
 ## Send rotation update (local player only)

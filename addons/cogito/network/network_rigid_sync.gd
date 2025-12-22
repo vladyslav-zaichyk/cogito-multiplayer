@@ -1,6 +1,7 @@
 extends Node
 ## Network Rigid Body Sync Component
-## Simple: Host simulates physics, clients apply position/rotation/velocities
+## Host-authority: Host simulates physics, clients apply states
+## Client interactions are handled through existing network commands
 
 var parent_rigid_body: RigidBody3D = null
 var network_id: String = ""
@@ -15,7 +16,18 @@ var last_sent_state: Dictionary = {}
 var pending_state: Dictionary = {}
 var has_pending_state: bool = false
 
-# Carry handling
+# Interpolation targets
+var target_transform: Transform3D = Transform3D.IDENTITY
+var target_linear_velocity: Vector3 = Vector3.ZERO
+var target_angular_velocity: Vector3 = Vector3.ZERO
+var has_target: bool = false
+
+# Interpolation settings
+var interpolation_frames: int = 2  # Interpolate over 2 physics ticks
+var interpolation_frame_count: int = 0
+var snap_threshold: float = 1.0  # If error > 1.0m, snap instead of interpolate
+
+# Carry handling (for skipping state application when carried locally)
 var carryable_component: Node = null
 
 
@@ -35,8 +47,10 @@ func _ready() -> void:
 	if NetworkRigidSyncManager:
 		NetworkRigidSyncManager.register_rigid_body(self)
 	
-	# Find carryable component
+	# Find carryable component and connect to signal
 	_find_carryable_component()
+	if carryable_component and carryable_component.has_signal("carry_state_changed"):
+		carryable_component.carry_state_changed.connect(_on_carry_state_changed)
 	
 	await get_tree().create_timer(0.5).timeout
 
@@ -45,11 +59,18 @@ func _physics_process(_delta: float) -> void:
 	if not parent_rigid_body or not is_instance_valid(parent_rigid_body):
 		return
 	
-	# Client: Apply pending state
+	# Client: Update target from pending state (skip if being carried locally)
 	if has_pending_state and NetworkManager and NetworkManager.is_multiplayer():
 		var local_peer_id = NetworkManager.get_local_peer_id()
 		if local_peer_id != 1:  # Client
-			_apply_pending_state()
+			if not _is_carried_locally():
+				_update_target_from_pending()
+	
+	# Client: Interpolate to target (applies state in _physics_process via PhysicsServer3D)
+	if has_target and NetworkManager and NetworkManager.is_multiplayer():
+		var local_peer_id = NetworkManager.get_local_peer_id()
+		if local_peer_id != 1 and not _is_carried_locally():  # Client
+			_interpolate_to_target(_delta)
 	
 	# Host: Send state
 	if sync_enabled and NetworkManager and NetworkManager.is_multiplayer():
@@ -189,14 +210,8 @@ func _receive_state_update(state_data: Dictionary) -> void:
 	has_pending_state = true
 
 
-func _apply_pending_state() -> void:
+func _update_target_from_pending() -> void:
 	if not has_pending_state or not parent_rigid_body:
-		return
-	
-	# Don't apply if object is being carried locally on client
-	# (but DO apply if object is carried on host - we need to sync host's position)
-	if _is_carried_locally():
-		has_pending_state = false
 		return
 	
 	var state_data = pending_state
@@ -225,11 +240,10 @@ func _apply_pending_state() -> void:
 		state_data.angular_velocity.z
 	)
 	
-	# Validate position
+	# Validate
 	if not (is_finite(pos.x) and is_finite(pos.y) and is_finite(pos.z)):
 		return
 	
-	# Validate quaternion
 	if not (is_finite(rot.x) and is_finite(rot.y) and is_finite(rot.z) and is_finite(rot.w)):
 		return
 	
@@ -241,26 +255,95 @@ func _apply_pending_state() -> void:
 	if abs(rot_len_sq - 1.0) > 0.1:
 		return
 	
-	# Create Basis and validate
+	# Create target transform
 	var basis = Basis(rot)
 	if not (_is_finite(basis.x) and _is_finite(basis.y) and _is_finite(basis.z)):
 		return
 	
-	# Apply via PhysicsServer3D
+	target_transform = Transform3D(basis, pos)
+	
+	# Validate velocities
+	if is_finite(lin_vel.x) and is_finite(lin_vel.y) and is_finite(lin_vel.z):
+		target_linear_velocity = lin_vel
+	else:
+		target_linear_velocity = Vector3.ZERO
+	
+	if is_finite(ang_vel.x) and is_finite(ang_vel.y) and is_finite(ang_vel.z):
+		target_angular_velocity = ang_vel
+	else:
+		target_angular_velocity = Vector3.ZERO
+	
+	# Check if we should snap (large error)
+	var current_pos = parent_rigid_body.global_position
+	var error = (current_pos - pos).length()
+	
+	if error > snap_threshold:
+		# Large error - snap immediately (set frame count to max)
+		interpolation_frame_count = interpolation_frames
+	else:
+		# Small error - interpolate (start from 0)
+		interpolation_frame_count = 0
+	
+	has_target = true
+
+
+## Interpolate to target state (called from _physics_process)
+## Applies state via PhysicsServer3D.body_set_state() in _physics_process
+## This is the correct place to modify RigidBody3D state
+func _interpolate_to_target(_delta: float) -> void:
+	if not has_target or not parent_rigid_body:
+		return
+	
 	var body_rid = parent_rigid_body.get_rid()
-	if body_rid.is_valid():
-		var transform = Transform3D(basis, pos)
-		
-		# Final validation
-		if not (_is_finite(transform.origin) and _is_finite(transform.basis.x) and _is_finite(transform.basis.y) and _is_finite(transform.basis.z)):
-			return
-		
-		PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_TRANSFORM, transform)
-		
-		if is_finite(lin_vel.x) and is_finite(lin_vel.y) and is_finite(lin_vel.z):
-			PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY, lin_vel)
-		if is_finite(ang_vel.x) and is_finite(ang_vel.y) and is_finite(ang_vel.z):
-			PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_ANGULAR_VELOCITY, ang_vel)
+	if not body_rid.is_valid():
+		return
+	
+	# Update frame count
+	interpolation_frame_count += 1
+	
+	# Calculate interpolation alpha (0.0 to 1.0)
+	var alpha = float(interpolation_frame_count) / float(interpolation_frames)
+	if alpha > 1.0:
+		alpha = 1.0
+	
+	# Get current transform
+	var current_transform = parent_rigid_body.global_transform
+	
+	# Interpolate position (lerp)
+	var current_pos = current_transform.origin
+	var target_pos = target_transform.origin
+	var lerped_pos = current_pos.lerp(target_pos, alpha)
+	
+	# Interpolate rotation (slerp quaternion)
+	var current_rot = current_transform.basis.get_rotation_quaternion()
+	var target_rot = target_transform.basis.get_rotation_quaternion()
+	var slerped_rot = current_rot.slerp(target_rot, alpha)
+	
+	# Create interpolated transform
+	var interpolated_transform = Transform3D(Basis(slerped_rot), lerped_pos)
+	
+	# Interpolate velocities (lerp)
+	var current_lin_vel = parent_rigid_body.linear_velocity
+	var current_ang_vel = parent_rigid_body.angular_velocity
+	var lerped_lin_vel = current_lin_vel.lerp(target_linear_velocity, alpha)
+	var lerped_ang_vel = current_ang_vel.lerp(target_angular_velocity, alpha)
+	
+	# Validate before applying
+	if not (_is_finite(interpolated_transform.origin) and _is_finite(interpolated_transform.basis.x) and _is_finite(interpolated_transform.basis.y) and _is_finite(interpolated_transform.basis.z)):
+		return
+	
+	# Apply interpolated state
+	PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_TRANSFORM, interpolated_transform)
+	
+	if _is_finite(lerped_lin_vel):
+		PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY, lerped_lin_vel)
+	if _is_finite(lerped_ang_vel):
+		PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_ANGULAR_VELOCITY, lerped_ang_vel)
+	
+	# If interpolation complete, reset
+	if interpolation_frame_count >= interpolation_frames:
+		has_target = false
+		interpolation_frame_count = 0
 
 
 func _is_finite(v: Vector3) -> bool:
@@ -278,10 +361,10 @@ func set_sync_enabled(enabled: bool) -> void:
 		
 		var local_peer_id = NetworkManager.get_local_peer_id()
 		if local_peer_id == 1:  # Host
-			parent_rigid_body.freeze = false
+			parent_rigid_body.freeze = false  # Host simulates physics
 		else:  # Client
+			parent_rigid_body.freeze = true  # Client only receives states (no local physics)
 			parent_rigid_body.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
-			parent_rigid_body.freeze = false
 
 
 func get_network_id() -> String:
@@ -332,6 +415,22 @@ func _is_carried_on_host() -> bool:
 		return carryable_component.is_being_carried
 	
 	return false
+
+
+func _on_carry_state_changed(is_carried: bool) -> void:
+	if not NetworkManager or not NetworkManager.is_multiplayer():
+		return
+	
+	var local_peer_id = NetworkManager.get_local_peer_id()
+	if local_peer_id == 1:  # Host - no changes needed
+		return
+	
+	# On client: when object is carried, temporarily unfreeze for carry system
+	# When dropped, freeze again to prevent local physics simulation
+	if is_carried:
+		parent_rigid_body.freeze = false  # Temporarily unfreeze for carry
+	else:
+		parent_rigid_body.freeze = true  # Freeze again (network-controlled)
 
 
 func _exit_tree() -> void:

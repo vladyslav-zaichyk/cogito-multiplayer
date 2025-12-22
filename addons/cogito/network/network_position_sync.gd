@@ -97,6 +97,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	# Only send updates in _process (not physics-critical)
 	if not parent_body:
 		return
 	
@@ -111,10 +112,19 @@ func _process(delta: float) -> void:
 		if sync_timer >= sync_interval:
 			sync_timer = 0.0
 			_send_position_update()
+
+
+func _physics_process(_delta: float) -> void:
+	# Remote player: apply position in _physics_process (physics-critical)
+	if not parent_body:
+		return
 	
-	# Remote player: interpolate to target position
-	else:
-		_interpolate_position(delta)
+	if not NetworkManager or not NetworkManager.is_multiplayer():
+		return
+	
+	# Remote player: interpolate to target position using velocity + move_and_slide
+	if not is_local:
+		_apply_remote_position(_delta)
 
 
 ## Send position update (local player only)
@@ -170,22 +180,32 @@ func _receive_position_update(position: Vector3) -> void:
 	)
 
 
-## Interpolate position for remote players
-func _interpolate_position(delta: float) -> void:
+## Apply remote position in _physics_process using velocity + move_and_slide
+## This is the correct way to move CharacterBody3D (respects collisions)
+func _apply_remote_position(_delta: float) -> void:
 	if not parent_body:
 		return
 	
 	var current_position = parent_body.global_position
+	var distance = current_position.distance_to(target_position)
 	
-	# Interpolate towards target position
-	if current_position.distance_to(target_position) > position_threshold:
-		parent_body.global_position = current_position.lerp(
-			target_position,
-			interpolation_speed * delta
-		)
-	else:
-		# Close enough, snap to target
+	# If very close, snap to target
+	if distance < position_threshold:
 		parent_body.global_position = target_position
+		parent_body.velocity = Vector3.ZERO
+		return
+	
+	# Calculate velocity needed to reach target
+	# Use interpolation speed to control how fast we move
+	var direction = (target_position - current_position).normalized()
+	var speed = interpolation_speed * distance  # Speed based on distance
+	
+	# Set velocity and let move_and_slide handle the movement
+	# This respects collisions and physics interactions
+	parent_body.velocity = direction * speed
+	
+	# Move using move_and_slide (this is the correct way for CharacterBody3D)
+	parent_body.move_and_slide()
 
 
 ## Force immediate position sync (useful for teleportation, respawn, etc.)
