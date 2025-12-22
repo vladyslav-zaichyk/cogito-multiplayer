@@ -344,7 +344,7 @@ func set_player_name_by_peer_id(peer_id: int, name: String) -> void:
 	
 	# Sync via RPC if in multiplayer
 	if NetworkManager and NetworkManager.is_multiplayer():
-		NetworkManager.sync_player_data.rpc(peer_id, player_data.to_dict())
+		NetworkManager.sync_player_data.rpc(player_data.to_dict())
 		CogitoGlobals.debug_log(
 			true,  # Always log this
 			"PlayerManager",
@@ -578,14 +578,14 @@ func _on_network_connected(peer_id: int) -> void:
 		if local_peer_id != -1:
 			var local_data = get_player_data(local_peer_id)
 			# Send our data to the new client
-			NetworkManager.sync_player_data.rpc_id(peer_id, local_peer_id, local_data.to_dict())
+			NetworkManager.sync_player_data.rpc_id(peer_id, local_data.to_dict())
 			
 			# Also send data for all other players
 			for other_peer_id in _player_data.keys():
 				if other_peer_id != local_peer_id:
 					var other_data = _player_data[other_peer_id] as PlayerData
 					if other_data:
-						NetworkManager.sync_player_data.rpc_id(peer_id, other_peer_id, other_data.to_dict())
+						NetworkManager.sync_player_data.rpc_id(peer_id, other_data.to_dict())
 
 
 ## Callback when a peer disconnects

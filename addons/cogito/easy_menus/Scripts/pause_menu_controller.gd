@@ -68,8 +68,7 @@ func open_pause_menu():
 	# In multiplayer, request pause from host instead of pausing locally
 	if NetworkManager and NetworkManager.is_multiplayer():
 		# Request pause from host (even if we're the host, use RPC for consistency)
-		var local_peer_id = NetworkManager.get_local_peer_id()
-		NetworkManager.request_pause.rpc(local_peer_id)
+		NetworkManager.request_pause.rpc()
 		# Show menu immediately (will be paused when host authorizes)
 		_show_pause_menu_ui()
 	else:
@@ -144,8 +143,7 @@ func close_pause_menu():
 	# In multiplayer, request resume from host instead of resuming locally
 	if NetworkManager and NetworkManager.is_multiplayer():
 		# Request resume from host (even if we're the host, use RPC for consistency)
-		var local_peer_id = NetworkManager.get_local_peer_id()
-		NetworkManager.request_resume.rpc(local_peer_id)
+		NetworkManager.request_resume.rpc()
 		# Hide menu immediately (will be resumed when host authorizes)
 		hide()
 		emit_signal("resume")

@@ -8,6 +8,9 @@ var network_id: int = 0  # Stable network ID (set by NetworkRigidBodyID componen
 var network_id_component: Node = null  # Reference to NetworkRigidBodyID
 var sync_enabled: bool = false
 
+# Enable/disable logging
+var enable_logging: bool = false
+
 # Rate limiting
 var send_interval_frames: int = 2  # Send every 2 frames for smoother sync
 var frames_since_last_send: int = 0
@@ -363,14 +366,19 @@ func _receive_state_update(state_data: Dictionary) -> void:
 	
 	var local_peer_id = NetworkManager.get_local_peer_id()
 	
-	# Diagnostic logging
-	print("[Sync] peer=%d recv id=%d owner=%d local_owner=%s sync_enabled=%s" % [
-		local_peer_id,
-		network_id,
-		owner_peer_id,
-		str(is_local_owner()),
-		str(sync_enabled)
-	])
+	# Diagnostic logging (use debug_log instead of print to avoid spam)
+	# Only log if explicitly enabled via enable_logging flag
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"NetworkRigidSync",
+		"[Sync] peer=%d recv id=%d owner=%d local_owner=%s sync_enabled=%s" % [
+			local_peer_id,
+			network_id,
+			owner_peer_id,
+			str(is_local_owner()),
+			str(sync_enabled)
+		]
+	)
 	
 	# Don't apply if we are the owner (we send states, not apply)
 	if is_local_owner():
@@ -648,7 +656,7 @@ func _request_ownership() -> void:
 		return  # Already requested
 	
 	ownership_requested = true
-	NetworkManager.request_rigid_body_ownership.rpc_id(1, network_id, local_peer_id)  # Request from host
+	NetworkManager.request_rigid_body_ownership.rpc_id(1, network_id)  # Request from host
 
 
 func _set_ownership(peer_id: int) -> void:

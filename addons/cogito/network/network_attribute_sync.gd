@@ -153,7 +153,7 @@ func _on_local_attribute_changed(attribute_name: String, value_current: float, v
 		NetworkEventBus.attribute_changed.emit(player_id, attribute_name, value_current, value_max)
 	
 	# Also send RPC directly for immediate sync
-	NetworkManager.sync_player_attribute.rpc(peer_id, attribute_name, value_current, value_max)
+	NetworkManager.sync_player_attribute.rpc(attribute_name, value_current, value_max)
 	
 	CogitoGlobals.debug_log(
 		enable_logging,
@@ -227,7 +227,10 @@ func _request_initial_attributes() -> void:
 	for attribute_name in player_attributes.keys():
 		var attribute = player_attributes[attribute_name]
 		if attribute:
-			NetworkManager.sync_player_attribute.rpc_id(requester_id, peer_id, attribute_name, attribute.value_current, attribute.value_max)
+			# Note: rpc_id sends to specific peer, but we still use get_remote_sender_id() in the RPC handler
+			# For rpc_id, we need to pass peer_id as parameter since it's a direct call
+			# But for security, the RPC handler should still verify sender
+			NetworkManager.sync_player_attribute.rpc_id(requester_id, attribute_name, attribute.value_current, attribute.value_max)
 			CogitoGlobals.debug_log(
 				enable_logging,
 				"NetworkAttributeSync",

@@ -202,7 +202,7 @@ func _send_state_update(state: Dictionary) -> void:
 		return
 	
 	# Send RPC
-	NetworkManager.sync_player_state.rpc(peer_id, state)
+	NetworkManager.sync_player_state.rpc(state)
 	
 	CogitoGlobals.debug_log(
 		enable_logging,

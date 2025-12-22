@@ -77,8 +77,8 @@ func start_hosting(port: int = 7777, max_peers: int = 4) -> bool:
 		enable_logging, "NetworkManager", "Server started on port %d" % port
 	)
 	
-	if NetworkEventBus:
-		NetworkEventBus.network_connected.emit(local_peer_id)
+	# Don't emit network_connected here - host is ready, but no peers connected yet
+	# Will emit when peers connect via _on_peer_connected() or when client connects via _on_connected_to_server()
 	
 	return true
 
@@ -124,6 +124,9 @@ func disconnect_from_game() -> void:
 	if current_game_mode == GameMode.SINGLE_PLAYER:
 		return
 	
+	# Save previous peer_id before resetting (for disconnect event)
+	var prev_peer_id = local_peer_id
+	
 	if multiplayer_peer:
 		multiplayer_peer.close()
 		multiplayer_peer = null
@@ -140,7 +143,7 @@ func disconnect_from_game() -> void:
 	)
 	
 	if NetworkEventBus:
-		NetworkEventBus.network_disconnected.emit(local_peer_id)
+		NetworkEventBus.network_disconnected.emit(prev_peer_id)
 
 
 ## Check if we're in multiplayer mode
@@ -244,10 +247,15 @@ func _on_server_disconnected() -> void:
 
 ## RPC: Sync player position (called from NetworkPositionSync)
 @rpc("any_peer", "call_local", "unreliable")
-func sync_player_position(peer_id: int, position: Vector3) -> void:
+func sync_player_position(position: Vector3) -> void:
+	# Get actual sender ID (security: don't trust peer_id from parameters)
+	var sender_peer_id = multiplayer.get_remote_sender_id()
+	if sender_peer_id == 0:
+		return  # Invalid sender
+	
 	# Route to the correct player's NetworkPositionSync component
 	if PlayerManager:
-		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		var player_node = PlayerManager.get_player_by_peer_id(sender_peer_id)
 		if player_node:
 			var position_sync = player_node.get_node_or_null("NetworkPositionSync")
 			if position_sync:
@@ -256,10 +264,15 @@ func sync_player_position(peer_id: int, position: Vector3) -> void:
 
 ## RPC: Sync player rotation (called from NetworkRotationSync)
 @rpc("any_peer", "call_local", "unreliable")
-func sync_player_rotation(peer_id: int, body_rotation: float, neck_rotation: float, head_rotation: float) -> void:
+func sync_player_rotation(body_rotation: float, neck_rotation: float, head_rotation: float) -> void:
+	# Get actual sender ID (security: don't trust peer_id from parameters)
+	var sender_peer_id = multiplayer.get_remote_sender_id()
+	if sender_peer_id == 0:
+		return  # Invalid sender
+	
 	# Route to the correct player's NetworkRotationSync component
 	if PlayerManager:
-		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		var player_node = PlayerManager.get_player_by_peer_id(sender_peer_id)
 		if player_node:
 			var rotation_sync = player_node.get_node_or_null("NetworkRotationSync")
 			if rotation_sync:
@@ -268,10 +281,15 @@ func sync_player_rotation(peer_id: int, body_rotation: float, neck_rotation: flo
 
 ## RPC: Sync player attribute (called from NetworkAttributeSync)
 @rpc("any_peer", "call_local", "reliable")
-func sync_player_attribute(peer_id: int, attribute_name: String, current_value: float, max_value: float) -> void:
+func sync_player_attribute(attribute_name: String, current_value: float, max_value: float) -> void:
+	# Get actual sender ID (security: don't trust peer_id from parameters)
+	var sender_peer_id = multiplayer.get_remote_sender_id()
+	if sender_peer_id == 0:
+		return  # Invalid sender
+	
 	# Route to the correct player's NetworkAttributeSync component
 	if PlayerManager:
-		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		var player_node = PlayerManager.get_player_by_peer_id(sender_peer_id)
 		if player_node:
 			var attribute_sync = player_node.get_node_or_null("NetworkAttributeSync")
 			if attribute_sync:
@@ -280,10 +298,15 @@ func sync_player_attribute(peer_id: int, attribute_name: String, current_value: 
 
 ## RPC: Sync player state (called from NetworkPlayerStateSync)
 @rpc("any_peer", "call_local", "unreliable")
-func sync_player_state(peer_id: int, state: Dictionary) -> void:
+func sync_player_state(state: Dictionary) -> void:
+	# Get actual sender ID (security: don't trust peer_id from parameters)
+	var sender_peer_id = multiplayer.get_remote_sender_id()
+	if sender_peer_id == 0:
+		return  # Invalid sender
+	
 	# Route to the correct player's NetworkPlayerStateSync component
 	if PlayerManager:
-		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		var player_node = PlayerManager.get_player_by_peer_id(sender_peer_id)
 		if player_node:
 			var state_sync = player_node.get_node_or_null("NetworkPlayerStateSync")
 			if state_sync:
@@ -292,10 +315,15 @@ func sync_player_state(peer_id: int, state: Dictionary) -> void:
 
 ## RPC: Sync player name (called from lobby or when player joins)
 @rpc("any_peer", "call_local", "reliable")
-func sync_player_name(peer_id: int, player_name: String) -> void:
+func sync_player_name(player_name: String) -> void:
+	# Get actual sender ID (security: don't trust peer_id from parameters)
+	var sender_peer_id = multiplayer.get_remote_sender_id()
+	if sender_peer_id == 0:
+		return  # Invalid sender
+	
 	# Route to PlayerManager to update the name
 	if PlayerManager:
-		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		var player_node = PlayerManager.get_player_by_peer_id(sender_peer_id)
 		if player_node:
 			var player_id = PlayerManager.get_player_id(player_node)
 			if player_id != -1:
@@ -304,24 +332,34 @@ func sync_player_name(peer_id: int, player_name: String) -> void:
 
 ## RPC: Sync player data (centralized player information)
 @rpc("any_peer", "call_local", "reliable")
-func sync_player_data(peer_id: int, data_dict: Dictionary) -> void:
+func sync_player_data(data_dict: Dictionary) -> void:
+	# Get actual sender ID (security: don't trust peer_id from parameters)
+	var sender_peer_id = multiplayer.get_remote_sender_id()
+	if sender_peer_id == 0:
+		return  # Invalid sender
+	
 	# Route to PlayerManager to update player data
 	if PlayerManager:
-		PlayerManager.update_player_data(peer_id, data_dict)
+		PlayerManager.update_player_data(sender_peer_id, data_dict)
 
 
 ## RPC: Request pause (client requests pause from host)
-@rpc("any_peer", "call_local", "reliable")
-func request_pause(requester_peer_id: int) -> void:
+@rpc("any_peer", "reliable")
+func request_pause() -> void:
 	# Only host can authorize pause
 	if not is_host():
 		return
+	
+	# Get actual sender ID (security: don't trust peer_id from parameters)
+	var requester_peer_id = multiplayer.get_remote_sender_id()
+	if requester_peer_id == 0:
+		return  # Invalid sender
 	
 	# Host authorizes pause and notifies all clients
 	if NetworkEventBus:
 		NetworkEventBus.game_paused.emit()
 	
-	# Notify all clients about pause
+	# Notify all clients about pause (host handles locally, no call_local needed)
 	set_game_paused.rpc(true)
 	
 	CogitoGlobals.debug_log(
@@ -332,17 +370,22 @@ func request_pause(requester_peer_id: int) -> void:
 
 
 ## RPC: Request resume (client requests resume from host)
-@rpc("any_peer", "call_local", "reliable")
-func request_resume(requester_peer_id: int) -> void:
+@rpc("any_peer", "reliable")
+func request_resume() -> void:
 	# Only host can authorize resume
 	if not is_host():
 		return
+	
+	# Get actual sender ID (security: don't trust peer_id from parameters)
+	var requester_peer_id = multiplayer.get_remote_sender_id()
+	if requester_peer_id == 0:
+		return  # Invalid sender
 	
 	# Host authorizes resume and notifies all clients
 	if NetworkEventBus:
 		NetworkEventBus.game_resumed.emit()
 	
-	# Notify all clients about resume
+	# Notify all clients about resume (host handles locally, no call_local needed)
 	set_game_paused.rpc(false)
 	
 	CogitoGlobals.debug_log(
@@ -353,9 +396,9 @@ func request_resume(requester_peer_id: int) -> void:
 
 
 ## RPC: Set game paused state (host notifies clients)
-@rpc("any_peer", "call_local", "reliable")
+@rpc("any_peer", "reliable")
 func set_game_paused(paused: bool) -> void:
-	# Update local pause state
+	# Update local pause state (host already handled locally, no call_local needed)
 	if paused:
 		if NetworkEventBus:
 			NetworkEventBus.game_paused.emit()
@@ -372,62 +415,87 @@ func set_game_paused(paused: bool) -> void:
 
 ## RPC: Sync player death (called from NetworkDeathSync)
 @rpc("any_peer", "call_local", "reliable")
-func sync_player_death(peer_id: int) -> void:
+func sync_player_death() -> void:
+	# Get actual sender ID (security: don't trust peer_id from parameters)
+	var sender_peer_id = multiplayer.get_remote_sender_id()
+	if sender_peer_id == 0:
+		return  # Invalid sender
+	
 	# Route to the correct player's NetworkDeathSync component
 	if PlayerManager:
-		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		var player_node = PlayerManager.get_player_by_peer_id(sender_peer_id)
 		if player_node:
 			var death_sync = player_node.get_node_or_null("NetworkDeathSync")
 			if death_sync and death_sync.has_method("_receive_death"):
-				death_sync._receive_death(peer_id)
+				death_sync._receive_death(sender_peer_id)
 
 
 ## RPC: Sync inventory item picked (called from NetworkInventorySync)
 @rpc("any_peer", "call_local", "reliable")
-func sync_inventory_item_picked(peer_id: int, item_data: Dictionary, slot_index: int) -> void:
+func sync_inventory_item_picked(item_data: Dictionary, slot_index: int) -> void:
+	# Get actual sender ID (security: don't trust peer_id from parameters)
+	var sender_peer_id = multiplayer.get_remote_sender_id()
+	if sender_peer_id == 0:
+		return  # Invalid sender
+	
 	# Route to the correct player's NetworkInventorySync component
 	if PlayerManager:
-		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		var player_node = PlayerManager.get_player_by_peer_id(sender_peer_id)
 		if player_node:
 			var inventory_sync = player_node.get_node_or_null("NetworkInventorySync")
 			if inventory_sync and inventory_sync.has_method("_receive_item_picked"):
-				inventory_sync._receive_item_picked(peer_id, item_data, slot_index)
+				inventory_sync._receive_item_picked(sender_peer_id, item_data, slot_index)
 
 
 ## RPC: Sync inventory item dropped (called from NetworkInventorySync)
 @rpc("any_peer", "call_local", "reliable")
-func sync_inventory_item_dropped(peer_id: int, item_data: Dictionary, position: Vector3) -> void:
+func sync_inventory_item_dropped(item_data: Dictionary, position: Vector3) -> void:
+	# Get actual sender ID (security: don't trust peer_id from parameters)
+	var sender_peer_id = multiplayer.get_remote_sender_id()
+	if sender_peer_id == 0:
+		return  # Invalid sender
+	
 	# Route to the correct player's NetworkInventorySync component
 	if PlayerManager:
-		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		var player_node = PlayerManager.get_player_by_peer_id(sender_peer_id)
 		if player_node:
 			var inventory_sync = player_node.get_node_or_null("NetworkInventorySync")
 			if inventory_sync and inventory_sync.has_method("_receive_item_dropped"):
-				inventory_sync._receive_item_dropped(peer_id, item_data, position)
+				inventory_sync._receive_item_dropped(sender_peer_id, item_data, position)
 
 
 ## RPC: Sync inventory item used (called from NetworkInventorySync)
 @rpc("any_peer", "call_local", "reliable")
-func sync_inventory_item_used(peer_id: int, item_data: Dictionary) -> void:
+func sync_inventory_item_used(item_data: Dictionary) -> void:
+	# Get actual sender ID (security: don't trust peer_id from parameters)
+	var sender_peer_id = multiplayer.get_remote_sender_id()
+	if sender_peer_id == 0:
+		return  # Invalid sender
+	
 	# Route to the correct player's NetworkInventorySync component
 	if PlayerManager:
-		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		var player_node = PlayerManager.get_player_by_peer_id(sender_peer_id)
 		if player_node:
 			var inventory_sync = player_node.get_node_or_null("NetworkInventorySync")
 			if inventory_sync and inventory_sync.has_method("_receive_item_used"):
-				inventory_sync._receive_item_used(peer_id, item_data)
+				inventory_sync._receive_item_used(sender_peer_id, item_data)
 
 
 ## RPC: Sync pickup item removed from world (called when item is used/consumed from world)
 @rpc("any_peer", "call_local", "reliable")
-func sync_pickup_item_removed(peer_id: int, item_data: Dictionary) -> void:
+func sync_pickup_item_removed(item_data: Dictionary) -> void:
+	# Get actual sender ID (security: don't trust peer_id from parameters)
+	var sender_peer_id = multiplayer.get_remote_sender_id()
+	if sender_peer_id == 0:
+		return  # Invalid sender
+	
 	# Route to the correct player's NetworkInventorySync component
 	if PlayerManager:
-		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		var player_node = PlayerManager.get_player_by_peer_id(sender_peer_id)
 		if player_node:
 			var inventory_sync = player_node.get_node_or_null("NetworkInventorySync")
 			if inventory_sync and inventory_sync.has_method("_receive_pickup_removed"):
-				inventory_sync._receive_pickup_removed(peer_id, item_data)
+				inventory_sync._receive_pickup_removed(sender_peer_id, item_data)
 
 
 ## RPC: Sync rigid body state (called from NetworkRigidSync)
@@ -441,11 +509,16 @@ func sync_rigid_body_state(state_data: Dictionary) -> void:
 
 
 ## RPC: Request rigid body ownership (called from client when picking up object)
-@rpc("any_peer", "call_local", "reliable")
-func request_rigid_body_ownership(network_id: int, requesting_peer_id: int) -> void:
+@rpc("any_peer", "reliable")
+func request_rigid_body_ownership(network_id: int) -> void:
 	# Only host processes ownership requests
 	if not is_host():
 		return
+	
+	# Get actual sender ID (security: don't trust peer_id from parameters)
+	var requesting_peer_id = multiplayer.get_remote_sender_id()
+	if requesting_peer_id == 0:
+		return  # Invalid sender
 	
 	# Route to NetworkRigidSyncManager
 	if NetworkRigidSyncManager:
@@ -474,14 +547,19 @@ func return_rigid_body_ownership(network_id: int) -> void:
 
 ## RPC: Sync wieldable change (called from NetworkWieldableSync)
 @rpc("any_peer", "call_local", "reliable")
-func sync_wieldable_change(peer_id: int, wieldable_data: Dictionary) -> void:
+func sync_wieldable_change(wieldable_data: Dictionary) -> void:
+	# Get actual sender ID (security: don't trust peer_id from parameters)
+	var sender_peer_id = multiplayer.get_remote_sender_id()
+	if sender_peer_id == 0:
+		return  # Invalid sender
+	
 	# Route to the correct player's NetworkWieldableSync component
 	if PlayerManager:
-		var player_node = PlayerManager.get_player_by_peer_id(peer_id)
+		var player_node = PlayerManager.get_player_by_peer_id(sender_peer_id)
 		if player_node:
 			var wieldable_sync = player_node.get_node_or_null("NetworkWieldableSync")
 			if wieldable_sync and wieldable_sync.has_method("_receive_wieldable_change"):
-				wieldable_sync._receive_wieldable_change(peer_id, wieldable_data)
+				wieldable_sync._receive_wieldable_change(sender_peer_id, wieldable_data)
 
 
 ## RPC: Sync pickup network_id (called from NetworkPickupID on host)

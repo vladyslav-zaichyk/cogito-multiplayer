@@ -92,7 +92,7 @@ func _on_local_death() -> void:
 		"Local player died, syncing to all clients"
 	)
 	
-	NetworkManager.sync_player_death.rpc(peer_id)
+	NetworkManager.sync_player_death.rpc()
 
 
 ## Request respawn (called from death screen)

@@ -223,7 +223,7 @@ func _spawn_local_player() -> void:
 				PlayerManager.set_player_name(player_id, player_data.player_name)
 			
 			# Sync player data via RPC (this includes name and other info)
-			NetworkManager.sync_player_data.rpc(local_peer_id, player_data.to_dict())
+			NetworkManager.sync_player_data.rpc(player_data.to_dict())
 			
 			CogitoGlobals.debug_log(
 				true,  # Always log this
@@ -277,7 +277,7 @@ func _spawn_remote_players() -> void:
 			if host_data:
 				host_data.player_name = host_name
 				host_data.spawn_position = host_spawn_pos
-				NetworkManager.sync_player_data.rpc(1, host_data.to_dict())
+				NetworkManager.sync_player_data.rpc(host_data.to_dict())
 			
 			CogitoGlobals.debug_log(
 				enable_logging,
@@ -458,7 +458,7 @@ func _player_spawned(peer_id: int, spawn_position: Vector3, player_name: String 
 						PlayerManager.set_player_name(player_id, player_name)
 						
 						# Also sync the player data via RPC to all clients
-						NetworkManager.sync_player_data.rpc(peer_id, player_data.to_dict())
+						NetworkManager.sync_player_data.rpc(player_data.to_dict())
 						CogitoGlobals.debug_log(
 							true,  # Always log this
 							"PlayerSpawner",
@@ -556,7 +556,7 @@ func _player_spawned(peer_id: int, spawn_position: Vector3, player_name: String 
 			PlayerManager.set_player_name(player_id, player_name)
 			# Also sync the player data via RPC to ensure all clients have the correct name
 			if NetworkManager and NetworkManager.is_multiplayer() and player_data:
-				NetworkManager.sync_player_data.rpc(peer_id, player_data.to_dict())
+				NetworkManager.sync_player_data.rpc(player_data.to_dict())
 		
 		CogitoGlobals.debug_log(
 			enable_logging,

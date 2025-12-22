@@ -321,19 +321,24 @@ func _receive_rigid_state(state_data: Dictionary, sender_peer_id: int) -> void:
 	# Find the component and apply state
 	var component = get_rigid_body(network_id)
 	
-	# Diagnostic logging
-	var local_peer_id = NetworkManager.get_local_peer_id() if NetworkManager else -1
-	var component_owner = -1
-	if component and "owner_peer_id" in component:
-		component_owner = component.owner_peer_id
+	# Get local peer ID early (needed for ownership checks)
+	var local_peer_id: int = -1
+	if NetworkManager and NetworkManager.is_multiplayer():
+		local_peer_id = NetworkManager.get_local_peer_id()
 	
-	print("[Mgr] peer=%d got state id=%d from=%d has=%s owner=%d" % [
-		local_peer_id,
-		network_id,
-		sender_peer_id,
-		str(component != null),
-		component_owner
-	])
+	# Diagnostic logging (throttled to avoid spam)
+	# Use debug_log instead of print, and only log if enabled
+	CogitoGlobals.debug_log(
+		enable_logging,
+		"NetworkRigidSyncManager",
+		"[Mgr] peer=%d got state id=%d from=%d has=%s owner=%d" % [
+			local_peer_id,
+			network_id,
+			sender_peer_id,
+			str(component != null),
+			component.owner_peer_id if component and "owner_peer_id" in component else -1
+		]
+	)
 	
 	if not component or not component.has_method("_receive_state_update"):
 		return
@@ -345,13 +350,14 @@ func _receive_rigid_state(state_data: Dictionary, sender_peer_id: int) -> void:
 			return
 		
 		# Check if component has ownership info
-		if "owner_peer_id" in component and component.has_method("is_local_owner"):
-			if component.is_local_owner():
-				return
-		elif "owner_peer_id" in component:
-			var owner_peer_id = component.owner_peer_id
-			if owner_peer_id == local_peer_id:
-				return
+		if "owner_peer_id" in component:
+			if component.has_method("is_local_owner"):
+				if component.is_local_owner():
+					return
+			else:
+				var owner_peer_id = component.owner_peer_id
+				if owner_peer_id == local_peer_id:
+					return
 	
 	component._receive_state_update(state_data)
 

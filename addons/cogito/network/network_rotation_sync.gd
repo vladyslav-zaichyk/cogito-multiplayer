@@ -265,7 +265,7 @@ func _send_rotation_update() -> void:
 				current_head_rotation
 			]
 		)
-		NetworkManager.sync_player_rotation.rpc(peer_id, current_body_rotation, current_neck_rotation, current_head_rotation)
+		NetworkManager.sync_player_rotation.rpc(current_body_rotation, current_neck_rotation, current_head_rotation)
 
 
 ## Receive rotation update (called from NetworkManager RPC)
@@ -370,4 +370,4 @@ func force_sync_rotation(body_rotation: float, neck_rotation: float, head_rotati
 		target_head_rotation = head_rotation
 	
 	if is_local and NetworkManager and NetworkManager.is_multiplayer():
-		NetworkManager.sync_player_rotation.rpc(peer_id, body_rotation, neck_rotation, head_rotation)
+		NetworkManager.sync_player_rotation.rpc(body_rotation, neck_rotation, head_rotation)

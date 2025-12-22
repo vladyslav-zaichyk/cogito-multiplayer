@@ -160,7 +160,7 @@ func _send_position_update() -> void:
 	
 	# Send RPC through NetworkManager (autoload singleton, always available)
 	if NetworkManager and NetworkManager.is_multiplayer():
-		NetworkManager.sync_player_position.rpc(peer_id, current_position)
+		NetworkManager.sync_player_position.rpc(current_position)
 
 
 ## Receive position update (called from NetworkManager RPC)
@@ -218,4 +218,4 @@ func force_sync_position(position: Vector3) -> void:
 	target_position = position
 	
 	if is_local and NetworkManager and NetworkManager.is_multiplayer():
-		NetworkManager.sync_player_position.rpc(peer_id, position)
+		NetworkManager.sync_player_position.rpc(position)
