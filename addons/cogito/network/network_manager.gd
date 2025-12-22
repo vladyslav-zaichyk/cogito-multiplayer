@@ -431,11 +431,45 @@ func sync_pickup_item_removed(peer_id: int, item_data: Dictionary) -> void:
 
 
 ## RPC: Sync rigid body state (called from NetworkRigidSync)
-@rpc("any_peer", "call_local", "unreliable")
+@rpc("any_peer", "unreliable")
 func sync_rigid_body_state(state_data: Dictionary) -> void:
 	# Route to NetworkRigidSyncManager
+	# Note: removed call_local - use sender_peer_id to filter own packets
 	if NetworkRigidSyncManager:
-		NetworkRigidSyncManager._receive_rigid_state(state_data)
+		var sender_peer_id = multiplayer.get_remote_sender_id()
+		NetworkRigidSyncManager._receive_rigid_state(state_data, sender_peer_id)
+
+
+## RPC: Request rigid body ownership (called from client when picking up object)
+@rpc("any_peer", "call_local", "reliable")
+func request_rigid_body_ownership(network_id: int, requesting_peer_id: int) -> void:
+	# Only host processes ownership requests
+	if not is_host():
+		return
+	
+	# Route to NetworkRigidSyncManager
+	if NetworkRigidSyncManager:
+		NetworkRigidSyncManager._handle_ownership_request(network_id, requesting_peer_id)
+
+
+## RPC: Grant rigid body ownership (called from host to grant ownership)
+@rpc("any_peer", "call_local", "reliable")
+func grant_rigid_body_ownership(network_id: int, owner_peer_id: int) -> void:
+	# Route to NetworkRigidSyncManager
+	if NetworkRigidSyncManager:
+		NetworkRigidSyncManager._handle_ownership_grant(network_id, owner_peer_id)
+
+
+## RPC: Return rigid body ownership (called from client when object sleeps)
+@rpc("any_peer", "call_local", "reliable")
+func return_rigid_body_ownership(network_id: int) -> void:
+	# Only host processes ownership returns
+	if not is_host():
+		return
+	
+	# Route to NetworkRigidSyncManager
+	if NetworkRigidSyncManager:
+		NetworkRigidSyncManager._handle_ownership_return(network_id)
 
 
 ## RPC: Sync wieldable change (called from NetworkWieldableSync)
@@ -483,6 +517,82 @@ func sync_pickup_network_id(scene_path_str: String, network_id: int, position: V
 	
 	# If path doesn't work, try to find by position and item name (for dynamically spawned items)
 	_find_pickup_by_position_and_set_id(position, network_id, item_name)
+
+
+## RPC: Sync rigid body network_id (called from NetworkRigidBodyID on host)
+@rpc("any_peer", "call_local", "reliable")
+func sync_rigid_body_network_id(scene_path_str: String, network_id: int, position: Vector3) -> void:
+	# Find the rigid body by scene path and set its network_id
+	var scene_root = get_tree().current_scene
+	if not scene_root:
+		return
+	
+	# Try to parse scene_path_str as NodePath
+	var scene_path = NodePath(scene_path_str)
+	var target_node = scene_root.get_node_or_null(scene_path)
+	
+	if target_node and target_node is RigidBody3D:
+		# Find NetworkRigidBodyID component
+		for child in target_node.get_children():
+			if child.has_method("set_network_id") and child.get_script() and child.get_script().resource_path.ends_with("network_rigid_body_id.gd"):
+				child.set_network_id(network_id)
+				return
+		
+		# If not found, add NetworkRigidBodyID component
+		var network_id_component = preload("res://addons/cogito/network/network_rigid_body_id.gd").new()
+		network_id_component.name = "NetworkRigidBodyID"
+		target_node.add_child(network_id_component)
+		network_id_component.set_network_id(network_id)
+		return
+	
+	# If path doesn't work, try to find by position (for dynamically spawned items)
+	_find_rigid_body_by_position_and_set_id(position, network_id)
+
+
+## Helper: Find rigid body by position and set network_id
+func _find_rigid_body_by_position_and_set_id(position: Vector3, network_id: int) -> void:
+	var scene_root = get_tree().current_scene
+	if not scene_root:
+		return
+	
+	var all_nodes = scene_root.get_children()
+	var nodes_to_check = []
+	nodes_to_check.append_array(all_nodes)
+	
+	var closest_match = null
+	var closest_distance = 0.5  # Max distance to consider a match
+	
+	# Recursively find all nodes
+	while nodes_to_check.size() > 0:
+		var node = nodes_to_check.pop_front()
+		if not is_instance_valid(node):
+			continue
+		
+		# Check if this node is a RigidBody3D without NetworkRigidBodyID
+		if node is RigidBody3D:
+			var has_network_id = false
+			for child in node.get_children():
+				if child.has_method("get_network_id") and child.get_script() and child.get_script().resource_path.ends_with("network_rigid_body_id.gd"):
+					has_network_id = true
+					break
+			
+			if not has_network_id:
+				# Check distance
+				var distance = node.global_position.distance_to(position)
+				if distance < closest_distance:
+					closest_match = node
+					closest_distance = distance
+		
+		# Add children to check
+		for child in node.get_children():
+			nodes_to_check.append(child)
+	
+	if closest_match:
+		# Add NetworkRigidBodyID component if it doesn't exist
+		var network_id_component = preload("res://addons/cogito/network/network_rigid_body_id.gd").new()
+		network_id_component.name = "NetworkRigidBodyID"
+		closest_match.add_child(network_id_component)
+		network_id_component.set_network_id(network_id)
 
 
 ## Helper: Find pickup by position and set network_id
@@ -604,12 +714,18 @@ func sync_object_spawn(spawn_data: Dictionary) -> void:
 	if current_scene:
 		current_scene.add_child(spawned_object)
 		
-		# If this is a pickup item, add NetworkPickupID if it doesn't have one
-		if spawned_object.has_method("get") and "PickupComponent" in spawned_object.get_groups():
+		# If this is a pickup item (has PickupComponent child), add NetworkPickupID if it doesn't have one
+		var has_pickup_component = false
+		for child in spawned_object.get_children():
+			if child is PickupComponent:
+				has_pickup_component = true
+				break
+		
+		if has_pickup_component:
 			# Check if it already has NetworkPickupID
 			var has_network_id = false
 			for child in spawned_object.get_children():
-				if child.has_method("get_network_id"):
+				if child.has_method("get_network_id") and child.get_script() and child.get_script().resource_path.ends_with("network_pickup_id.gd"):
 					has_network_id = true
 					break
 			
