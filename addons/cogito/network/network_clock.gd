@@ -39,4 +39,3 @@ func sync_host_time(host_time: float) -> void:
 	# EMA filter для згладжування
 	time_offset = lerp(time_offset, new_offset, 0.1)
 	estimated_host_time = local_receive_time + time_offset
-

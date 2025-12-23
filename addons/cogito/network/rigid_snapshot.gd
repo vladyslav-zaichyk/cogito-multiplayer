@@ -12,4 +12,5 @@ var flags: int = 0
 const FLAG_KEYFRAME = 1
 const FLAG_TELEPORT = 2
 const FLAG_OWNERSHIP_CHANGE = 4
+const FLAG_IS_CARRIED = 8
 

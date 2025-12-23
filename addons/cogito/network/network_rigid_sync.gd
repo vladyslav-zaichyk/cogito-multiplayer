@@ -22,6 +22,8 @@ var extrapolation_limit: float = 0.2  # 200ms
 var snap_threshold: float = 1.0
 var teleport_threshold: float = 5.0
 
+var is_remote_carried: bool = false  # Чи тримає хтось об'єкт (з пакетів)
+
 var carryable_component: Node = null
 var owner_peer_id: int = 1
 var ownership_requested: bool = false
@@ -238,6 +240,10 @@ func _send_state_update(state: Array, flags: int = 0) -> void:
 	if not (is_finite(pos.x) and is_finite(pos.y) and is_finite(pos.z)):
 		return
 	
+	# Перевіряємо, чи ми несемо об'єкт
+	if _is_carried_locally():
+		flags |= RigidSnapshot.FLAG_IS_CARRIED
+	
 	# Додаємо flags в кінець
 	state.append(flags)
 	NetworkManager.sync_rigid_body_state.rpc(state)
@@ -264,6 +270,12 @@ func _receive_state_update(state_data: Array) -> void:
 	var ang_vel: Vector3 = state_data[5]
 	var flags: int = state_data[6] if state_data.size() > 6 else 0
 	
+	# Читаємо статус "в руках" з пакету
+	if flags & RigidSnapshot.FLAG_IS_CARRIED:
+		is_remote_carried = true
+	else:
+		is_remote_carried = false
+	
 	# Валідація
 	if not (is_finite(pos.x) and is_finite(pos.y) and is_finite(pos.z)):
 		return
@@ -282,12 +294,31 @@ func _receive_state_update(state_data: Array) -> void:
 	snapshot.angular_velocity = ang_vel
 	snapshot.flags = flags
 	
-	# Якщо keyframe/teleport/ownership_change - очищаємо буфер і робимо snap
-	if flags & (RigidSnapshot.FLAG_KEYFRAME | RigidSnapshot.FLAG_TELEPORT | RigidSnapshot.FLAG_OWNERSHIP_CHANGE):
+	# Якщо teleport - очищаємо буфер і робимо snap
+	if flags & RigidSnapshot.FLAG_TELEPORT:
 		snapshot_buffer.clear()
 		_apply_snapshot_immediate(snapshot)
 		snapshot_buffer.append(snapshot)
 		return
+	
+	# Якщо keyframe або ownership_change - можна очистити буфер, але тільки якщо позиція сильно відрізняється
+	if flags & (RigidSnapshot.FLAG_KEYFRAME | RigidSnapshot.FLAG_OWNERSHIP_CHANGE):
+		# Перевіряємо, чи позиція сильно відрізняється від останнього snapshot'а
+		var should_clear = false
+		if snapshot_buffer.size() > 0:
+			var last_snap = snapshot_buffer[snapshot_buffer.size() - 1]
+			var dist = last_snap.position.distance_to(pos)
+			# Якщо позиція відрізняється більше ніж на snap_threshold - очищаємо
+			if dist > snap_threshold:
+				should_clear = true
+		else:
+			should_clear = true
+		
+		if should_clear:
+			snapshot_buffer.clear()
+			_apply_snapshot_immediate(snapshot)
+			snapshot_buffer.append(snapshot)
+			return
 	
 	# Перевірка на телепорт (велика зміна позиції)
 	if snapshot_buffer.size() > 0:
@@ -598,8 +629,9 @@ func _set_ownership(peer_id: int) -> void:
 			push_warning("NetworkRigidSync: freeze was true after becoming owner! Forcing to false for network_id=%d" % network_id)
 			parent_rigid_body.freeze = false
 	else:
-		# Перестали бути owner - очищаємо буфер
-		snapshot_buffer.clear()
+		# Перестали бути owner - стаємо спостерігачем
+		# НЕ очищаємо буфер! Дозволяємо інтерполяції "дограти" старі дані
+		# від попереднього owner'а, поки не почнуть приходити пакети від нового
 		parent_rigid_body.freeze = true
 		parent_rigid_body.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 

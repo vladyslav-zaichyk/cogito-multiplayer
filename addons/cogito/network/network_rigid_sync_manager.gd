@@ -8,6 +8,9 @@ var auto_add_helper_script: bool = true
 var _rigid_body_bubbles: Dictionary = {}
 var _ownership_update_timer: float = 0.0
 var _ownership_update_interval: float = 0.1
+var _ownership_change_times: Dictionary = {}  # network_id -> timestamp останньої зміни
+var _ownership_cooldown: float = 1.5  # Не міняти частіше ніж раз на 1.5 сек
+var _ownership_hysteresis: float = 2.0  # Новий власник має бути на 2 метри ближче
 
 const COMPONENT_NAME = "NetworkRigidSync"
 const COMPONENT_SCRIPT = preload("res://addons/cogito/network/network_rigid_sync.gd")
@@ -204,6 +207,24 @@ func _process(delta: float) -> void:
 		if not rb or not is_instance_valid(rb):
 			continue
 		
+		# ФІКС КОНФЛІКТУ З РУКАМИ
+		# 1. Якщо ХОСТ тримає об'єкт (локально) - нікому не віддавати
+		if component.has_method("_is_carried_locally") and component._is_carried_locally():
+			continue
+		
+		# 2. Якщо КЛІЄНТ тримає об'єкт (ми дізналися про це через прапорець FLAG_IS_CARRIED)
+		if "is_remote_carried" in component and component.is_remote_carried:
+			# Примусово оновлюємо таймер, ніби ми щойно поміняли овнера.
+			# Це не дасть менеджеру спробувати забрати права назад.
+			_ownership_change_times[network_id] = Time.get_ticks_msec() / 1000.0
+			continue
+		
+		# Перевірка cooldown - не міняти частіше ніж раз на _ownership_cooldown секунд
+		var last_change_time = _ownership_change_times.get(network_id, 0.0)
+		var current_time = Time.get_ticks_msec() / 1000.0
+		if current_time - last_change_time < _ownership_cooldown:
+			continue
+		
 		var bubble_peers: Array = _rigid_body_bubbles.get(network_id, [])
 		var desired_owner := _choose_owner_for_rigid(network_id, rb, bubble_peers)
 		if desired_owner == -1:
@@ -213,8 +234,16 @@ func _process(delta: float) -> void:
 		if "owner_peer_id" in component:
 			current_owner = component.owner_peer_id
 		
-		if desired_owner != current_owner and NetworkManager:
-			NetworkManager.grant_rigid_body_ownership.rpc(network_id, desired_owner)
+		# Перевірка hysteresis - новий власник має бути значно ближче
+		if desired_owner != current_owner:
+			if current_owner != 1:  # Якщо не хост, перевіряємо відстань
+				var should_change = _should_change_owner(network_id, rb, current_owner, desired_owner, bubble_peers)
+				if not should_change:
+					continue
+			
+			if NetworkManager:
+				_ownership_change_times[network_id] = current_time
+				NetworkManager.grant_rigid_body_ownership.rpc(network_id, desired_owner)
 
 
 func _choose_owner_for_rigid(network_id: int, rb: RigidBody3D, bubble_peers: Array) -> int:
@@ -246,6 +275,32 @@ func _choose_owner_for_rigid(network_id: int, rb: RigidBody3D, bubble_peers: Arr
 	
 	return closest_peer_id
 
+
+func _should_change_owner(network_id: int, rb: RigidBody3D, current_owner: int, desired_owner: int, bubble_peers: Array) -> bool:
+	# Hysteresis: новий власник має бути значно ближче (_ownership_hysteresis метрів)
+	if not PlayerManager:
+		return true
+	
+	var rb_pos: Vector3 = rb.global_position
+	
+	# Отримуємо позицію поточного власника
+	var current_owner_node = PlayerManager.get_player_by_peer_id(current_owner)
+	if not current_owner_node or not (current_owner_node is Node3D):
+		return true  # Якщо поточний власник не знайдений, дозволяємо зміну
+	
+	var current_owner_pos = (current_owner_node as Node3D).global_position
+	var current_dist = rb_pos.distance_to(current_owner_pos)
+	
+	# Отримуємо позицію бажаного власника
+	var desired_owner_node = PlayerManager.get_player_by_peer_id(desired_owner)
+	if not desired_owner_node or not (desired_owner_node is Node3D):
+		return false  # Якщо бажаний власник не знайдений, не міняємо
+	
+	var desired_owner_pos = (desired_owner_node as Node3D).global_position
+	var desired_dist = rb_pos.distance_to(desired_owner_pos)
+	
+	# Новий власник має бути ближче на _ownership_hysteresis метрів
+	return desired_dist < (current_dist - _ownership_hysteresis)
 
 
 func _enable_sync_for_component(component: Node, network_id: int) -> void:
