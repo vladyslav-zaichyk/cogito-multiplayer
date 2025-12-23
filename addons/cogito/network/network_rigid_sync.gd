@@ -23,6 +23,7 @@ var snap_threshold: float = 1.0
 var teleport_threshold: float = 5.0
 
 var is_remote_carried: bool = false  # Чи тримає хтось об'єкт (з пакетів)
+var host_ownership_lock_timer: float = 0.0  # Таймер блокування передачі прав (для Хоста)
 
 var carryable_component: Node = null
 var owner_peer_id: int = 1
@@ -107,6 +108,10 @@ func _physics_process(_delta: float) -> void:
 	
 	if not NetworkManager or not NetworkManager.is_multiplayer():
 		return
+	
+	# Зменшуємо таймер блокування передачі прав
+	if host_ownership_lock_timer > 0.0:
+		host_ownership_lock_timer -= _delta
 	
 	if not is_local_owner() and not _is_carried_locally():
 		_interpolate_to_target(_delta)
@@ -557,7 +562,12 @@ func _on_carry_state_changed(is_carried: bool) -> void:
 			_request_ownership()
 			drop_timer = 0.0
 	else:
-		if local_peer_id != 1:
+		if local_peer_id == 1:
+			# Хост кинув об'єкт. Блокуємо передачу прав на 1.5 секунди.
+			# Нехай об'єкт летить під контролем Хоста (Server Authority).
+			# Клієнти будуть просто інтерполювати його політ (плавно).
+			host_ownership_lock_timer = 1.5
+		elif local_peer_id != 1:
 			drop_timer = 0.001
 
 

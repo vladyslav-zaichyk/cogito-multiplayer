@@ -212,6 +212,12 @@ func _process(delta: float) -> void:
 		if component.has_method("_is_carried_locally") and component._is_carried_locally():
 			continue
 		
+		# ФІКС: ПЕРЕВІРКА ТАЙМЕРА БЛОКУВАННЯ
+		# Якщо Хост щойно кинув об'єкт (він в польоті) - не міняти овнера
+		# Це запобігає "кланкінесу" при кидку, коли об'єкт влітає в бульбашку клієнта
+		if "host_ownership_lock_timer" in component and component.host_ownership_lock_timer > 0.0:
+			continue
+		
 		# 2. Якщо КЛІЄНТ тримає об'єкт (ми дізналися про це через прапорець FLAG_IS_CARRIED)
 		if "is_remote_carried" in component and component.is_remote_carried:
 			# Примусово оновлюємо таймер, ніби ми щойно поміняли овнера.
