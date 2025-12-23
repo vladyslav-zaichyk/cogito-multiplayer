@@ -752,7 +752,9 @@ func sync_interactable_state(interactable_data: Dictionary) -> void:
 func _find_network_interactables(node: Node, result: Array) -> void:
 	for child in node.get_children():
 		if child.has_method("_receive_state_update"):
-			result.append(child)
+			var script = child.get_script()
+			if script and script.resource_path.ends_with("network_interactable.gd"):
+				result.append(child)
 		_find_network_interactables(child, result)
 
 
