@@ -17,7 +17,7 @@ var last_sent_state: Array = []
 
 var snapshot_buffer: Array = []  # Array of RigidSnapshot
 var max_buffer_size: int = 40
-var interpolation_back_time: float = 0.12  # 120ms
+var interpolation_back_time: float = 0.06  # 60ms (зменшено для меншої затримки)
 var extrapolation_limit: float = 0.2  # 200ms
 var snap_threshold: float = 1.0
 var teleport_threshold: float = 5.0
@@ -62,10 +62,12 @@ func _ready() -> void:
 			retries += 1
 	
 	if network_id == 0:
-		push_error("NetworkRigidSync: Failed to get network_id for %s after retries" % parent_rigid_body.name)
+		# Не критична помилка - спробуємо зареєструватися пізніше
+		# Це може статися якщо NetworkRigidBodyID ще не ініціалізований
 		_try_register_later()
-	elif NetworkRigidSyncManager:
-		NetworkRigidSyncManager.register_rigid_body(self)
+	else:
+		if NetworkRigidSyncManager:
+			NetworkRigidSyncManager.register_rigid_body(self)
 	
 	_find_carryable_component()
 	if carryable_component and carryable_component.has_signal("carry_state_changed"):
@@ -597,13 +599,34 @@ func _set_ownership(peer_id: int) -> void:
 	if peer_id == local_peer_id:
 		# Стали owner - відправляємо keyframe
 		var preserve_velocity = parent_rigid_body.linear_velocity
+		var preserve_angular = parent_rigid_body.angular_velocity
+		
+		# ФІКС: Телепортуємо об'єкт у "теперішній час" сервера
+		# Інакше він впаде вдруге з тієї точки, де була візуальна інтерполяція (в минулому)
 		if snapshot_buffer.size() > 0:
 			var last_snap = snapshot_buffer[snapshot_buffer.size() - 1]
 			preserve_velocity = last_snap.linear_velocity
+			preserve_angular = last_snap.angular_velocity
+			
+			# ВАЖЛИВО: Телепортуємо об'єкт до позиції з останнього snapshot'а
+			# Це скасовує відставання інтерполяції (interpolation_back_time)
+			var body_rid = parent_rigid_body.get_rid()
+			if body_rid.is_valid():
+				var target_transform = Transform3D(Basis(last_snap.rotation), last_snap.position)
+				PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_TRANSFORM, target_transform)
+			else:
+				parent_rigid_body.global_position = last_snap.position
+				parent_rigid_body.quaternion = last_snap.rotation
 		
 		parent_rigid_body.freeze = false
 		parent_rigid_body.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
-		parent_rigid_body.linear_velocity = preserve_velocity
+		
+		# Застосовуємо швидкості
+		if parent_rigid_body.has_method("apply_network_velocity"):
+			parent_rigid_body.apply_network_velocity(preserve_velocity, preserve_angular)
+		else:
+			parent_rigid_body.linear_velocity = preserve_velocity
+			parent_rigid_body.angular_velocity = preserve_angular
 		
 		if parent_rigid_body.sleeping:
 			parent_rigid_body.sleeping = false

@@ -143,7 +143,7 @@ func _on_wieldable_updated(wieldable_item: WieldableItemPD, ammo_count: int, amm
 	
 	# Sync wieldable change to all clients
 	if NetworkManager.is_multiplayer() and peer_id > 0:
-		NetworkManager.sync_wieldable_change.rpc(peer_id, wieldable_data)
+		NetworkManager.sync_wieldable_change.rpc(wieldable_data)
 
 
 ## Serialize wieldable data for RPC
