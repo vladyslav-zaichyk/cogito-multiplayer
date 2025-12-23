@@ -10,9 +10,7 @@ extends Area3D
 var parent_rigid_body: RigidBody3D = null
 var network_sync: Node = null  ## NetworkRigidSync
 
-## Радіус бульбашки в метрах (за замовчуванням 2.5м)
-## Можна змінити в Inspector або через код
-@export var bubble_radius: float = 2.5
+@export var bubble_radius: float = 1.5
 
 ## Collision mask для детекції гравців
 ## За замовчуванням детектуємо layer 1 (CharacterBody3D зазвичай там)

@@ -499,10 +499,9 @@ func sync_pickup_item_removed(item_data: Dictionary) -> void:
 
 
 ## RPC: Sync rigid body state (called from NetworkRigidSync)
+## state_data: Array[network_id, position, quaternion, linear_velocity, angular_velocity]
 @rpc("any_peer", "unreliable")
-func sync_rigid_body_state(state_data: Dictionary) -> void:
-	# Route to NetworkRigidSyncManager
-	# Note: removed call_local - use sender_peer_id to filter own packets
+func sync_rigid_body_state(state_data: Array) -> void:
 	if NetworkRigidSyncManager:
 		var sender_peer_id = multiplayer.get_remote_sender_id()
 		NetworkRigidSyncManager._receive_rigid_state(state_data, sender_peer_id)

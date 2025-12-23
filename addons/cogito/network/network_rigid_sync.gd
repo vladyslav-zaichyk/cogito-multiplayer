@@ -4,43 +4,32 @@ extends Node
 ## During carry: Client-authority (client-owner simulates and sends states, host and other clients apply states)
 
 var parent_rigid_body: RigidBody3D = null
-var network_id: int = 0  # Stable network ID (set by NetworkRigidBodyID component)
-var network_id_component: Node = null  # Reference to NetworkRigidBodyID
+var network_id: int = 0
+var network_id_component: Node = null
 var sync_enabled: bool = false
-
-# Enable/disable logging
 var enable_logging: bool = false
 
-# Rate limiting
-var send_interval_frames: int = 2  # Send every 2 frames for smoother sync
-var frames_since_last_send: int = 0
-var last_sent_state: Dictionary = {}
+var sync_rate: float = 20.0
+var _sync_timer: float = 0.0
+var last_sent_state: Array = []
 
-# Client state application
-var pending_state: Dictionary = {}
+var pending_state: Array = []
 var has_pending_state: bool = false
 
-# Interpolation targets
 var target_transform: Transform3D = Transform3D.IDENTITY
 var target_linear_velocity: Vector3 = Vector3.ZERO
 var target_angular_velocity: Vector3 = Vector3.ZERO
 var has_target: bool = false
 
-# Interpolation settings
-var interpolation_frames: int = 2  # Interpolate over 2 physics ticks
+var interpolation_frames: int = 2
 var interpolation_frame_count: int = 0
-var snap_threshold: float = 1.0  # If error > 1.0m, snap instead of interpolate
+var snap_threshold: float = 1.0
 
-# Carry handling (for skipping state application when carried locally)
 var carryable_component: Node = null
-
-# Ownership (for client-carried objects)
-var owner_peer_id: int = 1  # Default: host is owner (peer 1)
+var owner_peer_id: int = 1
 var ownership_requested: bool = false
-
-# Timer for returning ownership after drop
 var drop_timer: float = 0.0
-var drop_timer_duration: float = 1.0  # Return ownership after 1 second of not being carried
+var drop_timer_duration: float = 1.0
 
 
 func _ready() -> void:
@@ -50,17 +39,12 @@ func _ready() -> void:
 		return
 	
 	await get_tree().process_frame
-	
-	# Find or create NetworkRigidBodyID component
 	_find_network_id_component()
 	
-	# Wait for network_id to be set (host generates it and syncs to clients)
 	if NetworkManager and NetworkManager.is_multiplayer() and NetworkManager.is_host():
-		# Host generates network_id immediately
 		if not network_id_component:
 			network_id = await _generate_network_id()
 		else:
-			# Component already exists, wait for it to generate network_id
 			var retries = 0
 			while network_id == 0 and retries < 10:
 				await get_tree().process_frame
@@ -68,27 +52,21 @@ func _ready() -> void:
 					network_id = network_id_component.get_network_id()
 				retries += 1
 	else:
-		# Client waits for network_id from host via RPC
-		# Retry until network_id is received (up to 2 seconds)
 		var retries = 0
-		var max_retries = 40  # 40 * 0.05s = 2 seconds
+		var max_retries = 40
 		while network_id == 0 and retries < max_retries:
 			await get_tree().create_timer(0.05).timeout
-			_find_network_id_component()  # Re-check in case component was added
+			_find_network_id_component()
 			if network_id_component and network_id_component.has_method("get_network_id"):
 				network_id = network_id_component.get_network_id()
 			retries += 1
 	
 	if network_id == 0:
 		push_error("NetworkRigidSync: Failed to get network_id for %s after retries" % parent_rigid_body.name)
-		# Try to register later when network_id becomes available
 		_try_register_later()
-	else:
-		# Register immediately if network_id is available
-		if NetworkRigidSyncManager:
-			NetworkRigidSyncManager.register_rigid_body(self)
+	elif NetworkRigidSyncManager:
+		NetworkRigidSyncManager.register_rigid_body(self)
 	
-	# Find carryable component and connect to signal
 	_find_carryable_component()
 	if carryable_component and carryable_component.has_signal("carry_state_changed"):
 		carryable_component.carry_state_changed.connect(_on_carry_state_changed)
@@ -96,22 +74,17 @@ func _ready() -> void:
 	await get_tree().create_timer(0.5).timeout
 
 
-## Try to register later when network_id becomes available
 func _try_register_later() -> void:
-	# Check periodically if network_id became available
 	var check_timer = Timer.new()
 	check_timer.wait_time = 0.1
 	check_timer.one_shot = false
 	check_timer.timeout.connect(_check_and_register)
 	add_child(check_timer)
 	check_timer.start()
-	
-	# Stop checking after 5 seconds
 	await get_tree().create_timer(5.0).timeout
 	check_timer.queue_free()
 
 
-## Check if network_id is available and register
 func _check_and_register() -> void:
 	_find_network_id_component()
 	if network_id_component and network_id_component.has_method("get_network_id"):
@@ -122,7 +95,6 @@ func _check_and_register() -> void:
 				NetworkRigidSyncManager.register_rigid_body(self)
 
 
-## Check if local peer is the owner
 func is_local_owner() -> bool:
 	if not NetworkManager or not NetworkManager.is_multiplayer():
 		return false
@@ -137,124 +109,55 @@ func _physics_process(_delta: float) -> void:
 	if not NetworkManager or not NetworkManager.is_multiplayer():
 		return
 	
-	# Apply pending state on ANY peer that is NOT the owner (including host when client is owner)
-	if has_pending_state and not is_local_owner():
-		# Skip if this peer is locally carrying the object
-		if not _is_carried_locally():
-			_update_target_from_pending()
+	if has_pending_state and not is_local_owner() and not _is_carried_locally():
+		_update_target_from_pending()
 	
-	# Interpolate/apply state on ANY peer that is NOT the owner (including host when client is owner)
-	if has_target and not is_local_owner():
-		# Skip if this peer is locally carrying the object
-		if not _is_carried_locally():
-			_interpolate_to_target(_delta)
+	if has_target and not is_local_owner() and not _is_carried_locally():
+		_interpolate_to_target(_delta)
 	
-	# Send state only if we are the owner
 	if sync_enabled and NetworkManager and NetworkManager.is_multiplayer():
 		var local_peer_id = NetworkManager.get_local_peer_id()
 		
-		# Debug: log why we're not sending (only once per second to avoid spam)
-		if owner_peer_id == local_peer_id and network_id != 0:
-			# We are owner - check conditions
-			pass  # Will send below
-		elif owner_peer_id == local_peer_id and network_id == 0:
-			# Owner but no network_id - try to get it
+		if owner_peer_id == local_peer_id and network_id == 0:
 			_find_network_id_component()
 			if network_id_component and network_id_component.has_method("get_network_id"):
 				network_id = network_id_component.get_network_id()
 		
 		if owner_peer_id == local_peer_id:
-			# We are the owner - send states
 			var is_carried = _is_carried_locally() if local_peer_id != 1 else _is_carried_on_host()
 			
-			# DIAGNOSTIC: Check if we should send but something is wrong
-			if parent_rigid_body.freeze:
-				CogitoGlobals.debug_log(
-					true,
-					"NetworkRigidSync",
-					"[DIAG] WARNING: Owner but frozen! network_id=%d, freeze=%s, sync_enabled=%s" % [
-						network_id, parent_rigid_body.freeze, sync_enabled
-					]
-				)
-			
-			# Debug: check if we should send but network_id is invalid
 			if network_id == 0:
-				# Try to get network_id from component
 				_find_network_id_component()
 				if network_id_component and network_id_component.has_method("get_network_id"):
 					network_id = network_id_component.get_network_id()
 			
-			if network_id == 0:
-				# Can't send without network_id
-				CogitoGlobals.debug_log(
-					true,
-					"NetworkRigidSync",
-					"[DIAG] Cannot send: network_id=0, owner=%d, local=%d" % [owner_peer_id, local_peer_id]
-				)
+			if network_id == 0 or not sync_enabled:
 				return
 			
-			if not sync_enabled:
-				CogitoGlobals.debug_log(
-					true,
-					"NetworkRigidSync",
-					"[DIAG] Cannot send: sync_enabled=false, network_id=%d" % network_id
-				)
-				return
+			var current_sync_rate = sync_rate if not is_carried else sync_rate * 2.0
+			_sync_timer += _delta
 			
-			frames_since_last_send += 1
-			var interval = send_interval_frames if not is_carried else 1  # Every frame if carried
-			
-			if frames_since_last_send >= interval:
+			if _sync_timer >= (1.0 / current_sync_rate):
+				_sync_timer = 0.0
 				var current_state = _collect_state()
 				if current_state.is_empty():
-					# State collection failed
-					CogitoGlobals.debug_log(
-						true,
-						"NetworkRigidSync",
-						"[DIAG] Cannot send: state collection failed, network_id=%d" % network_id
-					)
 					return
 				
-				# If carried, always send (even if position didn't change)
 				var should_send = last_sent_state.is_empty() or _state_changed(current_state) or is_carried
 				if should_send:
-					CogitoGlobals.debug_log(
-						true,
-						"NetworkRigidSync",
-						"[DIAG] Sending state: network_id=%d, local=%d, owner=%d, freeze=%s, pos=%s" % [
-							network_id, local_peer_id, owner_peer_id, parent_rigid_body.freeze,
-							Vector3(current_state.position.x, current_state.position.y, current_state.position.z)
-						]
-					)
 					_send_state_update(current_state)
 					last_sent_state = current_state.duplicate()
-					frames_since_last_send = 0
 		
-		# Check if object should return ownership to host (timer-based after drop)
-		# IMPORTANT: This only applies to objects that were CARRIED and then DROPPED
-		# For objects that are owned via bubble proximity, ownership is managed by NetworkRigidSyncManager
-		# We only return ownership here if the object was previously carried
 		if owner_peer_id != 1 and local_peer_id == owner_peer_id:
 			if _is_carried_locally():
-				# Object is being carried - reset timer
 				drop_timer = 0.0
-			else:
-				# Object is not carried - check if it was previously carried
-				# Only start timer if object was recently dropped (not for bubble-based ownership)
-				# We check this by seeing if drop_timer is already > 0 (meaning it was carried before)
-				# If drop_timer is 0, it means ownership was granted via bubble, not via carry
-				if drop_timer > 0.0:
-					# Object was previously carried and now dropped - start timer
-					drop_timer += _delta
-					if drop_timer >= drop_timer_duration:
-						# Object not carried for drop_timer_duration - return ownership to host
-						_return_ownership_to_host()
-				# If drop_timer is 0, ownership was granted via bubble - don't return it here
-				# NetworkRigidSyncManager will handle ownership changes based on bubble proximity
+			elif drop_timer > 0.0:
+				drop_timer += _delta
+				if drop_timer >= drop_timer_duration:
+					_return_ownership_to_host()
 
 
 func _find_network_id_component() -> void:
-	# Find existing NetworkRigidBodyID component
 	for child in parent_rigid_body.get_children():
 		if child.get_script() and child.get_script().resource_path.ends_with("network_rigid_body_id.gd"):
 			network_id_component = child
@@ -264,29 +167,24 @@ func _find_network_id_component() -> void:
 
 
 func _generate_network_id() -> int:
-	# Only host generates network_id
 	if not NetworkManager or not NetworkManager.is_multiplayer() or not NetworkManager.is_host():
 		return 0
 	
-	# Re-check for NetworkRigidBodyID component (might have been added by NetworkRigidSyncManager)
 	_find_network_id_component()
 	
-	# Check if NetworkRigidBodyID already exists and has network_id
 	if network_id_component and network_id_component.has_method("get_network_id"):
 		var existing_id = network_id_component.get_network_id()
 		if existing_id != 0:
 			return existing_id
 	
-	# Create NetworkRigidBodyID component if it doesn't exist
 	if not network_id_component:
 		var network_id_script = preload("res://addons/cogito/network/network_rigid_body_id.gd")
 		network_id_component = network_id_script.new()
 		network_id_component.name = "NetworkRigidBodyID"
 		parent_rigid_body.add_child(network_id_component)
 	
-	# Wait for component to generate network_id (it generates in _ready)
 	var retries = 0
-	while retries < 20:  # Wait up to 1 second (20 * 0.05s)
+	while retries < 20:
 		await get_tree().create_timer(0.05).timeout
 		if network_id_component and network_id_component.has_method("get_network_id"):
 			var generated_id = network_id_component.get_network_id()
@@ -297,165 +195,62 @@ func _generate_network_id() -> int:
 	return 0
 
 
-func _collect_state() -> Dictionary:
+func _collect_state() -> Array:
 	if not parent_rigid_body:
-		return {}
-	
-	return {
-		"network_id": network_id,
-		"position": {
-			"x": parent_rigid_body.global_position.x,
-			"y": parent_rigid_body.global_position.y,
-			"z": parent_rigid_body.global_position.z
-		},
-		"rotation_quat": {
-			"x": parent_rigid_body.quaternion.x,
-			"y": parent_rigid_body.quaternion.y,
-			"z": parent_rigid_body.quaternion.z,
-			"w": parent_rigid_body.quaternion.w
-		},
-		"linear_velocity": {
-			"x": parent_rigid_body.linear_velocity.x,
-			"y": parent_rigid_body.linear_velocity.y,
-			"z": parent_rigid_body.linear_velocity.z
-		},
-		"angular_velocity": {
-			"x": parent_rigid_body.angular_velocity.x,
-			"y": parent_rigid_body.angular_velocity.y,
-			"z": parent_rigid_body.angular_velocity.z
-		},
-		"timestamp": Time.get_ticks_msec() / 1000.0
-	}
+		return []
+	return [
+		network_id,
+		parent_rigid_body.global_position,
+		parent_rigid_body.quaternion,
+		parent_rigid_body.linear_velocity,
+		parent_rigid_body.angular_velocity
+	]
 
 
-func _state_changed(new_state: Dictionary) -> bool:
+func _state_changed(new_state: Array) -> bool:
 	if last_sent_state.is_empty():
 		return true
 	
-	var old_pos = Vector3(
-		last_sent_state.position.x,
-		last_sent_state.position.y,
-		last_sent_state.position.z
-	)
-	var new_pos = Vector3(
-		new_state.position.x,
-		new_state.position.y,
-		new_state.position.z
-	)
-	
-	# Check position change (smaller threshold for smoother sync)
+	var old_pos: Vector3 = last_sent_state[1]
+	var new_pos: Vector3 = new_state[1]
 	var pos_changed = (old_pos - new_pos).length_squared() > 0.00001
 	
-	# Check rotation change
-	var old_rot = Quaternion(
-		last_sent_state.rotation_quat.x,
-		last_sent_state.rotation_quat.y,
-		last_sent_state.rotation_quat.z,
-		last_sent_state.rotation_quat.w
-	)
-	var new_rot = Quaternion(
-		new_state.rotation_quat.x,
-		new_state.rotation_quat.y,
-		new_state.rotation_quat.z,
-		new_state.rotation_quat.w
-	)
+	var old_rot: Quaternion = last_sent_state[2]
+	var new_rot: Quaternion = new_state[2]
 	var rot_changed = abs(old_rot.angle_to(new_rot)) > 0.001
 	
 	return pos_changed or rot_changed
 
 
-func _send_state_update(state: Dictionary) -> void:
+func _send_state_update(state: Array) -> void:
 	if not NetworkManager or not NetworkManager.is_multiplayer():
 		return
 	
-	# Validate network_id
 	if network_id == 0:
-		# Try to get network_id from component
 		_find_network_id_component()
 		if network_id_component and network_id_component.has_method("get_network_id"):
 			network_id = network_id_component.get_network_id()
-		
 		if network_id == 0:
-			# Can't send without network_id
 			return
 	
-	# Validate
-	var pos = Vector3(state.position.x, state.position.y, state.position.z)
+	var pos: Vector3 = state[1]
 	if not (is_finite(pos.x) and is_finite(pos.y) and is_finite(pos.z)):
 		return
 	
-	var state_data = {
-		"network_id": network_id,
-		"position": state.position,
-		"rotation_quat": state.rotation_quat,
-		"linear_velocity": state.linear_velocity,
-		"angular_velocity": state.angular_velocity,
-		"timestamp": state.get("timestamp", Time.get_ticks_msec() / 1000.0)
-	}
-	
-	# Debug log (only for client-owners to avoid spam)
-	var local_peer_id = NetworkManager.get_local_peer_id()
-	if local_peer_id != 1 and owner_peer_id == local_peer_id:
-		CogitoGlobals.debug_log(
-			true,
-			"NetworkRigidSync",
-			"[CLIENT-OWNER] Sending state for network_id=%d, pos=%s" % [
-				network_id,
-				Vector3(state.position.x, state.position.y, state.position.z)
-			]
-		)
-	
-	NetworkManager.sync_rigid_body_state.rpc(state_data)
+	NetworkManager.sync_rigid_body_state.rpc(state)
 
 
-func _receive_state_update(state_data: Dictionary) -> void:
+func _receive_state_update(state_data: Array) -> void:
 	if not NetworkManager or not NetworkManager.is_multiplayer():
 		return
 	
-	var local_peer_id = NetworkManager.get_local_peer_id()
-	
-	# Diagnostic logging (use debug_log instead of print to avoid spam)
-	# Only log if explicitly enabled via enable_logging flag
-	CogitoGlobals.debug_log(
-		enable_logging,
-		"NetworkRigidSync",
-		"[Sync] peer=%d recv id=%d owner=%d local_owner=%s sync_enabled=%s" % [
-			local_peer_id,
-			network_id,
-			owner_peer_id,
-			str(is_local_owner()),
-			str(sync_enabled)
-		]
-	)
-	
-	# Don't apply if we are the owner (we send states, not apply)
-	if is_local_owner():
-		CogitoGlobals.debug_log(
-			true,
-			"NetworkRigidSync",
-			"[DIAG] Host _receive_state_update: ignoring (local owner) network_id=%d, local=%d, owner=%d" % [
-				network_id, local_peer_id, owner_peer_id
-			]
-		)
+	if is_local_owner() or not sync_enabled:
 		return
 	
-	if not sync_enabled:
-		CogitoGlobals.debug_log(
-			true,
-			"NetworkRigidSync",
-			"[DIAG] Host _receive_state_update: ignoring (sync_disabled) network_id=%d" % network_id
-		)
+	if state_data.is_empty() or state_data.size() < 5:
 		return
 	
-	var received_network_id_raw = state_data.get("network_id", 0)
-	# Ensure network_id is int (handle both int and String for compatibility)
-	var received_network_id: int = 0
-	if received_network_id_raw is int:
-		received_network_id = received_network_id_raw
-	elif received_network_id_raw is String:
-		# Try to convert String to int (for backward compatibility)
-		received_network_id = int(received_network_id_raw) if received_network_id_raw.is_valid_int() else 0
-	
+	var received_network_id: int = state_data[0]
 	if received_network_id != network_id:
 		return
 	
@@ -470,79 +265,40 @@ func _update_target_from_pending() -> void:
 	var state_data = pending_state
 	has_pending_state = false
 	
-	# Extract data
-	var pos = Vector3(
-		state_data.position.x,
-		state_data.position.y,
-		state_data.position.z
-	)
-	var rot = Quaternion(
-		state_data.rotation_quat.x,
-		state_data.rotation_quat.y,
-		state_data.rotation_quat.z,
-		state_data.rotation_quat.w
-	)
-	var lin_vel = Vector3(
-		state_data.linear_velocity.x,
-		state_data.linear_velocity.y,
-		state_data.linear_velocity.z
-	)
-	var ang_vel = Vector3(
-		state_data.angular_velocity.x,
-		state_data.angular_velocity.y,
-		state_data.angular_velocity.z
-	)
+	if state_data.is_empty() or state_data.size() < 5:
+		return
 	
-	# Validate
+	var pos: Vector3 = state_data[1]
+	var rot: Quaternion = state_data[2]
+	var lin_vel: Vector3 = state_data[3]
+	var ang_vel: Vector3 = state_data[4]
+	
 	if not (is_finite(pos.x) and is_finite(pos.y) and is_finite(pos.z)):
 		return
 	
 	if not (is_finite(rot.x) and is_finite(rot.y) and is_finite(rot.z) and is_finite(rot.w)):
 		return
 	
-	# Normalize quaternion
 	rot = rot.normalized()
-	
-	# Validate normalized quaternion
 	var rot_len_sq = rot.x * rot.x + rot.y * rot.y + rot.z * rot.z + rot.w * rot.w
 	if abs(rot_len_sq - 1.0) > 0.1:
 		return
 	
-	# Create target transform
 	var basis = Basis(rot)
 	if not (_is_finite(basis.x) and _is_finite(basis.y) and _is_finite(basis.z)):
 		return
 	
 	target_transform = Transform3D(basis, pos)
 	
-	# Validate velocities
-	if is_finite(lin_vel.x) and is_finite(lin_vel.y) and is_finite(lin_vel.z):
-		target_linear_velocity = lin_vel
-	else:
-		target_linear_velocity = Vector3.ZERO
+	target_linear_velocity = lin_vel if is_finite(lin_vel.x) and is_finite(lin_vel.y) and is_finite(lin_vel.z) else Vector3.ZERO
+	target_angular_velocity = ang_vel if is_finite(ang_vel.x) and is_finite(ang_vel.y) and is_finite(ang_vel.z) else Vector3.ZERO
 	
-	if is_finite(ang_vel.x) and is_finite(ang_vel.y) and is_finite(ang_vel.z):
-		target_angular_velocity = ang_vel
-	else:
-		target_angular_velocity = Vector3.ZERO
-	
-	# Check if we should snap (large error)
 	var current_pos = parent_rigid_body.global_position
 	var error = (current_pos - pos).length()
-	
-	if error > snap_threshold:
-		# Large error - snap immediately (set frame count to max)
-		interpolation_frame_count = interpolation_frames
-	else:
-		# Small error - interpolate (start from 0)
-		interpolation_frame_count = 0
-	
+	interpolation_frame_count = interpolation_frames if error > snap_threshold else 0
 	has_target = true
 
 
-## Interpolate to target state (called from _physics_process)
-## Applies state via PhysicsServer3D.body_set_state() in _physics_process
-## This is the correct place to modify RigidBody3D state
 func _interpolate_to_target(_delta: float) -> void:
 	if not has_target or not parent_rigid_body:
 		return
@@ -551,52 +307,36 @@ func _interpolate_to_target(_delta: float) -> void:
 	if not body_rid.is_valid():
 		return
 	
-	# Update frame count
 	interpolation_frame_count += 1
+	var alpha = min(float(interpolation_frame_count) / float(interpolation_frames), 1.0)
 	
-	# Calculate interpolation alpha (0.0 to 1.0)
-	var alpha = float(interpolation_frame_count) / float(interpolation_frames)
-	if alpha > 1.0:
-		alpha = 1.0
-	
-	# Get current transform
 	var current_transform = parent_rigid_body.global_transform
-	
-	# Interpolate position (lerp)
 	var current_pos = current_transform.origin
 	var target_pos = target_transform.origin
 	var lerped_pos = current_pos.lerp(target_pos, alpha)
 	
-	# Interpolate rotation (slerp quaternion)
 	var current_rot = current_transform.basis.get_rotation_quaternion()
 	var target_rot = target_transform.basis.get_rotation_quaternion()
 	var slerped_rot = current_rot.slerp(target_rot, alpha)
 	
-	# Create interpolated transform
 	var interpolated_transform = Transform3D(Basis(slerped_rot), lerped_pos)
 	
-	# Interpolate velocities (lerp)
 	var current_lin_vel = parent_rigid_body.linear_velocity
 	var current_ang_vel = parent_rigid_body.angular_velocity
 	var lerped_lin_vel = current_lin_vel.lerp(target_linear_velocity, alpha)
 	var lerped_ang_vel = current_ang_vel.lerp(target_angular_velocity, alpha)
 	
-	# Validate before applying
 	if not (_is_finite(interpolated_transform.origin) and _is_finite(interpolated_transform.basis.x) and _is_finite(interpolated_transform.basis.y) and _is_finite(interpolated_transform.basis.z)):
 		return
 	
-	# Apply interpolated transform
 	PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_TRANSFORM, interpolated_transform)
 	
-	# Only apply velocities if body is not frozen (frozen bodies shouldn't have velocities applied)
-	# Velocities are only meaningful for dynamic simulation, not for kinematic/frozen bodies
 	if not parent_rigid_body.freeze:
 		if _is_finite(lerped_lin_vel):
 			PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY, lerped_lin_vel)
 		if _is_finite(lerped_ang_vel):
 			PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_ANGULAR_VELOCITY, lerped_ang_vel)
 	
-	# If interpolation complete, reset
 	if interpolation_frame_count >= interpolation_frames:
 		has_target = false
 		interpolation_frame_count = 0
@@ -617,35 +357,16 @@ func set_sync_enabled(enabled: bool) -> void:
 	if enabled and NetworkManager and NetworkManager.is_multiplayer():
 		var local_peer_id = NetworkManager.get_local_peer_id()
 		
-		# Initialize ownership: host is default owner (if not already set)
-		# Don't overwrite if ownership was already set (e.g., by _set_ownership)
 		if owner_peer_id == 0:
 			owner_peer_id = 1
 		
 		parent_rigid_body.set_multiplayer_authority(owner_peer_id)
 		
 		if owner_peer_id == local_peer_id:
-			# We are owner - enable physics
-			# CRITICAL: Always unfreeze for owner, even if it was frozen before
 			parent_rigid_body.freeze = false
-			CogitoGlobals.debug_log(
-				true,
-				"NetworkRigidSync",
-				"[DIAG] set_sync_enabled: enabled=%s, owner=%d, local=%d, freeze %s->%s, network_id=%d" % [
-					enabled, owner_peer_id, local_peer_id, freeze_before, parent_rigid_body.freeze, network_id
-				]
-			)
 		else:
-			# We are not owner - freeze
 			parent_rigid_body.freeze = true
 			parent_rigid_body.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
-			CogitoGlobals.debug_log(
-				true,
-				"NetworkRigidSync",
-				"[DIAG] set_sync_enabled: enabled=%s, NOT owner (owner=%d, local=%d), freeze %s->%s, network_id=%d" % [
-					enabled, owner_peer_id, local_peer_id, freeze_before, parent_rigid_body.freeze, network_id
-				]
-			)
 
 
 func get_network_id() -> int:
@@ -667,30 +388,21 @@ func _find_carryable_component() -> void:
 
 
 func _is_carried_locally() -> bool:
-	# Check if object is being carried locally (works for both host and clients)
 	if not NetworkManager or not NetworkManager.is_multiplayer():
 		return false
-	
-	# Check if object is being carried locally
 	if carryable_component and "is_being_carried" in carryable_component:
 		return carryable_component.is_being_carried
-	
 	return false
 
 
 func _is_carried_on_host() -> bool:
-	# Only check on host
 	if not NetworkManager or not NetworkManager.is_multiplayer():
 		return false
-	
 	var local_peer_id = NetworkManager.get_local_peer_id()
-	if local_peer_id != 1:  # Not host
+	if local_peer_id != 1:
 		return false
-	
-	# Check if object is being carried on host
 	if carryable_component and "is_being_carried" in carryable_component:
 		return carryable_component.is_being_carried
-	
 	return false
 
 
@@ -702,42 +414,23 @@ func _on_carry_state_changed(is_carried: bool) -> void:
 	
 	if is_carried:
 		if local_peer_id == 1:
-			# Host - no ownership changes needed, unfreeze immediately
 			parent_rigid_body.freeze = false
 		else:
-			# Client picked up object - request ownership
-			# DO NOT unfreeze until ownership is granted (in _set_ownership)
 			_request_ownership()
-			# Keep frozen - will be unfrozen in _set_ownership when grant arrives
-			# Reset drop_timer - object is being carried
 			drop_timer = 0.0
 	else:
-		# Object dropped - start drop timer (only for objects that were carried)
-		# This timer will return ownership to host after drop_timer_duration
-		# But only if object was previously carried (drop_timer will be > 0 in _physics_process)
-		if local_peer_id == 1:
-			# Host - no changes needed
-			pass
-		else:
-			# Client dropped object - start timer to return ownership to host
-			# Set drop_timer to a small value to indicate object was dropped
-			# This will trigger the timer in _physics_process
-			drop_timer = 0.001  # Small value to indicate object was dropped (not 0.0)
+		if local_peer_id != 1:
+			drop_timer = 0.001
 
 
 func _request_ownership() -> void:
 	if not NetworkManager or not NetworkManager.is_multiplayer():
 		return
-	
 	var local_peer_id = NetworkManager.get_local_peer_id()
-	if local_peer_id == 1:  # Host doesn't request
+	if local_peer_id == 1 or ownership_requested:
 		return
-	
-	if ownership_requested:
-		return  # Already requested
-	
 	ownership_requested = true
-	NetworkManager.request_rigid_body_ownership.rpc_id(1, network_id)  # Request from host
+	NetworkManager.request_rigid_body_ownership.rpc_id(1, network_id)
 
 
 func _set_ownership(peer_id: int) -> void:
@@ -754,113 +447,43 @@ func _set_ownership(peer_id: int) -> void:
 	parent_rigid_body.set_multiplayer_authority(peer_id)
 	
 	if peer_id == local_peer_id:
-		# We became owner - enable physics simulation
-		# CRITICAL: Preserve velocity before unfreezing to avoid network jitter
-		# Зберігаємо поточну інтерпольовану швидкість, якщо вона була
-		# Це щоб об'єкт не зупинився миттєво при переключенні
-		var preserve_velocity = parent_rigid_body.linear_velocity
-		if has_target:
-			preserve_velocity = target_linear_velocity
+		var preserve_velocity = target_linear_velocity if has_target else parent_rigid_body.linear_velocity
 		
-		# CRITICAL: Unfreeze FIRST, before any other operations
-		var freeze_before = parent_rigid_body.freeze
 		parent_rigid_body.freeze = false
-		parent_rigid_body.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC  # Set mode (doesn't matter when frozen=false, but good practice)
-		
-		# Відновлюємо швидкість після розмороження
+		parent_rigid_body.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 		parent_rigid_body.linear_velocity = preserve_velocity
 		
-		# Wake up the rigid body if it's sleeping
 		if parent_rigid_body.sleeping:
 			parent_rigid_body.sleeping = false
 		
-		# Скидаємо цілі інтерполяції (ми тепер керуємо фізикою)
 		has_target = false
 		has_pending_state = false
 		
-		# DIAGNOSTIC: Log freeze state change
-		CogitoGlobals.debug_log(
-			true,
-			"NetworkRigidSync",
-			"[DIAG] _set_ownership START: peer_id=%d, local=%d, freeze_before=%s, freeze_after=%s, network_id=%d" % [
-				peer_id, local_peer_id, freeze_before, parent_rigid_body.freeze, network_id
-			]
-		)
-		
-		# Ensure network_id is set (might not be set yet on client)
 		if network_id == 0:
 			_find_network_id_component()
 			if network_id_component and network_id_component.has_method("get_network_id"):
 				network_id = network_id_component.get_network_id()
-			
 			if network_id == 0:
 				push_error("NetworkRigidSync: Became owner but network_id is 0 for %s" % parent_rigid_body.name)
-				CogitoGlobals.debug_log(
-					true,
-					"NetworkRigidSync",
-					"[DIAG] ERROR: Returning early due to network_id=0, freeze=%s" % parent_rigid_body.freeze
-				)
 				return
 		
-		# Ensure component is registered (might not be registered yet)
 		if network_id != 0 and NetworkRigidSyncManager:
 			var existing = NetworkRigidSyncManager.get_rigid_body(network_id)
 			if existing != self:
-				# Not registered yet, register now
 				NetworkRigidSyncManager.register_rigid_body(self)
 		
-		# Ensure sync is enabled when we become owner
-		# IMPORTANT: Set sync_enabled flag, but don't call set_sync_enabled() which might override freeze
-		var sync_enabled_before = sync_enabled
 		if not sync_enabled:
 			sync_enabled = true
-			# Set authority manually to avoid set_sync_enabled() override
 			parent_rigid_body.set_multiplayer_authority(peer_id)
-			# Ensure freeze is still false after setting authority
-			var freeze_after_authority = parent_rigid_body.freeze
 			parent_rigid_body.freeze = false
-			CogitoGlobals.debug_log(
-				true,
-				"NetworkRigidSync",
-				"[DIAG] After set_multiplayer_authority: freeze_was=%s, freeze_now=%s" % [
-					freeze_after_authority, parent_rigid_body.freeze
-				]
-			)
 		else:
-			# Even if already enabled, ensure ownership is set correctly
 			parent_rigid_body.set_multiplayer_authority(peer_id)
-			# Ensure freeze is still false
-			var freeze_after_authority = parent_rigid_body.freeze
 			parent_rigid_body.freeze = false
-			CogitoGlobals.debug_log(
-				true,
-				"NetworkRigidSync",
-				"[DIAG] After set_multiplayer_authority (sync_enabled=true): freeze_was=%s, freeze_now=%s" % [
-					freeze_after_authority, parent_rigid_body.freeze
-				]
-			)
 		
-		# Final check: ensure freeze is false (defensive programming)
 		if parent_rigid_body.freeze:
 			push_warning("NetworkRigidSync: freeze was true after becoming owner! Forcing to false for network_id=%d" % network_id)
 			parent_rigid_body.freeze = false
-		
-		# Debug log
-		CogitoGlobals.debug_log(
-			true,
-			"NetworkRigidSync",
-			"[CLIENT-OWNER] Became owner for network_id=%d, sync_enabled=%s->%s, freeze=%s, authority=%d, registered=%s" % [
-				network_id,
-				sync_enabled_before,
-				sync_enabled,
-				parent_rigid_body.freeze,
-				parent_rigid_body.get_multiplayer_authority(),
-				NetworkRigidSyncManager.get_rigid_body(network_id) != null if NetworkRigidSyncManager else false
-			]
-		)
 	else:
-		# Someone else became owner - we are not owner
-		# Freeze and use kinematic mode to apply states
 		parent_rigid_body.freeze = true
 		parent_rigid_body.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 
@@ -868,20 +491,13 @@ func _set_ownership(peer_id: int) -> void:
 func _return_ownership_to_host() -> void:
 	if not NetworkManager or not NetworkManager.is_multiplayer():
 		return
-	
 	var local_peer_id = NetworkManager.get_local_peer_id()
 	if local_peer_id != owner_peer_id:
-		return  # Not our ownership to return
-	
-	# Notify host that we're returning ownership
+		return
 	NetworkManager.return_rigid_body_ownership.rpc_id(1, network_id)
-	
-	# Reset ownership locally (host will confirm via grant)
 	owner_peer_id = 1
 	ownership_requested = false
 	drop_timer = 0.0
-	
-	# Freeze until host confirms
 	parent_rigid_body.freeze = true
 	parent_rigid_body.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 
