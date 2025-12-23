@@ -293,8 +293,9 @@ func _on_item_picked(slot_data: InventorySlotPD) -> void:
 	)
 	
 	# Only sync if we're in multiplayer and have a valid peer_id
+	# IMPORTANT: We don't send peer_id as an argument - NetworkManager uses multiplayer.get_remote_sender_id()
 	if NetworkManager.is_multiplayer() and peer_id > 0:
-		NetworkManager.sync_inventory_item_picked.rpc(peer_id, item_data, slot_index)
+		NetworkManager.sync_inventory_item_picked.rpc(item_data, slot_index)
 
 
 ## Called when local player drops an item
@@ -380,8 +381,9 @@ func _on_item_dropped(player_id: int, item: InventoryItemPD, position: Vector3) 
 	)
 	
 	# Only sync if we're in multiplayer and have a valid peer_id
+	# IMPORTANT: We don't send peer_id as an argument - NetworkManager uses multiplayer.get_remote_sender_id()
 	if NetworkManager.is_multiplayer() and peer_id > 0:
-		NetworkManager.sync_inventory_item_dropped.rpc(peer_id, item_data, position)
+		NetworkManager.sync_inventory_item_dropped.rpc(item_data, position)
 
 
 ## Called when local player's inventory changes (items moved, used, etc.)

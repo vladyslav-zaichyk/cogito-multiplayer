@@ -22,6 +22,10 @@ var no_sync_group_name: String = ""  # Empty = no exclusions (Phase 1)
 const COMPONENT_NAME = "NetworkRigidSync"
 const COMPONENT_SCRIPT = preload("res://addons/cogito/network/network_rigid_sync.gd")
 
+## Bubble component for rigid bodies (Area3D attached to each RigidBody3D)
+const BUBBLE_NAME = "NetworkRigidBubble"
+const BUBBLE_SCRIPT = preload("res://addons/cogito/network/network_rigid_bubble.gd")
+
 ## Helper script for _integrate_forces (optional)
 const HELPER_SCRIPT = preload("res://addons/cogito/network/rigid_body_sync_helper.gd")
 
@@ -31,6 +35,9 @@ const NETWORK_ID_NAME = "NetworkRigidBodyID"
 
 ## Auto-add helper script to RigidBody3D that don't have scripts (for _integrate_forces)
 var auto_add_helper_script: bool = true
+
+## Bubble tracking: network_id -> Array[peer_id] (players currently inside bubble)
+var _rigid_body_bubbles: Dictionary = {}
 
 
 func _ready() -> void:
@@ -168,6 +175,14 @@ func _inject_component_if_needed(rigid_body: RigidBody3D) -> void:
 	component.name = COMPONENT_NAME
 	rigid_body.add_child(component)
 	
+	# Create and add bubble component (Area3D) as child of rigid body
+	# Використовується тільки на хості для вибору owner на основі близькості гравців
+	if not rigid_body.get_node_or_null(BUBBLE_NAME):
+		var bubble: Area3D = BUBBLE_SCRIPT.new()
+		bubble.name = BUBBLE_NAME
+		# Розмір бульбашки можна буде налаштувати пізніше (через CollisionShape3D)
+		rigid_body.add_child(bubble)
+	
 	# Optionally add helper script if RigidBody3D doesn't have a script
 	if auto_add_helper_script and not rigid_body.get_script():
 		rigid_body.set_script(HELPER_SCRIPT)
@@ -291,6 +306,136 @@ func _enable_sync_for_all_registered() -> void:
 	)
 
 
+## === Bubble callbacks (host-only) ===
+
+## Викликається компонентом NetworkRigidBubble, коли гравець входить у бульбашку рігіда
+func _on_rigid_body_entered_bubble(network_id: int, player_peer_id: int) -> void:
+	if not NetworkManager or not NetworkManager.is_host():
+		return
+	
+	if not _rigid_body_bubbles.has(network_id):
+		_rigid_body_bubbles[network_id] = []
+	
+	var arr: Array = _rigid_body_bubbles[network_id]
+	if not arr.has(player_peer_id):
+		arr.append(player_peer_id)
+		
+		CogitoGlobals.debug_log(
+			enable_logging,
+			"NetworkRigidSyncManager",
+			"[Bubble] network_id=%d entered by peer=%d (total=%d)" % [
+				network_id,
+				player_peer_id,
+				arr.size()
+			]
+		)
+		
+		# Оновлення ownership відбуватиметься в _process, щоб уникати флапання
+
+
+## Викликається компонентом NetworkRigidBubble, коли гравець виходить з бульбашки рігіда
+func _on_rigid_body_exited_bubble(network_id: int, player_peer_id: int) -> void:
+	if not NetworkManager or not NetworkManager.is_host():
+		return
+	
+	if not _rigid_body_bubbles.has(network_id):
+		return
+	
+	var arr: Array = _rigid_body_bubbles[network_id]
+	var idx := arr.find(player_peer_id)
+	if idx != -1:
+		arr.remove_at(idx)
+		
+		CogitoGlobals.debug_log(
+			enable_logging,
+			"NetworkRigidSyncManager",
+			"[Bubble] network_id=%d exited by peer=%d (remaining=%d)" % [
+				network_id,
+				player_peer_id,
+				arr.size()
+			]
+		)
+		
+		if arr.is_empty():
+			_rigid_body_bubbles.erase(network_id)
+
+
+## === Ownership selection based on bubbles (host-only) ===
+
+func _process(_delta: float) -> void:
+	# Поки що bubble-логіка працює тільки на хості
+	if not NetworkManager or not NetworkManager.is_host():
+		return
+	
+	# Проходимо по всіх зареєстрованих рігідах і при необхідності оновлюємо owner_peer_id
+	for network_id in registered_bodies.keys():
+		var component = get_rigid_body(network_id)
+		if not component or not component.has_method("get_parent_rigid_body"):
+			continue
+		
+		var rb: RigidBody3D = component.get_parent_rigid_body()
+		if not rb or not is_instance_valid(rb):
+			continue
+		
+		var bubble_peers: Array = _rigid_body_bubbles.get(network_id, [])
+		
+		var desired_owner := _choose_owner_for_rigid(network_id, rb, bubble_peers)
+		if desired_owner == -1:
+			continue
+		
+		# Отримаємо поточного owner з компонента, якщо він є
+		var current_owner: int = 1
+		if "owner_peer_id" in component:
+			current_owner = component.owner_peer_id
+		
+		# === ФІКС: Використовуємо RPC замість прямого виклику ===
+		# Це гарантує, що всі клієнти дізнаються про зміну власника
+		if desired_owner != current_owner:
+			# НЕ викликаємо локальний метод напряму!
+			# _handle_ownership_grant(network_id, desired_owner) <--- БУЛО (ПОМИЛКА)
+			
+			# Викликаємо RPC, щоб всі дізналися про нового власника
+			# RPC має прапорець "call_local", тому він виконається і на хості, і на всіх клієнтах
+			if NetworkManager:
+				NetworkManager.grant_rigid_body_ownership.rpc(network_id, desired_owner)
+
+
+## Вибір бажаного owner для конкретного рігіда
+## Правила (поки прості):
+## - Якщо немає гравців у бульбашці → owner = 1 (host)
+## - Якщо один гравець у бульбашці → owner = цей peer
+## - Якщо кілька → owner = найближчий гравець до рігіда (по global_position)
+func _choose_owner_for_rigid(network_id: int, rb: RigidBody3D, bubble_peers: Array) -> int:
+	if bubble_peers.is_empty():
+		return 1  # Host
+	
+	if bubble_peers.size() == 1:
+		return bubble_peers[0] as int
+	
+	if not PlayerManager:
+		return 1
+	
+	var rb_pos: Vector3 = rb.global_position
+	var closest_peer_id := 1
+	var closest_dist := INF
+	
+	for peer_id in bubble_peers:
+		var player_node := PlayerManager.get_player_by_peer_id(peer_id)
+		if not player_node or not is_instance_valid(player_node):
+			continue
+		
+		if not (player_node is Node3D):
+			continue
+		
+		var dist := rb_pos.distance_to((player_node as Node3D).global_position)
+		if dist < closest_dist:
+			closest_dist = dist
+			closest_peer_id = peer_id as int
+	
+	return closest_peer_id
+
+
+
 ## Enable sync for a single component (deferred call)
 func _enable_sync_for_component(component: Node, network_id: int) -> void:
 	# Wait a bit for component to be ready
@@ -326,39 +471,70 @@ func _receive_rigid_state(state_data: Dictionary, sender_peer_id: int) -> void:
 	if NetworkManager and NetworkManager.is_multiplayer():
 		local_peer_id = NetworkManager.get_local_peer_id()
 	
-	# Diagnostic logging (throttled to avoid spam)
-	# Use debug_log instead of print, and only log if enabled
-	CogitoGlobals.debug_log(
-		enable_logging,
-		"NetworkRigidSyncManager",
-		"[Mgr] peer=%d got state id=%d from=%d has=%s owner=%d" % [
-			local_peer_id,
-			network_id,
-			sender_peer_id,
-			str(component != null),
-			component.owner_peer_id if component and "owner_peer_id" in component else -1
-		]
-	)
+	# Diagnostic logging вимкнено для зменшення спаму
+	# Розкоментуй наступні рядки для діагностики, якщо потрібно:
+	# CogitoGlobals.debug_log(
+	# 	enable_logging,
+	# 	"NetworkRigidSyncManager",
+	# 	"[Mgr] peer=%d got state id=%d from=%d has=%s owner=%d" % [
+	# 		local_peer_id,
+	# 		network_id,
+	# 		sender_peer_id,
+	# 		str(component != null),
+	# 		component.owner_peer_id if component and "owner_peer_id" in component else -1
+	# 	]
+	# )
 	
 	if not component or not component.has_method("_receive_state_update"):
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkRigidSyncManager",
+			"[DIAG] Host received state but no component: network_id=%d, from=%d, component=%s" % [
+				network_id, sender_peer_id, str(component != null)
+			]
+		)
 		return
 	
 	# Check ownership: don't apply if we are the owner (we send states)
 	if NetworkManager and NetworkManager.is_multiplayer():
 		# Don't apply if we sent this state (use sender_peer_id instead of timestamp hack)
 		if sender_peer_id == local_peer_id:
+			CogitoGlobals.debug_log(
+				true,
+				"NetworkRigidSyncManager",
+				"[DIAG] Host ignoring own state: network_id=%d, sender=%d, local=%d" % [
+					network_id, sender_peer_id, local_peer_id
+				]
+			)
 			return
 		
 		# Check if component has ownership info
 		if "owner_peer_id" in component:
+			var component_owner = component.owner_peer_id
+			var is_local_owner_check = false
 			if component.has_method("is_local_owner"):
-				if component.is_local_owner():
-					return
+				is_local_owner_check = component.is_local_owner()
 			else:
-				var owner_peer_id = component.owner_peer_id
-				if owner_peer_id == local_peer_id:
-					return
+				is_local_owner_check = (component_owner == local_peer_id)
+			
+			if is_local_owner_check:
+				CogitoGlobals.debug_log(
+					true,
+					"NetworkRigidSyncManager",
+					"[DIAG] Host ignoring state: considers self owner! network_id=%d, from=%d, host_owner=%d, component_owner=%d" % [
+						network_id, sender_peer_id, local_peer_id, component_owner
+					]
+				)
+				return
 	
+	CogitoGlobals.debug_log(
+		true,
+		"NetworkRigidSyncManager",
+		"[DIAG] Host forwarding state to component: network_id=%d, from=%d, local=%d, component_owner=%d" % [
+			network_id, sender_peer_id, local_peer_id,
+			component.owner_peer_id if "owner_peer_id" in component else -1
+		]
+	)
 	component._receive_state_update(state_data)
 
 
@@ -392,8 +568,35 @@ func _handle_ownership_grant(network_id: int, owner_peer_id: int) -> void:
 	if not component or not component.has_method("_set_ownership"):
 		return
 	
+	# DIAGNOSTIC: Check current state before granting
+	var local_peer_id = NetworkManager.get_local_peer_id() if NetworkManager else -1
+	var current_owner = component.owner_peer_id if "owner_peer_id" in component else -1
+	var rigid_body = component.get_parent_rigid_body() if component.has_method("get_parent_rigid_body") else null
+	var current_authority = rigid_body.get_multiplayer_authority() if rigid_body else -1
+	
+	CogitoGlobals.debug_log(
+		true,
+		"NetworkRigidSyncManager",
+		"[DIAG] _handle_ownership_grant: network_id=%d, granting_to=%d, local=%d, current_owner=%d, current_authority=%d" % [
+			network_id, owner_peer_id, local_peer_id, current_owner, current_authority
+		]
+	)
+	
 	# Update ownership locally
 	component._set_ownership(owner_peer_id)
+	
+	# DIAGNOSTIC: Check state after granting
+	var new_owner = component.owner_peer_id if "owner_peer_id" in component else -1
+	var new_authority = rigid_body.get_multiplayer_authority() if rigid_body else -1
+	var new_freeze = rigid_body.freeze if rigid_body else false
+	
+	CogitoGlobals.debug_log(
+		true,
+		"NetworkRigidSyncManager",
+		"[DIAG] _handle_ownership_grant AFTER: network_id=%d, new_owner=%d, new_authority=%d, freeze=%s, local=%d" % [
+			network_id, new_owner, new_authority, new_freeze, local_peer_id
+		]
+	)
 	
 	CogitoGlobals.debug_log(
 		enable_logging,

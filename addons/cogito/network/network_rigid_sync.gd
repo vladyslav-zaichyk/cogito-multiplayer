@@ -167,6 +167,16 @@ func _physics_process(_delta: float) -> void:
 			# We are the owner - send states
 			var is_carried = _is_carried_locally() if local_peer_id != 1 else _is_carried_on_host()
 			
+			# DIAGNOSTIC: Check if we should send but something is wrong
+			if parent_rigid_body.freeze:
+				CogitoGlobals.debug_log(
+					true,
+					"NetworkRigidSync",
+					"[DIAG] WARNING: Owner but frozen! network_id=%d, freeze=%s, sync_enabled=%s" % [
+						network_id, parent_rigid_body.freeze, sync_enabled
+					]
+				)
+			
 			# Debug: check if we should send but network_id is invalid
 			if network_id == 0:
 				# Try to get network_id from component
@@ -176,6 +186,19 @@ func _physics_process(_delta: float) -> void:
 			
 			if network_id == 0:
 				# Can't send without network_id
+				CogitoGlobals.debug_log(
+					true,
+					"NetworkRigidSync",
+					"[DIAG] Cannot send: network_id=0, owner=%d, local=%d" % [owner_peer_id, local_peer_id]
+				)
+				return
+			
+			if not sync_enabled:
+				CogitoGlobals.debug_log(
+					true,
+					"NetworkRigidSync",
+					"[DIAG] Cannot send: sync_enabled=false, network_id=%d" % network_id
+				)
 				return
 			
 			frames_since_last_send += 1
@@ -185,24 +208,49 @@ func _physics_process(_delta: float) -> void:
 				var current_state = _collect_state()
 				if current_state.is_empty():
 					# State collection failed
+					CogitoGlobals.debug_log(
+						true,
+						"NetworkRigidSync",
+						"[DIAG] Cannot send: state collection failed, network_id=%d" % network_id
+					)
 					return
 				
 				# If carried, always send (even if position didn't change)
-				if last_sent_state.is_empty() or _state_changed(current_state) or is_carried:
+				var should_send = last_sent_state.is_empty() or _state_changed(current_state) or is_carried
+				if should_send:
+					CogitoGlobals.debug_log(
+						true,
+						"NetworkRigidSync",
+						"[DIAG] Sending state: network_id=%d, local=%d, owner=%d, freeze=%s, pos=%s" % [
+							network_id, local_peer_id, owner_peer_id, parent_rigid_body.freeze,
+							Vector3(current_state.position.x, current_state.position.y, current_state.position.z)
+						]
+					)
 					_send_state_update(current_state)
 					last_sent_state = current_state.duplicate()
 					frames_since_last_send = 0
 		
 		# Check if object should return ownership to host (timer-based after drop)
+		# IMPORTANT: This only applies to objects that were CARRIED and then DROPPED
+		# For objects that are owned via bubble proximity, ownership is managed by NetworkRigidSyncManager
+		# We only return ownership here if the object was previously carried
 		if owner_peer_id != 1 and local_peer_id == owner_peer_id:
-			if not _is_carried_locally():
-				drop_timer += _delta
-				if drop_timer >= drop_timer_duration:
-					# Object not carried for drop_timer_duration - return ownership to host
-					_return_ownership_to_host()
-			else:
+			if _is_carried_locally():
 				# Object is being carried - reset timer
 				drop_timer = 0.0
+			else:
+				# Object is not carried - check if it was previously carried
+				# Only start timer if object was recently dropped (not for bubble-based ownership)
+				# We check this by seeing if drop_timer is already > 0 (meaning it was carried before)
+				# If drop_timer is 0, it means ownership was granted via bubble, not via carry
+				if drop_timer > 0.0:
+					# Object was previously carried and now dropped - start timer
+					drop_timer += _delta
+					if drop_timer >= drop_timer_duration:
+						# Object not carried for drop_timer_duration - return ownership to host
+						_return_ownership_to_host()
+				# If drop_timer is 0, ownership was granted via bubble - don't return it here
+				# NetworkRigidSyncManager will handle ownership changes based on bubble proximity
 
 
 func _find_network_id_component() -> void:
@@ -382,9 +430,21 @@ func _receive_state_update(state_data: Dictionary) -> void:
 	
 	# Don't apply if we are the owner (we send states, not apply)
 	if is_local_owner():
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkRigidSync",
+			"[DIAG] Host _receive_state_update: ignoring (local owner) network_id=%d, local=%d, owner=%d" % [
+				network_id, local_peer_id, owner_peer_id
+			]
+		)
 		return
 	
 	if not sync_enabled:
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkRigidSync",
+			"[DIAG] Host _receive_state_update: ignoring (sync_disabled) network_id=%d" % network_id
+		)
 		return
 	
 	var received_network_id_raw = state_data.get("network_id", 0)
@@ -550,6 +610,8 @@ func set_sync_enabled(enabled: bool) -> void:
 	if not parent_rigid_body:
 		return
 	
+	var freeze_before = parent_rigid_body.freeze
+	var sync_enabled_before = sync_enabled
 	sync_enabled = enabled
 	
 	if enabled and NetworkManager and NetworkManager.is_multiplayer():
@@ -564,11 +626,26 @@ func set_sync_enabled(enabled: bool) -> void:
 		
 		if owner_peer_id == local_peer_id:
 			# We are owner - enable physics
+			# CRITICAL: Always unfreeze for owner, even if it was frozen before
 			parent_rigid_body.freeze = false
+			CogitoGlobals.debug_log(
+				true,
+				"NetworkRigidSync",
+				"[DIAG] set_sync_enabled: enabled=%s, owner=%d, local=%d, freeze %s->%s, network_id=%d" % [
+					enabled, owner_peer_id, local_peer_id, freeze_before, parent_rigid_body.freeze, network_id
+				]
+			)
 		else:
 			# We are not owner - freeze
 			parent_rigid_body.freeze = true
 			parent_rigid_body.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+			CogitoGlobals.debug_log(
+				true,
+				"NetworkRigidSync",
+				"[DIAG] set_sync_enabled: enabled=%s, NOT owner (owner=%d, local=%d), freeze %s->%s, network_id=%d" % [
+					enabled, owner_peer_id, local_peer_id, freeze_before, parent_rigid_body.freeze, network_id
+				]
+			)
 
 
 func get_network_id() -> int:
@@ -632,16 +709,20 @@ func _on_carry_state_changed(is_carried: bool) -> void:
 			# DO NOT unfreeze until ownership is granted (in _set_ownership)
 			_request_ownership()
 			# Keep frozen - will be unfrozen in _set_ownership when grant arrives
+			# Reset drop_timer - object is being carried
+			drop_timer = 0.0
 	else:
-		# Object dropped - reset drop timer
-		drop_timer = 0.0
+		# Object dropped - start drop timer (only for objects that were carried)
+		# This timer will return ownership to host after drop_timer_duration
+		# But only if object was previously carried (drop_timer will be > 0 in _physics_process)
 		if local_peer_id == 1:
 			# Host - no changes needed
 			pass
 		else:
-			# Client dropped object - ownership will return to host after timer
-			# Timer is checked in _physics_process
-			pass
+			# Client dropped object - start timer to return ownership to host
+			# Set drop_timer to a small value to indicate object was dropped
+			# This will trigger the timer in _physics_process
+			drop_timer = 0.001  # Small value to indicate object was dropped (not 0.0)
 
 
 func _request_ownership() -> void:
@@ -674,7 +755,37 @@ func _set_ownership(peer_id: int) -> void:
 	
 	if peer_id == local_peer_id:
 		# We became owner - enable physics simulation
-		parent_rigid_body.freeze = false  # Enable physics
+		# CRITICAL: Preserve velocity before unfreezing to avoid network jitter
+		# Зберігаємо поточну інтерпольовану швидкість, якщо вона була
+		# Це щоб об'єкт не зупинився миттєво при переключенні
+		var preserve_velocity = parent_rigid_body.linear_velocity
+		if has_target:
+			preserve_velocity = target_linear_velocity
+		
+		# CRITICAL: Unfreeze FIRST, before any other operations
+		var freeze_before = parent_rigid_body.freeze
+		parent_rigid_body.freeze = false
+		parent_rigid_body.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC  # Set mode (doesn't matter when frozen=false, but good practice)
+		
+		# Відновлюємо швидкість після розмороження
+		parent_rigid_body.linear_velocity = preserve_velocity
+		
+		# Wake up the rigid body if it's sleeping
+		if parent_rigid_body.sleeping:
+			parent_rigid_body.sleeping = false
+		
+		# Скидаємо цілі інтерполяції (ми тепер керуємо фізикою)
+		has_target = false
+		has_pending_state = false
+		
+		# DIAGNOSTIC: Log freeze state change
+		CogitoGlobals.debug_log(
+			true,
+			"NetworkRigidSync",
+			"[DIAG] _set_ownership START: peer_id=%d, local=%d, freeze_before=%s, freeze_after=%s, network_id=%d" % [
+				peer_id, local_peer_id, freeze_before, parent_rigid_body.freeze, network_id
+			]
+		)
 		
 		# Ensure network_id is set (might not be set yet on client)
 		if network_id == 0:
@@ -684,6 +795,11 @@ func _set_ownership(peer_id: int) -> void:
 			
 			if network_id == 0:
 				push_error("NetworkRigidSync: Became owner but network_id is 0 for %s" % parent_rigid_body.name)
+				CogitoGlobals.debug_log(
+					true,
+					"NetworkRigidSync",
+					"[DIAG] ERROR: Returning early due to network_id=0, freeze=%s" % parent_rigid_body.freeze
+				)
 				return
 		
 		# Ensure component is registered (might not be registered yet)
@@ -693,23 +809,52 @@ func _set_ownership(peer_id: int) -> void:
 				# Not registered yet, register now
 				NetworkRigidSyncManager.register_rigid_body(self)
 		
-		# Ensure sync is enabled when we become owner (call set_sync_enabled to ensure proper setup)
+		# Ensure sync is enabled when we become owner
+		# IMPORTANT: Set sync_enabled flag, but don't call set_sync_enabled() which might override freeze
+		var sync_enabled_before = sync_enabled
 		if not sync_enabled:
-			set_sync_enabled(true)
+			sync_enabled = true
+			# Set authority manually to avoid set_sync_enabled() override
+			parent_rigid_body.set_multiplayer_authority(peer_id)
+			# Ensure freeze is still false after setting authority
+			var freeze_after_authority = parent_rigid_body.freeze
+			parent_rigid_body.freeze = false
+			CogitoGlobals.debug_log(
+				true,
+				"NetworkRigidSync",
+				"[DIAG] After set_multiplayer_authority: freeze_was=%s, freeze_now=%s" % [
+					freeze_after_authority, parent_rigid_body.freeze
+				]
+			)
 		else:
 			# Even if already enabled, ensure ownership is set correctly
 			parent_rigid_body.set_multiplayer_authority(peer_id)
-			if owner_peer_id == local_peer_id:
-				parent_rigid_body.freeze = false
+			# Ensure freeze is still false
+			var freeze_after_authority = parent_rigid_body.freeze
+			parent_rigid_body.freeze = false
+			CogitoGlobals.debug_log(
+				true,
+				"NetworkRigidSync",
+				"[DIAG] After set_multiplayer_authority (sync_enabled=true): freeze_was=%s, freeze_now=%s" % [
+					freeze_after_authority, parent_rigid_body.freeze
+				]
+			)
+		
+		# Final check: ensure freeze is false (defensive programming)
+		if parent_rigid_body.freeze:
+			push_warning("NetworkRigidSync: freeze was true after becoming owner! Forcing to false for network_id=%d" % network_id)
+			parent_rigid_body.freeze = false
 		
 		# Debug log
 		CogitoGlobals.debug_log(
 			true,
 			"NetworkRigidSync",
-			"[CLIENT-OWNER] Became owner for network_id=%d, sync_enabled=%s, freeze=%s, registered=%s" % [
+			"[CLIENT-OWNER] Became owner for network_id=%d, sync_enabled=%s->%s, freeze=%s, authority=%d, registered=%s" % [
 				network_id,
+				sync_enabled_before,
 				sync_enabled,
 				parent_rigid_body.freeze,
+				parent_rigid_body.get_multiplayer_authority(),
 				NetworkRigidSyncManager.get_rigid_body(network_id) != null if NetworkRigidSyncManager else false
 			]
 		)
