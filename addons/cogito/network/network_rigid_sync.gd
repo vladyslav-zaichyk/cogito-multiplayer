@@ -3,6 +3,8 @@ extends Node
 ## Default: Host-authority (host simulates physics, clients apply states)
 ## During carry: Client-authority (client-owner simulates and sends states, host and other clients apply states)
 
+const RigidSnapshot = preload("res://addons/cogito/network/rigid_snapshot.gd")
+
 var parent_rigid_body: RigidBody3D = null
 var network_id: int = 0
 var network_id_component: Node = null
@@ -13,17 +15,12 @@ var sync_rate: float = 20.0
 var _sync_timer: float = 0.0
 var last_sent_state: Array = []
 
-var pending_state: Array = []
-var has_pending_state: bool = false
-
-var target_transform: Transform3D = Transform3D.IDENTITY
-var target_linear_velocity: Vector3 = Vector3.ZERO
-var target_angular_velocity: Vector3 = Vector3.ZERO
-var has_target: bool = false
-
-var interpolation_frames: int = 2
-var interpolation_frame_count: int = 0
+var snapshot_buffer: Array = []  # Array of RigidSnapshot
+var max_buffer_size: int = 40
+var interpolation_back_time: float = 0.12  # 120ms
+var extrapolation_limit: float = 0.2  # 200ms
 var snap_threshold: float = 1.0
+var teleport_threshold: float = 5.0
 
 var carryable_component: Node = null
 var owner_peer_id: int = 1
@@ -109,10 +106,7 @@ func _physics_process(_delta: float) -> void:
 	if not NetworkManager or not NetworkManager.is_multiplayer():
 		return
 	
-	if has_pending_state and not is_local_owner() and not _is_carried_locally():
-		_update_target_from_pending()
-	
-	if has_target and not is_local_owner() and not _is_carried_locally():
+	if not is_local_owner() and not _is_carried_locally():
 		_interpolate_to_target(_delta)
 	
 	if sync_enabled and NetworkManager and NetworkManager.is_multiplayer():
@@ -198,8 +192,14 @@ func _generate_network_id() -> int:
 func _collect_state() -> Array:
 	if not parent_rigid_body:
 		return []
+	var host_time: float = Time.get_ticks_msec() / 1000.0
+	if has_node("/root/NetworkClock"):
+		var clock = get_node("/root/NetworkClock")
+		if clock and clock.has_method("get_estimated_host_time"):
+			host_time = clock.get_estimated_host_time()
 	return [
 		network_id,
+		host_time,  # timestamp
 		parent_rigid_body.global_position,
 		parent_rigid_body.quaternion,
 		parent_rigid_body.linear_velocity,
@@ -211,18 +211,19 @@ func _state_changed(new_state: Array) -> bool:
 	if last_sent_state.is_empty():
 		return true
 	
-	var old_pos: Vector3 = last_sent_state[1]
-	var new_pos: Vector3 = new_state[1]
+	# Тепер позиція на індексі 2 (після network_id та timestamp)
+	var old_pos: Vector3 = last_sent_state[2]
+	var new_pos: Vector3 = new_state[2]
 	var pos_changed = (old_pos - new_pos).length_squared() > 0.00001
 	
-	var old_rot: Quaternion = last_sent_state[2]
-	var new_rot: Quaternion = new_state[2]
+	var old_rot: Quaternion = last_sent_state[3]
+	var new_rot: Quaternion = new_state[3]
 	var rot_changed = abs(old_rot.angle_to(new_rot)) > 0.001
 	
 	return pos_changed or rot_changed
 
 
-func _send_state_update(state: Array) -> void:
+func _send_state_update(state: Array, flags: int = 0) -> void:
 	if not NetworkManager or not NetworkManager.is_multiplayer():
 		return
 	
@@ -233,10 +234,12 @@ func _send_state_update(state: Array) -> void:
 		if network_id == 0:
 			return
 	
-	var pos: Vector3 = state[1]
+	var pos: Vector3 = state[2]  # Тепер позиція на індексі 2 (після timestamp)
 	if not (is_finite(pos.x) and is_finite(pos.y) and is_finite(pos.z)):
 		return
 	
+	# Додаємо flags в кінець
+	state.append(flags)
 	NetworkManager.sync_rigid_body_state.rpc(state)
 
 
@@ -247,32 +250,21 @@ func _receive_state_update(state_data: Array) -> void:
 	if is_local_owner() or not sync_enabled:
 		return
 	
-	if state_data.is_empty() or state_data.size() < 5:
+	if state_data.is_empty() or state_data.size() < 6:  # Тепер 6 елементів (додали timestamp)
 		return
 	
 	var received_network_id: int = state_data[0]
 	if received_network_id != network_id:
 		return
 	
-	pending_state = state_data
-	has_pending_state = true
-
-
-func _update_target_from_pending() -> void:
-	if not has_pending_state or not parent_rigid_body:
-		return
+	var timestamp: float = state_data[1]
+	var pos: Vector3 = state_data[2]
+	var rot: Quaternion = state_data[3]
+	var lin_vel: Vector3 = state_data[4]
+	var ang_vel: Vector3 = state_data[5]
+	var flags: int = state_data[6] if state_data.size() > 6 else 0
 	
-	var state_data = pending_state
-	has_pending_state = false
-	
-	if state_data.is_empty() or state_data.size() < 5:
-		return
-	
-	var pos: Vector3 = state_data[1]
-	var rot: Quaternion = state_data[2]
-	var lin_vel: Vector3 = state_data[3]
-	var ang_vel: Vector3 = state_data[4]
-	
+	# Валідація
 	if not (is_finite(pos.x) and is_finite(pos.y) and is_finite(pos.z)):
 		return
 	
@@ -280,66 +272,181 @@ func _update_target_from_pending() -> void:
 		return
 	
 	rot = rot.normalized()
-	var rot_len_sq = rot.x * rot.x + rot.y * rot.y + rot.z * rot.z + rot.w * rot.w
-	if abs(rot_len_sq - 1.0) > 0.1:
+	
+	# Створюємо snapshot
+	var snapshot = RigidSnapshot.new()
+	snapshot.timestamp = timestamp
+	snapshot.position = pos
+	snapshot.rotation = rot
+	snapshot.linear_velocity = lin_vel
+	snapshot.angular_velocity = ang_vel
+	snapshot.flags = flags
+	
+	# Якщо keyframe/teleport/ownership_change - очищаємо буфер і робимо snap
+	if flags & (RigidSnapshot.FLAG_KEYFRAME | RigidSnapshot.FLAG_TELEPORT | RigidSnapshot.FLAG_OWNERSHIP_CHANGE):
+		snapshot_buffer.clear()
+		_apply_snapshot_immediate(snapshot)
+		snapshot_buffer.append(snapshot)
 		return
 	
-	var basis = Basis(rot)
-	if not (_is_finite(basis.x) and _is_finite(basis.y) and _is_finite(basis.z)):
-		return
+	# Перевірка на телепорт (велика зміна позиції)
+	if snapshot_buffer.size() > 0:
+		var last_snap = snapshot_buffer[snapshot_buffer.size() - 1]
+		var dist = last_snap.position.distance_to(pos)
+		if dist > teleport_threshold:
+			snapshot.flags |= RigidSnapshot.FLAG_TELEPORT
+			snapshot_buffer.clear()
+			_apply_snapshot_immediate(snapshot)
+			snapshot_buffer.append(snapshot)
+			return
 	
-	target_transform = Transform3D(basis, pos)
+	# Вставляємо в буфер
+	_insert_snapshot(snapshot)
+
+
+func _insert_snapshot(snapshot: RigidSnapshot) -> void:
+	# Вставляємо в відсортований масив за timestamp
+	var inserted = false
+	for i in range(snapshot_buffer.size()):
+		if snapshot_buffer[i].timestamp > snapshot.timestamp:
+			snapshot_buffer.insert(i, snapshot)
+			inserted = true
+			break
 	
-	target_linear_velocity = lin_vel if is_finite(lin_vel.x) and is_finite(lin_vel.y) and is_finite(lin_vel.z) else Vector3.ZERO
-	target_angular_velocity = ang_vel if is_finite(ang_vel.x) and is_finite(ang_vel.y) and is_finite(ang_vel.z) else Vector3.ZERO
+	if not inserted:
+		snapshot_buffer.append(snapshot)
 	
-	var current_pos = parent_rigid_body.global_position
-	var error = (current_pos - pos).length()
-	interpolation_frame_count = interpolation_frames if error > snap_threshold else 0
-	has_target = true
+	# Обмежуємо розмір буфера
+	if snapshot_buffer.size() > max_buffer_size:
+		snapshot_buffer.pop_front()
+
+
+func _cleanup_old_snapshots() -> void:
+	var host_time: float = Time.get_ticks_msec() / 1000.0
+	if has_node("/root/NetworkClock"):
+		var clock = get_node("/root/NetworkClock")
+		if clock and clock.has_method("get_estimated_host_time"):
+			host_time = clock.get_estimated_host_time()
+	var cutoff_time = host_time - 1.0  # Видаляємо старші за 1 секунду
+	
+	while snapshot_buffer.size() > 0 and snapshot_buffer[0].timestamp < cutoff_time:
+		snapshot_buffer.pop_front()
 
 
 func _interpolate_to_target(_delta: float) -> void:
-	if not has_target or not parent_rigid_body:
+	if not parent_rigid_body:
 		return
 	
 	var body_rid = parent_rigid_body.get_rid()
 	if not body_rid.is_valid():
 		return
 	
-	interpolation_frame_count += 1
-	var alpha = min(float(interpolation_frame_count) / float(interpolation_frames), 1.0)
+	# Очищаємо старі snapshot'и
+	_cleanup_old_snapshots()
 	
-	var current_transform = parent_rigid_body.global_transform
-	var current_pos = current_transform.origin
-	var target_pos = target_transform.origin
-	var lerped_pos = current_pos.lerp(target_pos, alpha)
-	
-	var current_rot = current_transform.basis.get_rotation_quaternion()
-	var target_rot = target_transform.basis.get_rotation_quaternion()
-	var slerped_rot = current_rot.slerp(target_rot, alpha)
-	
-	var interpolated_transform = Transform3D(Basis(slerped_rot), lerped_pos)
-	
-	var current_lin_vel = parent_rigid_body.linear_velocity
-	var current_ang_vel = parent_rigid_body.angular_velocity
-	var lerped_lin_vel = current_lin_vel.lerp(target_linear_velocity, alpha)
-	var lerped_ang_vel = current_ang_vel.lerp(target_angular_velocity, alpha)
-	
-	if not (_is_finite(interpolated_transform.origin) and _is_finite(interpolated_transform.basis.x) and _is_finite(interpolated_transform.basis.y) and _is_finite(interpolated_transform.basis.z)):
+	if snapshot_buffer.size() < 2:
+		# Недостатньо даних - hold last або екстраполяція
+		if snapshot_buffer.size() == 1:
+			var host_time: float = Time.get_ticks_msec() / 1000.0
+			if has_node("/root/NetworkClock"):
+				var clock = get_node("/root/NetworkClock")
+				if clock and clock.has_method("get_estimated_host_time"):
+					host_time = clock.get_estimated_host_time()
+			var render_time = host_time - interpolation_back_time
+			var time_passed = render_time - snapshot_buffer[0].timestamp
+			if time_passed > 0.0 and time_passed <= extrapolation_limit:
+				_extrapolate_from_snapshot(snapshot_buffer[0], time_passed)
+			else:
+				_apply_snapshot_immediate(snapshot_buffer[0])
 		return
 	
-	PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_TRANSFORM, interpolated_transform)
+	# Визначаємо render time (минуле)
+	var host_time: float = Time.get_ticks_msec() / 1000.0
+	if has_node("/root/NetworkClock"):
+		var clock = get_node("/root/NetworkClock")
+		if clock and clock.has_method("get_estimated_host_time"):
+			host_time = clock.get_estimated_host_time()
+	var render_time = host_time - interpolation_back_time
 	
-	if not parent_rigid_body.freeze:
-		if _is_finite(lerped_lin_vel):
-			PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY, lerped_lin_vel)
-		if _is_finite(lerped_ang_vel):
-			PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_ANGULAR_VELOCITY, lerped_ang_vel)
+	# Шукаємо два snapshot'и навколо render_time
+	var prev_snap: RigidSnapshot = null
+	var next_snap: RigidSnapshot = null
 	
-	if interpolation_frame_count >= interpolation_frames:
-		has_target = false
-		interpolation_frame_count = 0
+	for i in range(snapshot_buffer.size() - 1):
+		if snapshot_buffer[i].timestamp <= render_time and snapshot_buffer[i + 1].timestamp >= render_time:
+			prev_snap = snapshot_buffer[i]
+			next_snap = snapshot_buffer[i + 1]
+			break
+	
+	if prev_snap and next_snap:
+		# ІНТЕРПОЛЯЦІЯ
+		var total_time = next_snap.timestamp - prev_snap.timestamp
+		if total_time <= 0.0:
+			total_time = 0.001
+		
+		var time_since_prev = render_time - prev_snap.timestamp
+		var alpha = clamp(time_since_prev / total_time, 0.0, 1.0)
+		
+		var interp_pos = prev_snap.position.lerp(next_snap.position, alpha)
+		var interp_rot = prev_snap.rotation.slerp(next_snap.rotation, alpha)
+		var interp_lin_vel = prev_snap.linear_velocity.lerp(next_snap.linear_velocity, alpha)
+		var interp_ang_vel = prev_snap.angular_velocity.lerp(next_snap.angular_velocity, alpha)
+		
+		var interp_transform = Transform3D(Basis(interp_rot), interp_pos)
+		
+		# Валідація
+		if not (_is_finite(interp_transform.origin) and _is_finite(interp_transform.basis.x) and _is_finite(interp_transform.basis.y) and _is_finite(interp_transform.basis.z)):
+			return
+		
+		# Застосовуємо через PhysicsServer (правильний спосіб для kinematic)
+		PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_TRANSFORM, interp_transform)
+		PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY, interp_lin_vel)
+		PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_ANGULAR_VELOCITY, interp_ang_vel)
+		
+	elif snapshot_buffer.size() > 0:
+		# ЕКСТРАПОЛЯЦІЯ (немає наступного snapshot'а)
+		var latest = snapshot_buffer[snapshot_buffer.size() - 1]
+		var time_passed = render_time - latest.timestamp
+		
+		if time_passed > 0.0 and time_passed <= extrapolation_limit:
+			_extrapolate_from_snapshot(latest, time_passed)
+		else:
+			# Hold last
+			_apply_snapshot_immediate(latest)
+
+
+func _extrapolate_from_snapshot(snap: RigidSnapshot, dt: float) -> void:
+	var body_rid = parent_rigid_body.get_rid()
+	if not body_rid.is_valid():
+		return
+	
+	var extrapolated_pos = snap.position + (snap.linear_velocity * dt)
+	var extrapolated_rot = snap.rotation  # Спрощено - можна інтегрувати angular_velocity
+	
+	var extrapolated_transform = Transform3D(Basis(extrapolated_rot), extrapolated_pos)
+	
+	# Валідація
+	if not (_is_finite(extrapolated_transform.origin) and _is_finite(extrapolated_transform.basis.x) and _is_finite(extrapolated_transform.basis.y) and _is_finite(extrapolated_transform.basis.z)):
+		return
+	
+	PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_TRANSFORM, extrapolated_transform)
+	PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY, snap.linear_velocity)
+
+
+func _apply_snapshot_immediate(snap: RigidSnapshot) -> void:
+	var body_rid = parent_rigid_body.get_rid()
+	if not body_rid.is_valid():
+		return
+	
+	var transform = Transform3D(Basis(snap.rotation), snap.position)
+	
+	# Валідація
+	if not (_is_finite(transform.origin) and _is_finite(transform.basis.x) and _is_finite(transform.basis.y) and _is_finite(transform.basis.z)):
+		return
+	
+	PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_TRANSFORM, transform)
+	PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_LINEAR_VELOCITY, snap.linear_velocity)
+	PhysicsServer3D.body_set_state(body_rid, PhysicsServer3D.BODY_STATE_ANGULAR_VELOCITY, snap.angular_velocity)
 
 
 func _is_finite(v: Vector3) -> bool:
@@ -447,7 +554,11 @@ func _set_ownership(peer_id: int) -> void:
 	parent_rigid_body.set_multiplayer_authority(peer_id)
 	
 	if peer_id == local_peer_id:
-		var preserve_velocity = target_linear_velocity if has_target else parent_rigid_body.linear_velocity
+		# Стали owner - відправляємо keyframe
+		var preserve_velocity = parent_rigid_body.linear_velocity
+		if snapshot_buffer.size() > 0:
+			var last_snap = snapshot_buffer[snapshot_buffer.size() - 1]
+			preserve_velocity = last_snap.linear_velocity
 		
 		parent_rigid_body.freeze = false
 		parent_rigid_body.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
@@ -456,8 +567,11 @@ func _set_ownership(peer_id: int) -> void:
 		if parent_rigid_body.sleeping:
 			parent_rigid_body.sleeping = false
 		
-		has_target = false
-		has_pending_state = false
+		# Очищаємо буфер і відправляємо keyframe
+		snapshot_buffer.clear()
+		var state = _collect_state()
+		if not state.is_empty():
+			_send_state_update(state, RigidSnapshot.FLAG_KEYFRAME | RigidSnapshot.FLAG_OWNERSHIP_CHANGE)
 		
 		if network_id == 0:
 			_find_network_id_component()
@@ -484,6 +598,8 @@ func _set_ownership(peer_id: int) -> void:
 			push_warning("NetworkRigidSync: freeze was true after becoming owner! Forcing to false for network_id=%d" % network_id)
 			parent_rigid_body.freeze = false
 	else:
+		# Перестали бути owner - очищаємо буфер
+		snapshot_buffer.clear()
 		parent_rigid_body.freeze = true
 		parent_rigid_body.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 

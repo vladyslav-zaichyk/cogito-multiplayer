@@ -26,6 +26,7 @@ func _enter_tree():
 	add_autoload_singleton("CommandBus", "/network/commands/command_bus.gd")
 	add_autoload_singleton("ResponseHandler", "/network/commands/response_handler.gd")
 	add_autoload_singleton("NetworkRigidSyncManager", "/network/network_rigid_sync_manager.gd")
+	add_autoload_singleton("NetworkClock", "/network/network_clock.gd")
 
 	# Initialization of the plugin goes here.
 	parser_plugin = load("res://addons/cogito/Localization/scripts/loc_resource_parser.gd").new()

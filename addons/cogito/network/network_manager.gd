@@ -499,7 +499,7 @@ func sync_pickup_item_removed(item_data: Dictionary) -> void:
 
 
 ## RPC: Sync rigid body state (called from NetworkRigidSync)
-## state_data: Array[network_id, position, quaternion, linear_velocity, angular_velocity]
+## state_data: Array[network_id, timestamp, position, quaternion, linear_velocity, angular_velocity, flags]
 @rpc("any_peer", "unreliable")
 func sync_rigid_body_state(state_data: Array) -> void:
 	if NetworkRigidSyncManager:
