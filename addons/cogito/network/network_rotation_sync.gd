@@ -274,10 +274,11 @@ func _receive_rotation_update(body_rotation: float, neck_rotation: float, head_r
 	if is_local:
 		return
 	
-	# Update target rotations for interpolation
-	target_body_rotation = body_rotation
-	target_neck_rotation = neck_rotation
-	target_head_rotation = head_rotation
+	# Нормалізуємо кути в діапазон [-180, 180] перед збереженням
+	# ВАЖЛИВО: Інвертуємо body_rotation, щоб виправити поворот на 180°
+	target_body_rotation = fmod(-body_rotation + 180.0, 360.0) - 180.0
+	target_neck_rotation = fmod(neck_rotation + 180.0, 360.0) - 180.0
+	target_head_rotation = fmod(head_rotation + 180.0, 360.0) - 180.0
 	
 	CogitoGlobals.debug_log(
 		enable_logging,
@@ -296,55 +297,42 @@ func _interpolate_rotation(delta: float) -> void:
 	if not body_node:
 		return
 	
-	var current_body_rotation = rad_to_deg(body_node.rotation.y)
-	var current_neck_rotation = 0.0
-	if neck_node:
-		current_neck_rotation = rad_to_deg(neck_node.rotation.y)
-	var current_head_rotation = 0.0
-	if head_node:
-		current_head_rotation = rad_to_deg(head_node.rotation.x)
+	# Interpolate body rotation (Y-axis) using lerp_angle for proper wrap-around
+	var current_body_rad = body_node.rotation.y
+	# Нормалізуємо target_body_rotation в діапазон [-180, 180] перед конвертацією
+	var normalized_target = fmod(target_body_rotation + 180.0, 360.0) - 180.0
+	var target_body_rad = deg_to_rad(normalized_target)
+	var body_diff_rad = abs(angle_difference(current_body_rad, target_body_rad))
 	
-	# Normalize angles for interpolation (handle wrap-around)
-	var body_diff = target_body_rotation - current_body_rotation
-	if body_diff > 180:
-		body_diff -= 360
-	elif body_diff < -180:
-		body_diff += 360
-	
-	# Interpolate body rotation (Y-axis)
-	if abs(body_diff) > rotation_threshold:
-		var new_body_rotation = current_body_rotation + body_diff * interpolation_speed * delta
-		body_node.rotation.y = deg_to_rad(new_body_rotation)
+	if body_diff_rad > deg_to_rad(rotation_threshold):
+		var new_body_rotation = lerp_angle(current_body_rad, target_body_rad, interpolation_speed * delta)
+		body_node.rotation.y = new_body_rotation
 	else:
-		body_node.rotation.y = deg_to_rad(target_body_rotation)
+		body_node.rotation.y = target_body_rad
 	
 	# Interpolate neck rotation (Y-axis) - if neck node exists
 	if neck_node:
-		var neck_diff = target_neck_rotation - current_neck_rotation
-		if neck_diff > 180:
-			neck_diff -= 360
-		elif neck_diff < -180:
-			neck_diff += 360
+		var current_neck_rad = neck_node.rotation.y
+		var target_neck_rad = deg_to_rad(target_neck_rotation)
+		var neck_diff_rad = abs(angle_difference(current_neck_rad, target_neck_rad))
 		
-		if abs(neck_diff) > rotation_threshold:
-			var new_neck_rotation = current_neck_rotation + neck_diff * interpolation_speed * delta
-			neck_node.rotation.y = deg_to_rad(new_neck_rotation)
+		if neck_diff_rad > deg_to_rad(rotation_threshold):
+			var new_neck_rotation = lerp_angle(current_neck_rad, target_neck_rad, interpolation_speed * delta)
+			neck_node.rotation.y = new_neck_rotation
 		else:
-			neck_node.rotation.y = deg_to_rad(target_neck_rotation)
+			neck_node.rotation.y = target_neck_rad
 	
 	# Interpolate head rotation (X-axis) - if head node exists
 	if head_node:
-		var head_diff = target_head_rotation - current_head_rotation
-		if head_diff > 180:
-			head_diff -= 360
-		elif head_diff < -180:
-			head_diff += 360
+		var current_head_rad = head_node.rotation.x
+		var target_head_rad = deg_to_rad(target_head_rotation)
+		var head_diff_rad = abs(angle_difference(current_head_rad, target_head_rad))
 		
-		if abs(head_diff) > rotation_threshold:
-			var new_head_rotation = current_head_rotation + head_diff * interpolation_speed * delta
-			head_node.rotation.x = deg_to_rad(new_head_rotation)
+		if head_diff_rad > deg_to_rad(rotation_threshold):
+			var new_head_rotation = lerp_angle(current_head_rad, target_head_rad, interpolation_speed * delta)
+			head_node.rotation.x = new_head_rotation
 		else:
-			head_node.rotation.x = deg_to_rad(target_head_rotation)
+			head_node.rotation.x = target_head_rad
 
 
 ## Force immediate rotation sync (useful for respawn, etc.)
