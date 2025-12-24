@@ -12,6 +12,13 @@ var _ownership_change_times: Dictionary = {}  # network_id -> timestamp оста
 var _ownership_cooldown: float = 1.5  # Не міняти частіше ніж раз на 1.5 сек
 var _ownership_hysteresis: float = 2.0  # Новий власник має бути на 2 метри ближче
 
+enum SyncMode {
+	HOST_AUTHORITATIVE,  # Тільки хост симулює (за замовчуванням)
+	DISTRIBUTED_BUBBLE   # Distributed через бульбашки
+}
+
+var global_sync_mode: SyncMode = SyncMode.DISTRIBUTED_BUBBLE  # За замовчуванням - Host Authoritative
+
 const COMPONENT_NAME = "NetworkRigidSync"
 const COMPONENT_SCRIPT = preload("res://addons/cogito/network/network_rigid_sync.gd")
 const BUBBLE_NAME = "NetworkRigidBubble"
@@ -97,10 +104,12 @@ func _inject_component_if_needed(rigid_body: RigidBody3D) -> void:
 	component.name = COMPONENT_NAME
 	rigid_body.add_child(component)
 	
-	if not rigid_body.get_node_or_null(BUBBLE_NAME):
-		var bubble: Area3D = BUBBLE_SCRIPT.new()
-		bubble.name = BUBBLE_NAME
-		rigid_body.add_child(bubble)
+	# Створюємо бульбашку тільки для DISTRIBUTED_BUBBLE режиму
+	if global_sync_mode == SyncMode.DISTRIBUTED_BUBBLE:
+		if not rigid_body.get_node_or_null(BUBBLE_NAME):
+			var bubble: Area3D = BUBBLE_SCRIPT.new()
+			bubble.name = BUBBLE_NAME
+			rigid_body.add_child(bubble)
 	
 	if auto_add_helper_script and not rigid_body.get_script():
 		rigid_body.set_script(HELPER_SCRIPT)
@@ -192,6 +201,10 @@ func _on_rigid_body_exited_bubble(network_id: int, player_peer_id: int) -> void:
 func _process(delta: float) -> void:
 	if not NetworkManager or not NetworkManager.is_host():
 		return
+	
+	# ГІБРИДНА СИСТЕМА: Якщо глобальний режим Host Authoritative - не перевіряємо бульбашки
+	if global_sync_mode == SyncMode.HOST_AUTHORITATIVE:
+		return  # Хост завжди owner для всіх об'єктів, не потрібні перевірки
 	
 	_ownership_update_timer += delta
 	if _ownership_update_timer < _ownership_update_interval:
@@ -386,3 +399,43 @@ func set_logging_enabled(enabled: bool) -> void:
 		var component = registered_bodies[network_id]
 		if component and component.has("enable_logging"):
 			component.enable_logging = enabled
+
+
+## Перемикає глобальний режим синхронізації
+## HOST_AUTHORITATIVE - хост завжди owner (стабільніше, менше навантаження)
+## DISTRIBUTED_BUBBLE - distributed через бульбашки (реактивніше для активних предметів)
+func set_global_sync_mode(mode: SyncMode) -> void:
+	if global_sync_mode == mode:
+		return  # Вже в цьому режимі
+	
+	global_sync_mode = mode
+	
+	# Якщо перемикаємося на DISTRIBUTED_BUBBLE - створюємо бульбашки для всіх об'єктів
+	if mode == SyncMode.DISTRIBUTED_BUBBLE:
+		for network_id in registered_bodies.keys():
+			var component = get_rigid_body(network_id)
+			if not component or not component.has_method("get_parent_rigid_body"):
+				continue
+			
+			var rb: RigidBody3D = component.get_parent_rigid_body()
+			if not rb or not is_instance_valid(rb):
+				continue
+			
+			# Створюємо бульбашку, якщо її немає
+			if not rb.get_node_or_null(BUBBLE_NAME):
+				var bubble: Area3D = BUBBLE_SCRIPT.new()
+				bubble.name = BUBBLE_NAME
+				rb.add_child(bubble)
+	
+	# Якщо перемикаємося на HOST_AUTHORITATIVE - повертаємо всі права хосту
+	elif mode == SyncMode.HOST_AUTHORITATIVE:
+		if NetworkManager and NetworkManager.is_host():
+			for network_id in registered_bodies.keys():
+				var component = get_rigid_body(network_id)
+				if not component:
+					continue
+				
+				# Повертаємо права хосту
+				if "owner_peer_id" in component and component.owner_peer_id != 1:
+					if NetworkManager:
+						NetworkManager.grant_rigid_body_ownership.rpc(network_id, 1)
