@@ -321,6 +321,10 @@ func _update_remote_wieldable(wieldable_data: Dictionary) -> void:
 			wieldable_node.item_reference = wieldable_resource
 			current_wieldable_path = resource_path if not resource_path.is_empty() else wieldable_data.get("name", "")
 			
+			# ВАЖЛИВО: Скидаємо ротацію wieldable до нуля, оскільки контейнер вже обертається з head
+			# Раніше тут був хардкод для компенсації повороту на 180°, але тепер ротація гравця виправлена
+			wieldable_node.rotation = Vector3.ZERO
+			
 			CogitoGlobals.debug_log(
 				enable_logging,
 				"NetworkWieldableSync",
