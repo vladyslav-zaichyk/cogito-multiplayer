@@ -1,6 +1,9 @@
 extends Node3D
 class_name PlayerInteractionComponent
 
+## Command classes use class_name for static typing, so we can call them directly
+## (InteractWithDoorCommand, InteractWithSwitchCommand, InteractWithContainerCommand)
+
 # Signals for UI/HUD use
 signal interaction_prompt(interaction_text: String)
 signal hint_prompt(hint_icon: Texture2D, hint_text: String)
@@ -45,6 +48,8 @@ var is_carrying: bool:
 ## Leave empty to ignore stamina cost evaluation when throwing
 @export var stamina_attribute: CogitoAttribute
 var player: CogitoPlayer
+## Owner ID for multiplayer support (player_id)
+var owner_id: int = -1
 
 @export_group("Drop Settings")
 ## The maximum power you can use when dropping objects
@@ -73,6 +78,14 @@ var can_cycle_quickslots: bool = true
 
 func _ready():
 	player = get_parent() as CogitoPlayer
+	# Set owner_id from player if available
+	if player and player.has_method("get") and player.get("player_id") != null:
+		owner_id = player.player_id
+	elif PlayerManager and PlayerManager.has_local_player():
+		var local_player = PlayerManager.get_local_player()
+		if local_player == player:
+			owner_id = PlayerManager.get_local_player_id()
+	
 	cycle_quickslots_interrupt_timer.connect(
 		"timeout", Callable(self, "_on_can_cycle_quickslots_timeout")
 	)
@@ -84,7 +97,49 @@ func exclude_player(rid: RID):
 
 
 func _process(_delta):
-	pass
+	# Check if turnwheel hold was cancelled (player released button early)
+	# If turnwheel is turning but hold UI is not holding, stop the turnwheel
+	if player and "player_hud" in player:
+		var hud = player.get_node_or_null(NodePath(player.player_hud))
+		if hud and "hold_ui" in hud:
+			var hold_ui = hud.hold_ui
+			if hold_ui:
+				var tracker = get_node_or_null("_turnwheel_hold_tracker")
+				if tracker and tracker.has_meta("active_turnwheel"):
+					var turnwheel = tracker.get_meta("active_turnwheel")
+					if turnwheel:
+						# Check if turnwheel is turning (using has() for safety)
+						var is_turning = false
+						if turnwheel.has_method("get") and "is_currently_turning" in turnwheel:
+							is_turning = turnwheel.is_currently_turning
+						elif "is_currently_turning" in turnwheel:
+							is_turning = turnwheel.is_currently_turning
+						
+						if not hold_ui.is_holding and is_turning:
+							print("[TURNWHEEL DEBUG] Hold cancelled but turnwheel still turning! Stopping...")
+							# Hold was cancelled, check if any turnwheel is still turning
+							# Turnwheel is still turning but hold was cancelled - stop it
+							# Send command to stop turning
+							var player_id = -1
+							if PlayerManager:
+								player_id = PlayerManager.get_player_id(player)
+							
+							if player_id != -1:
+								# Don't actually complete the turn, just stop the visual rotation
+								if turnwheel.has_method("stop_visual_rotation"):
+									turnwheel.stop_visual_rotation()
+								else:
+									# Fallback if method doesn't exist
+									if "audio_stream_player_3d" in turnwheel and turnwheel.audio_stream_player_3d:
+										turnwheel.audio_stream_player_3d.stop()
+									if "is_currently_turning" in turnwheel:
+										turnwheel.is_currently_turning = false
+									if turnwheel.has_signal("turnwheel_interaction_stopped"):
+										turnwheel.turnwheel_interaction_stopped.emit()
+								print("[TURNWHEEL DEBUG] Turnwheel stopped successfully")
+							
+							# Clear the tracker
+							tracker.set_meta("active_turnwheel", null)
 
 
 func _input(event: InputEvent) -> void:
@@ -95,8 +150,43 @@ func _input(event: InputEvent) -> void:
 
 	if is_carrying and !get_parent().is_movement_paused and is_instance_valid(carried_object):
 		if Input.is_action_just_pressed("action_primary"):
+			# Use Command/Event Sourcing architecture
+			var player_id = -1
+			if PlayerManager and player:
+				player_id = PlayerManager.get_player_id(player)
+			
+			if player_id != -1:
+				# Calculate throw force
+				var carried_object_mass: float = (carried_object.get_parent() as RigidBody3D).mass
+				var throw_force: float = carried_object_mass * throw_power_mass_multiplier
+				throw_force = clamp(throw_force, 0, max_throw_power)
+				
+				# Check stamina if needed
+				if stamina_attribute and throw_force >= throw_stamina_threshold:
+					if stamina_attribute.value_current < throw_stamina_drain:
+						if drop_when_cant_throw:
+							# Drop instead of throw
+							var drop_force: float = carried_object_mass * drop_power_mass_multiplier
+							drop_force = clamp(drop_force, 0, max_drop_power)
+							var command = StopCarryingCommand.new(player_id, carried_object, drop_force)
+							CommandBus.execute_command(command)
+						return
+					else:
+						player.decrease_attribute(stamina_attribute.attribute_name, throw_stamina_drain)
+				
+				# Create and execute command (using class_name for static typing)
+				var command = StopCarryingCommand.new(player_id, carried_object, throw_force)
+				var result = CommandBus.execute_command(command)
+				
+				if result.success:
+					# Command executed successfully, throw handled by command
+					return
+				else:
+					# Command failed, fallback to old system
+					push_warning("StopCarryingCommand (throw) failed: %s" % result.error_message)
+			
+			# Fallback to old system if player_id not found or command failed
 			_attempt_throw()
-			#carried_object.throw(throw_power)
 
 	# Wieldable primary Action Input
 	if is_wielding and !get_parent().is_movement_paused:
@@ -120,8 +210,30 @@ func _handle_interaction(action: String) -> void:
 	if is_carrying:
 		if is_instance_valid(carried_object):
 			if carried_object.input_map_action == action:
+				# Use Command/Event Sourcing architecture
+				var player_id = -1
+				if PlayerManager and player:
+					player_id = PlayerManager.get_player_id(player)
+				
+				if player_id != -1:
+					# Calculate drop force
+					var carried_object_mass: float = (carried_object.get_parent() as RigidBody3D).mass
+					var drop_force: float = carried_object_mass * drop_power_mass_multiplier
+					drop_force = clamp(drop_force, 0, max_drop_power)
+					
+					# Create and execute command (using class_name for static typing)
+					var command = StopCarryingCommand.new(player_id, carried_object, drop_force)
+					var result = CommandBus.execute_command(command)
+					
+					if result.success:
+						# Command executed successfully, drop handled by command
+						return
+					else:
+						# Command failed, fallback to old system
+						push_warning("StopCarryingCommand failed: %s" % result.error_message)
+				
+				# Fallback to old system if player_id not found or command failed
 				_drop_carried_object()
-				#carried_object.throw(1)
 				return
 			else:
 				# Allow 'take' input actions for the carried object
@@ -136,6 +248,12 @@ func _handle_interaction(action: String) -> void:
 							):
 								if !node.ignore_open_gui and get_parent().is_showing_ui:
 									return
+								
+								# Emit interaction_started event through Event Bus
+								if NetworkEventBus and owner_id != -1:
+									var interaction_type = node.get_script().get_path().get_file().get_basename() if node.get_script() else "unknown"
+									NetworkEventBus.interaction_started.emit(owner_id, carry_parent, interaction_type)
+								
 								node.interact(self)
 
 								#Dual interaction components need to await signal to update correctly
@@ -145,6 +263,11 @@ func _handle_interaction(action: String) -> void:
 								else:
 									# Update the prompts after an interaction. This is especially crucial for doors and switches.
 									_rebuild_interaction_prompts()
+								
+								# Emit interaction_completed event through Event Bus
+								if NetworkEventBus and owner_id != -1:
+									var interaction_type = node.get_script().get_path().get_file().get_basename() if node.get_script() else "unknown"
+									NetworkEventBus.interaction_completed.emit(owner_id, carry_parent, interaction_type)
 								break
 		else:
 			stop_carrying()
@@ -156,6 +279,116 @@ func _handle_interaction(action: String) -> void:
 			if node.input_map_action == action and not node.is_disabled:
 				if !node.ignore_open_gui and get_parent().is_showing_ui:
 					return
+				
+				# Use Command/Event Sourcing architecture for specific interactable types
+				var player_id = -1
+				if PlayerManager and player:
+					player_id = PlayerManager.get_player_id(player)
+				
+				# Try to use commands for doors, switches, and containers
+				if player_id != -1:
+					var command_executed = false
+					
+					# Check interactable type and create appropriate command
+					if interactable is CogitoDoor:
+						# Check if this is a DualInteraction (hold for lock/unlock)
+						# DualInteraction should be handled by the old system (hold UI)
+						# When hold completes, on_hold_complete will trigger LockInteraction.interact()
+						# which will use the command system (see lock_interaction.gd)
+						if node is DualInteraction:
+							# Don't execute command immediately - let DualInteraction handle hold UI
+							# LockInteraction.interact() will handle the command when hold completes
+							command_executed = false  # Let old system handle DualInteraction
+						elif action == "interact2" and node.get_script() and node.get_script().resource_path.ends_with("lock_interaction.gd"):
+							# LockInteraction uses interact2 action - handle lock/unlock
+							var door_action = "unlock" if interactable.is_locked else "lock"
+							var command = InteractWithDoorCommand.new(player_id, interactable, door_action, false)
+							var result = CommandBus.execute_command(command)
+							
+							if result.success:
+								command_executed = true
+								_rebuild_interaction_prompts()
+						else:
+							# Regular interaction (BasicInteraction or HoldInteraction) - toggle door
+							var door_action = "toggle"
+							var target_state = false
+							if "is_open" in interactable:
+								target_state = not interactable.is_open
+							
+							var command = InteractWithDoorCommand.new(player_id, interactable, door_action, target_state)
+							var result = CommandBus.execute_command(command)
+							
+							if result.success:
+								command_executed = true
+								# Command executed successfully, interaction handled by command
+								# Still need to rebuild prompts
+								_rebuild_interaction_prompts()
+					
+					elif interactable is CogitoSwitch:
+						var command = InteractWithSwitchCommand.new(player_id, interactable)
+						var result = CommandBus.execute_command(command)
+						
+						if result.success:
+							command_executed = true
+							# Command executed successfully, interaction handled by command
+							_rebuild_interaction_prompts()
+					
+					elif interactable is CogitoContainer:
+						var command = InteractWithContainerCommand.new(player_id, interactable)
+						var result = CommandBus.execute_command(command)
+						
+						if result.success:
+							command_executed = true
+							# Command executed successfully, interaction handled by command
+							# Containers might need special handling for UI
+							_rebuild_interaction_prompts()
+					
+					elif interactable is CogitoTurnwheel:
+						# Turnwheel uses DualInteraction (press-and-hold)
+						# We need to handle both start and complete of hold
+						if node is DualInteraction:
+							# Subscribe to hold signals for turnwheel
+							var dual_interaction = node as DualInteraction
+							
+							# Connect to hold complete signal to execute command
+							if not dual_interaction.on_hold_complete.is_connected(_on_turnwheel_hold_complete):
+								print("[TURNWHEEL DEBUG] Connecting on_hold_complete signal for turnwheel: %s" % interactable.get_path())
+								dual_interaction.on_hold_complete.connect(_on_turnwheel_hold_complete.bind(interactable, player_id))
+							else:
+								print("[TURNWHEEL DEBUG] on_hold_complete signal already connected for turnwheel: %s" % interactable.get_path())
+							
+							# Also connect to is_being_held to track when hold starts
+							# This will trigger visual replication on all clients
+							if not dual_interaction.is_being_held.is_connected(_on_turnwheel_hold_start):
+								dual_interaction.is_being_held.connect(_on_turnwheel_hold_start.bind(interactable, player_id))
+							
+							# Store reference to turnwheel for cleanup if hold is cancelled
+							# We'll check this in _process to detect if hold was cancelled
+							var tracker = get_node_or_null("_turnwheel_hold_tracker")
+							if not tracker:
+								tracker = Node.new()
+								tracker.name = "_turnwheel_hold_tracker"
+								add_child(tracker)
+								tracker.set_meta("active_turnwheel", null)
+							
+							if tracker:
+								tracker.set_meta("active_turnwheel", interactable)
+								print("[TURNWHEEL DEBUG] Stored turnwheel reference in tracker")
+					
+					if command_executed:
+						# Emit interaction events through Event Bus
+						if NetworkEventBus and owner_id != -1:
+							var interaction_type = node.get_script().get_path().get_file().get_basename() if node.get_script() else "unknown"
+							NetworkEventBus.interaction_started.emit(owner_id, interactable, interaction_type)
+							NetworkEventBus.interaction_completed.emit(owner_id, interactable, interaction_type)
+						break
+				
+				# Fallback to old system if player_id not found or command not applicable
+				# Emit interaction_started event through Event Bus
+				if NetworkEventBus and owner_id != -1:
+					var interaction_type = node.get_script().get_path().get_file().get_basename() if node.get_script() else "unknown"
+					NetworkEventBus.interaction_started.emit(owner_id, interactable, interaction_type)
+				
 				node.interact(self)
 
 				#Dual interaction components need to await signal to update correctly
@@ -166,6 +399,11 @@ func _handle_interaction(action: String) -> void:
 				else:
 					# Update the prompts after an interaction. This is especially crucial for doors and switches.
 					_rebuild_interaction_prompts()
+				
+				# Emit interaction_completed event through Event Bus
+				if NetworkEventBus and owner_id != -1:
+					var interaction_type = node.get_script().get_path().get_file().get_basename() if node.get_script() else "unknown"
+					NetworkEventBus.interaction_completed.emit(owner_id, interactable, interaction_type)
 				break
 
 
@@ -248,6 +486,14 @@ func equip_wieldable(wieldable_item: WieldableItemPD):
 			. timeout
 		)
 		is_changing_wieldables = false
+		
+		# Sync wieldable after it's fully equipped (for multiplayer)
+		# This ensures the wieldable is visible on remote clients immediately
+		if NetworkManager and NetworkManager.is_multiplayer():
+			# Trigger sync via updated_wieldable_data signal
+			# This will be picked up by NetworkWieldableSync
+			if equipped_wieldable_item:
+				equipped_wieldable_item.update_wieldable_data(self)
 	else:
 		is_changing_wieldables = false
 
@@ -274,27 +520,92 @@ func change_wieldable_to(next_wieldable: InventoryItemPD):
 
 
 func attempt_action_primary(is_released: bool):
+	# Use Command/Event Sourcing architecture
+	# CommandBus is an autoload singleton (registered in cogito_plugin.gd)
+	# Accessible directly as global variable at runtime
+	var player_id = -1
+	if PlayerManager and player:
+		player_id = PlayerManager.get_player_id(player)
+	
+	if player_id != -1:
+		# Using class_name for static typing
+		var command = WieldableActionCommand.new(player_id, WieldableActionCommand.ActionType.PRIMARY, is_released)
+		var result = CommandBus.execute_command(command)
+		
+		if result.success:
+			# Command executed successfully, action handled by command
+			return
+		else:
+			# Command failed, don't perform action
+			push_warning("WieldableActionCommand (primary) failed: %s" % result.error_message)
+			return
+	
+	# Fallback to old system if player_id not found
+	push_warning("PlayerInteractionComponent: Player ID not found, using fallback (old system) instead of WieldableActionCommand")
 	if is_changing_wieldables:  # Block action if currently in the process of changing wieldables
 		return
 	if equipped_wieldable_node == null:
 		print("Nothing equipped, but is_wielding was true. This shouldn't happen!")
 		return
 
-	#else:
 	equipped_wieldable_node.action_primary(equipped_wieldable_item, is_released)
 
 
 func attempt_action_secondary(is_released: bool):
+	# Use Command/Event Sourcing architecture
+	# CommandBus is an autoload singleton (registered in cogito_plugin.gd)
+	# Accessible directly as global variable at runtime
+	var player_id = -1
+	if PlayerManager and player:
+		player_id = PlayerManager.get_player_id(player)
+	
+	if player_id != -1:
+		# Using class_name for static typing
+		var command = WieldableActionCommand.new(player_id, WieldableActionCommand.ActionType.SECONDARY, is_released)
+		var result = CommandBus.execute_command(command)
+		
+		if result.success:
+			# Command executed successfully, action handled by command
+			return
+		else:
+			# Command failed, don't perform action
+			push_warning("WieldableActionCommand (secondary) failed: %s" % result.error_message)
+			return
+	
+	# Fallback to old system if player_id not found
+	push_warning("PlayerInteractionComponent: Player ID not found, using fallback (old system) instead of WieldableActionCommand")
 	if is_changing_wieldables:  # Block action if currently in the process of changing wieldables
 		return
 	if equipped_wieldable_node == null:
 		print("Nothing equipped, but is_wielding was true. This shouldn't happen!")
 		return
-	else:
-		equipped_wieldable_node.action_secondary(is_released)
+	
+	equipped_wieldable_node.action_secondary(is_released)
 
 
 func attempt_reload():
+	# Use Command/Event Sourcing architecture
+	# CommandBus is an autoload singleton (registered in cogito_plugin.gd)
+	# Accessible directly as global variable at runtime
+	var player_id = -1
+	if PlayerManager and player:
+		player_id = PlayerManager.get_player_id(player)
+	
+	if player_id != -1:
+		# Using class_name for static typing
+		var command = ReloadWieldableCommand.new(player_id)
+		var result = CommandBus.execute_command(command)
+		
+		if result.success:
+			# Command executed successfully, reload handled by command
+			return
+		else:
+			# Command failed, don't reload
+			push_warning("ReloadWieldableCommand failed: %s" % result.error_message)
+			return
+	
+	# Fallback to old system if player_id not found
+	push_warning("PlayerInteractionComponent: Player ID not found, using fallback (old system) instead of ReloadWieldableCommand")
 	var inventory: CogitoInventory = get_parent().inventory_data
 	# Some safety checks if reload should even be triggered.
 	if inventory == null:
@@ -489,6 +800,50 @@ func _attempt_throw() -> void:
 			player.decrease_attribute(stamina_attribute.attribute_name, throw_stamina_drain)
 
 	carried_object.throw(throw_force)
+
+
+## Handler for turnwheel hold start - triggers visual replication
+func _on_turnwheel_hold_start(_time_remaining: float, turnwheel: Node, player_id_value: int) -> void:
+	print("[TURNWHEEL DEBUG] _on_turnwheel_hold_start called: time_remaining=%s, player_id=%s" % [_time_remaining, player_id_value])
+	# Only send command on first call (when hold actually starts)
+	# Check if it's a turnwheel and if it's already turning
+	if not turnwheel.has_method("get") or not "is_currently_turning" in turnwheel:
+		print("[TURNWHEEL DEBUG] Turnwheel check failed: has_method=%s, has_property=%s" % [turnwheel.has_method("get"), "is_currently_turning" in turnwheel])
+		return
+	
+	if turnwheel.is_currently_turning:
+		print("[TURNWHEEL DEBUG] Turnwheel already turning, skipping")
+		return  # Already started
+	
+	print("[TURNWHEEL DEBUG] Sending start command for turnwheel")
+	# Send start command for visual replication
+	var command = InteractWithTurnwheelCommand.new(player_id_value, turnwheel, "start")
+	var result = CommandBus.execute_command(command)
+	
+	if not result.success:
+		# Command failed, but continue with normal flow
+		push_warning("Turnwheel hold start command failed: %s" % result.error_message)
+	else:
+		print("[TURNWHEEL DEBUG] Start command executed successfully")
+
+
+## Handler for turnwheel hold complete - executes turnwheel logic
+func _on_turnwheel_hold_complete(_player_interaction_component: PlayerInteractionComponent, turnwheel: Node, player_id_value: int) -> void:
+	print("[TURNWHEEL DEBUG] _on_turnwheel_hold_complete called: player_id=%s" % player_id_value)
+	# Execute command to complete turnwheel interaction
+	var command = InteractWithTurnwheelCommand.new(player_id_value, turnwheel, "complete")
+	var result = CommandBus.execute_command(command)
+	
+	if result.success:
+		print("[TURNWHEEL DEBUG] Complete command executed successfully")
+		# Command executed successfully, turnwheel handled by command
+		# The command will call turnwheel.interact() which handles state change
+		_rebuild_interaction_prompts()
+	else:
+		# Command failed, fallback to old system
+		push_warning("Turnwheel hold complete command failed: %s, using fallback" % result.error_message)
+		if turnwheel.has_method("interact"):
+			turnwheel.interact(_player_interaction_component)
 
 
 func _drop_carried_object() -> void:

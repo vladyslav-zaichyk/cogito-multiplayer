@@ -3,6 +3,8 @@ class_name CogitoQuest
 
 ## ID number. Should be unique for each quest.
 @export var id: int
+## Player ID for multiplayer support (-1 for single-player or unassigned)
+var player_id: int = -1
 ## String name. Should have no spaces or special characters something like "level_quest01_a")
 @export var quest_name: String
 ## Quest title as it will be displayed in game.

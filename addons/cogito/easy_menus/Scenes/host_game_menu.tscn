@@ -1,0 +1,119 @@
+[gd_scene load_steps=5 format=3 uid="uid://host_game_menu"]
+
+[ext_resource type="Theme" uid="uid://by44nnjeu6u4n" path="res://addons/cogito/Theme/Cogito_Theme_A.tres" id="1_theme"]
+[ext_resource type="Script" path="res://addons/cogito/easy_menus/Scripts/host_game_menu_controller.gd" id="2_script"]
+[ext_resource type="AudioStream" uid="uid://cr3bcp0u6w1pl" path="res://addons/cogito/Assets/Audio/Kenney/UiAudio/mouseclick1.ogg" id="3_hover"]
+[ext_resource type="AudioStream" uid="uid://kbw2s407quul" path="res://addons/cogito/Assets/Audio/Kenney/UiAudio/click1.ogg" id="4_click"]
+
+[node name="HostGameMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("1_theme")
+script = ExtResource("2_script")
+sound_hover = ExtResource("3_hover")
+sound_click = ExtResource("4_click")
+
+[node name="ContentMain" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -250.0
+offset_top = -200.0
+offset_right = 250.0
+offset_bottom = 200.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 20
+
+[node name="TitleLabel" type="Label" parent="ContentMain"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 45
+text = "HOST GAME"
+horizontal_alignment = 1
+
+[node name="HSeparator" type="HSeparator" parent="ContentMain"]
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+
+[node name="ServerNameContainer" type="VBoxContainer" parent="ContentMain"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="ServerNameLabel" type="Label" parent="ContentMain/ServerNameContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Server Name:"
+
+[node name="ServerNameLineEdit" type="LineEdit" parent="ContentMain/ServerNameContainer"]
+layout_mode = 2
+placeholder_text = "My Server"
+text = "My Server"
+
+[node name="PortContainer" type="VBoxContainer" parent="ContentMain"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="PortLabel" type="Label" parent="ContentMain/PortContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Port:"
+
+[node name="PortLineEdit" type="LineEdit" parent="ContentMain/PortContainer"]
+layout_mode = 2
+placeholder_text = "7777"
+text = "7777"
+
+[node name="MaxPlayersContainer" type="VBoxContainer" parent="ContentMain"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="MaxPlayersLabel" type="Label" parent="ContentMain/MaxPlayersContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Max Players:"
+
+[node name="MaxPlayersSpinBox" type="SpinBox" parent="ContentMain/MaxPlayersContainer"]
+layout_mode = 2
+min_value = 2.0
+max_value = 16.0
+value = 4.0
+step = 1.0
+
+[node name="HSeparator2" type="HSeparator" parent="ContentMain"]
+custom_minimum_size = Vector2(0, 20)
+layout_mode = 2
+
+[node name="ButtonContainer" type="HBoxContainer" parent="ContentMain"]
+layout_mode = 2
+theme_override_constants/separation = 10
+alignment = 1
+
+[node name="StartServerButton" type="Button" parent="ContentMain/ButtonContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 25
+text = "Start Server"
+
+[node name="CancelButton" type="Button" parent="ContentMain/ButtonContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 25
+text = "Cancel"
+
+[node name="StatusLabel" type="Label" parent="ContentMain"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = ""
+horizontal_alignment = 1
+autowrap_mode = 2
+
+[connection signal="pressed" from="ContentMain/ButtonContainer/StartServerButton" to="." method="_on_start_server_pressed"]
+[connection signal="pressed" from="ContentMain/ButtonContainer/CancelButton" to="." method="_on_cancel_pressed"]
+

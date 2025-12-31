@@ -176,6 +176,12 @@ var is_dead: bool = false
 var slide_audio_player: AudioStreamPlayer3D
 var radius: float
 
+## Player ID assigned by PlayerManager (for multiplayer support)
+var player_id: int = -1
+
+## Is this the local player? (for multiplayer)
+var is_local_player: bool = true
+
 # Node caching
 @onready var player_interaction_component: PlayerInteractionComponent = $PlayerInteractionComponent
 @onready var body: Node3D = $Body
@@ -215,7 +221,70 @@ var radius: float
 
 func _ready():
 	#Some Setup steps
-	CogitoSceneManager._current_player_node = self
+	CogitoSceneManager._current_player_node = self  # Keep for backward compatibility
+	
+	# Register player in PlayerManager (new system)
+	# Determine if this is local player based on multiplayer authority
+	is_local_player = true
+	if NetworkManager and NetworkManager.is_multiplayer() and multiplayer:
+		var local_peer_id = NetworkManager.get_local_peer_id()
+		# Check authority - will be set correctly after spawn
+		# For now, assume first registered player is local
+		is_local_player = not PlayerManager.has_local_player()
+	
+	if PlayerManager:
+		player_id = PlayerManager.register_player(self, is_local_player)
+	
+	# Add network sync components for multiplayer
+	if NetworkManager and NetworkManager.is_multiplayer():
+		var position_sync = preload("res://addons/cogito/network/network_position_sync.gd").new()
+		position_sync.name = "NetworkPositionSync"
+		add_child(position_sync)
+		
+		var rotation_sync = preload("res://addons/cogito/network/network_rotation_sync.gd").new()
+		rotation_sync.name = "NetworkRotationSync"
+		add_child(rotation_sync)
+		
+		var attribute_sync = preload("res://addons/cogito/network/network_attribute_sync.gd").new()
+		attribute_sync.name = "NetworkAttributeSync"
+		add_child(attribute_sync)
+		
+		var state_sync = preload("res://addons/cogito/network/network_player_state_sync.gd").new()
+		state_sync.name = "NetworkPlayerStateSync"
+		add_child(state_sync)
+		
+		# Add visual representation for remote players (or all players)
+		var visual_rep = preload("res://addons/cogito/network/player_visual_representation.gd").new()
+		visual_rep.name = "PlayerVisualRepresentation"
+		add_child(visual_rep)
+		
+		var death_sync = preload("res://addons/cogito/network/network_death_sync.gd").new()
+		death_sync.name = "NetworkDeathSync"
+		add_child(death_sync)
+		
+		var inventory_sync = preload("res://addons/cogito/network/network_inventory_sync.gd").new()
+		inventory_sync.name = "NetworkInventorySync"
+		add_child(inventory_sync)
+		
+		var wieldable_sync = preload("res://addons/cogito/network/network_wieldable_sync.gd").new()
+		wieldable_sync.name = "NetworkWieldableSync"
+		add_child(wieldable_sync)
+	
+	# Disable input and physics for remote players
+	if NetworkManager and NetworkManager.is_multiplayer() and not is_local_player:
+		is_movement_paused = true
+		set_physics_process(false)
+		
+		# Hide GUI/HUD for remote players (only local player should see UI)
+		var gui_node = get_node_or_null("GUI")
+		if gui_node:
+			gui_node.visible = false
+			CogitoGlobals.debug_log(
+				is_logging,
+				"cogito_player.gd",
+				"Hiding GUI for remote player (player_id: %d)" % player_id
+			)
+	
 	player_interaction_component.exclude_player(get_rid())
 
 	randomize()
@@ -244,6 +313,13 @@ func _ready():
 	var sanity_attribute = player_attributes.get("sanity")
 	if sanity_attribute and visibility_attribute:
 		visibility_attribute.attribute_changed.connect(sanity_attribute.on_visibility_changed)
+	
+	# Register inventory in InventoryManager if it exists
+	if inventory_data:
+		inventory_data.set_owner(self)
+	
+	# Check visibility if attribute exists
+	if visibility_attribute:
 		visibility_attribute.check_current_visibility()
 
 	### CURRENCY SETUP
@@ -391,6 +467,10 @@ func _on_pause_menu_resume():
 
 
 func _input(event):
+	# Don't process input for remote players
+	if NetworkManager and NetworkManager.is_multiplayer() and not is_local_player:
+		return
+	
 	if event is InputEventMouseMotion and !is_movement_paused:
 		var look_movement: Vector2 = Vector2(0.0, 0.0)
 
@@ -886,6 +966,10 @@ func _process_on_sittable(delta):
 
 
 func _physics_process(delta):
+	# Don't process physics for remote players (they're synced via network)
+	if NetworkManager and NetworkManager.is_multiplayer() and not is_local_player:
+		return
+	
 	#if is_movement_paused:
 	#return
 	if is_sitting:
@@ -1449,3 +1533,10 @@ func _on_player_state_loaded():
 	#self.global_transform.basis = Basis()
 	#neck.global_transform.basis = Basis()
 	pass
+
+
+func _exit_tree() -> void:
+	# Unregister player from PlayerManager when exiting
+	if PlayerManager and player_id != -1:
+		PlayerManager.unregister_player(player_id)
+		player_id = -1

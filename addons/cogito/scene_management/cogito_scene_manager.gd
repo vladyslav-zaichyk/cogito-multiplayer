@@ -51,6 +51,10 @@ func _ready() -> void:
 
 	reset_scene_states()
 	instantiate_fade_panel()
+	
+	# Initialize world state from WorldStateManager if available
+	if WorldStateManager:
+		_current_world_dict = WorldStateManager.get_world_state_dict()
 
 
 func switch_active_slot_to(slot_name: String):
@@ -146,7 +150,10 @@ func loading_saved_game(passed_slot: String, current_scene_name: String = ""):
 
 
 #region PLAYER SAVE HANDLING
-func load_player_state(player, passed_slot: String):
+## Load player state for a specific player
+## If player_id is -1, uses the active slot (single-player mode)
+## If player_id is provided, loads player-specific state
+func load_player_state(player, passed_slot: String, player_id: int = -1):
 	CogitoGlobals.debug_log(true, "CSM", "Loading player state...")
 	if !_player_state:
 		_player_state = CogitoPlayerState.new()
@@ -163,17 +170,52 @@ func load_player_state(player, passed_slot: String):
 		player.inventory_data.assigned_quickslots = _player_state.player_quickslots
 
 		# Loading quests from player state:
-		CogitoQuestManager.active.clear_group()
-		for quest in _player_state.player_active_quests:
-			CogitoQuestManager.active.add_quest(quest)
+		# If player_id is provided, load only quests for that player
+		# Otherwise, load all quests (single-player mode)
+		var target_player_id: int = player_id
+		if target_player_id == -1 and player and player.has_method("get") and player.get("player_id") != null:
+			target_player_id = player.player_id
+		
+		if target_player_id != -1 and CogitoQuestManager:
+			# Load quests for this specific player
+			# Remove this player's existing quests from groups first
+			var player_active_quests = CogitoQuestManager.get_player_active_quests(target_player_id)
+			var player_completed_quests = CogitoQuestManager.get_player_completed_quests(target_player_id)
+			var player_failed_quests = CogitoQuestManager.get_player_failed_quests(target_player_id)
+			
+			# Remove this player's quests from groups
+			for quest in player_active_quests:
+				CogitoQuestManager.active.remove_quest(quest)
+			for quest in player_completed_quests:
+				CogitoQuestManager.completed.remove_quest(quest)
+			for quest in player_failed_quests:
+				CogitoQuestManager.failed.remove_quest(quest)
+			
+			# Set player_id for loaded quests and add them back
+			for quest in _player_state.player_active_quests:
+				quest.player_id = target_player_id
+				CogitoQuestManager.active.add_quest(quest)
+			
+			for quest in _player_state.player_completed_quests:
+				quest.player_id = target_player_id
+				CogitoQuestManager.completed.add_quest(quest)
+			
+			for quest in _player_state.player_failed_quests:
+				quest.player_id = target_player_id
+				CogitoQuestManager.failed.add_quest(quest)
+		else:
+			# Fallback: load all quests (single-player mode)
+			CogitoQuestManager.active.clear_group()
+			for quest in _player_state.player_active_quests:
+				CogitoQuestManager.active.add_quest(quest)
 
-		CogitoQuestManager.completed.clear_group()
-		for quest in _player_state.player_completed_quests:
-			CogitoQuestManager.completed.add_quest(quest)
+			CogitoQuestManager.completed.clear_group()
+			for quest in _player_state.player_completed_quests:
+				CogitoQuestManager.completed.add_quest(quest)
 
-		CogitoQuestManager.failed.clear_group()
-		for quest in _player_state.player_failed_quests:
-			CogitoQuestManager.failed.add_quest(quest)
+			CogitoQuestManager.failed.clear_group()
+			for quest in _player_state.player_failed_quests:
+				CogitoQuestManager.failed.add_quest(quest)
 
 		# Loading saved charges of wieldables
 		var array_of_wieldable_charges = _player_state.saved_wieldable_charges
@@ -211,6 +253,10 @@ func load_player_state(player, passed_slot: String):
 		_current_world_dict.clear()
 		for entry in local_dict_copy:
 			_current_world_dict.get_or_add(entry, local_dict_copy[entry])
+		
+		# Sync with WorldStateManager
+		if WorldStateManager:
+			WorldStateManager.set_world_state_dict(_current_world_dict)
 
 		player.global_position = _player_state.player_position
 		player.body.global_rotation = _player_state.player_rotation
@@ -239,7 +285,10 @@ func load_player_state(player, passed_slot: String):
 		)
 
 
-func save_player_state(player, slot: String):
+## Save player state for a specific player
+## If player_id is -1, uses the active slot (single-player mode)
+## If player_id is provided, saves to player-specific slot
+func save_player_state(player, slot: String, player_id: int = -1):
 	if !_player_state:
 		CogitoGlobals.debug_log(
 			true, "CSM", "State doesn't exist. Creating for slot " + slot + "..."
@@ -251,17 +300,41 @@ func save_player_state(player, slot: String):
 	_player_state.player_quickslots = player.inventory_data.assigned_quickslots  # Saving assigned quickslots
 
 	# Saving current quests to player state.
+	# If player_id is provided, save only quests for that player
+	# Otherwise, save all quests (single-player mode)
+	var target_player_id: int = player_id
+	if target_player_id == -1 and player and player.has_method("get") and player.get("player_id") != null:
+		target_player_id = player.player_id
+	
 	_player_state.player_active_quests.clear()
-	for quest in CogitoQuestManager.active.quests:
-		_player_state.player_active_quests.append(quest)
+	if target_player_id != -1 and CogitoQuestManager:
+		# Save only quests for this player
+		for quest in CogitoQuestManager.get_player_active_quests(target_player_id):
+			_player_state.player_active_quests.append(quest)
+	else:
+		# Fallback: save all active quests (single-player mode)
+		for quest in CogitoQuestManager.active.quests:
+			_player_state.player_active_quests.append(quest)
 
 	_player_state.player_completed_quests.clear()
-	for quest in CogitoQuestManager.completed.quests:
-		_player_state.player_completed_quests.append(quest)
+	if target_player_id != -1 and CogitoQuestManager:
+		# Save only quests for this player
+		for quest in CogitoQuestManager.get_player_completed_quests(target_player_id):
+			_player_state.player_completed_quests.append(quest)
+	else:
+		# Fallback: save all completed quests (single-player mode)
+		for quest in CogitoQuestManager.completed.quests:
+			_player_state.player_completed_quests.append(quest)
 
 	_player_state.player_failed_quests.clear()
-	for quest in CogitoQuestManager.failed.quests:
-		_player_state.player_completed_quests.append(quest)
+	if target_player_id != -1 and CogitoQuestManager:
+		# Save only quests for this player
+		for quest in CogitoQuestManager.get_player_failed_quests(target_player_id):
+			_player_state.player_failed_quests.append(quest)
+	else:
+		# Fallback: save all failed quests (single-player mode)
+		for quest in CogitoQuestManager.failed.quests:
+			_player_state.player_failed_quests.append(quest)
 
 	_player_state.clear_saved_wieldable_charges()
 	for item_slot in player.inventory_data.inventory_slots:
@@ -314,11 +387,19 @@ func save_player_state(player, slot: String):
 		_player_state.add_player_currency_to_state_data(currency, currency_data)
 
 	## Saving world dictionary
-	var local_dict_copy: Dictionary = _current_world_dict.duplicate(true)
+	# Get world state from WorldStateManager if available, otherwise use local dict
+	var world_dict_to_save: Dictionary
+	if WorldStateManager:
+		world_dict_to_save = WorldStateManager.get_world_state_dict()
+		# Also update local dict for backward compatibility
+		_current_world_dict = world_dict_to_save.duplicate(true)
+	else:
+		world_dict_to_save = _current_world_dict.duplicate(true)
+	
 	_player_state.clear_world_dictionary()
-	for entry in local_dict_copy:
+	for entry in world_dict_to_save:
 		CogitoGlobals.debug_log(true, "CSM", "World Dict: attemtping to save key: " + str(entry))
-		_player_state.add_to_world_dictionary(entry, local_dict_copy[entry])
+		_player_state.add_to_world_dictionary(entry, world_dict_to_save[entry])
 
 	## Adding a screenshot
 	var screenshot_path: String = str(_player_state.player_state_dir + _active_slot + ".png")
@@ -526,9 +607,43 @@ func save_scene_state(_scene_name_to_save, slot: String):
 
 
 # Function to transition to another scene via the loading screen.
+## Load next scene with optional fade transition
+## Emits scene_changing and scene_changed events through Event Bus
 func load_next_scene(
 	target: String, connector_name: String, passed_slot: String, load_mode: CogitoSceneLoadMode
 ) -> void:
+	# In multiplayer, RESET mode requires server authorization
+	# BUT: clients can load scenes if requested by host (through WorldLoadingManager)
+	if NetworkManager and NetworkManager.is_multiplayer() and load_mode == CogitoSceneLoadMode.RESET:
+		# Check if we're the host
+		if not NetworkManager.is_host():
+			# Clients can load scenes if called from WorldLoadingManager (authorized by host)
+			# Check if WorldLoadingManager is currently loading (authorized request)
+			if WorldLoadingManager and WorldLoadingManager.is_loading():
+				CogitoGlobals.debug_log(
+					true,
+					"CSM",
+					"[CLIENT] Scene load authorized by host (through WorldLoadingManager): %s" % target
+				)
+			else:
+				CogitoGlobals.debug_log(
+					true,
+					"CSM",
+					"[CLIENT] Scene reset blocked: only host can reset scenes in multiplayer"
+				)
+				return
+		else:
+			CogitoGlobals.debug_log(
+				true,
+				"CSM",
+				"[HOST] Authorizing scene reset to: %s" % target
+			)
+	
+	# Emit scene_changing event through Event Bus
+	if NetworkEventBus:
+		var from_scene = _current_scene_path if _current_scene_path else ""
+		NetworkEventBus.scene_changing.emit(from_scene, target)
+	
 	# fade_out()
 	var loading_screen = preload("./loading_scene.tscn").instantiate()
 	loading_screen.next_scene_path = target

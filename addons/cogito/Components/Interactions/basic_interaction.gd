@@ -12,6 +12,13 @@ func _ready() -> void:
 
 
 func interact(_player_interaction_component: PlayerInteractionComponent):
+	# Check if parent is a turnwheel that's currently turning
+	if parent_node is CogitoTurnwheel:
+		var turnwheel = parent_node as CogitoTurnwheel
+		if "is_currently_turning" in turnwheel and turnwheel.is_currently_turning:
+			print("[TURNWHEEL DEBUG] BasicInteraction.interact() called but turnwheel is turning - ignoring quick press")
+			return  # Don't call interact() on turnwheel if it's currently turning
+	
 	if !attribute_check != AttributeCheck.NONE:
 		if parent_node.has_method("interact"):
 			parent_node.interact(_player_interaction_component)

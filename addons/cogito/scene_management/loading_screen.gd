@@ -30,9 +30,15 @@ func _process(_delta):
 		set_process(false)
 		await get_tree().create_timer(forced_delay).timeout
 		var current_scene = get_tree().current_scene  # Stores currently active scene so it can be set later
-		var current_scene_name = current_scene.get_name()
-		current_scene.free()  # Removing previous scene.
-		var new_scene_packed: PackedScene = ResourceLoader.load_threaded_get(next_scene_path)
+		var current_scene_name = ""
+		if current_scene:
+			current_scene_name = current_scene.get_name()
+			current_scene.free()  # Removing previous scene.
+		var loaded_resource = ResourceLoader.load_threaded_get(next_scene_path)
+		if not loaded_resource is PackedScene:
+			push_error("Failed to load scene: " + next_scene_path)
+			return
+		var new_scene_packed: PackedScene = loaded_resource as PackedScene
 		var new_scene_node = new_scene_packed.instantiate()
 		get_tree().get_root().add_child(new_scene_node)  # Adds the instatiated new scene as a node.
 
@@ -58,15 +64,25 @@ func _process(_delta):
 					"Attempting to load scene state: " + next_scene_state_filename
 				)
 				CogitoSceneManager.load_scene_state(next_scene_state_filename, "temp")  # Loading temp scene state
-				CogitoSceneManager.load_player_state(
-					CogitoSceneManager._current_player_node, "temp"
-				)  # Loading temp player state.
+				# Get player from PlayerManager (new system) or fallback to old system
+				var player = PlayerManager.get_current_player() if PlayerManager else null
+				if not player and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+					player = CogitoSceneManager._current_player_node
+				CogitoSceneManager.load_player_state(player, "temp")  # Loading temp player state.
 		else:
 			CogitoGlobals.debug_log(
 				true, "loading_screen.gd", "Load mode 2 (RESET), ignoring scene and player states."
 			)
 
 		get_tree().current_scene = new_scene_node  # Assigns new scene as current scene
+		
+		# Update scene info in CogitoSceneManager
+		CogitoSceneManager._current_scene_name = new_scene_node.name
+		CogitoSceneManager._current_scene_path = new_scene_node.scene_file_path
+		
+		# Emit scene_changed event through Event Bus
+		if NetworkEventBus:
+			NetworkEventBus.scene_changed.emit(new_scene_node.scene_file_path, new_scene_node.name)
 
 		if connector_name != "":  #If a connector name has been passed, move the player to it. This requires the target scene to have a cogito scene script attached to it's root scene node.
 			new_scene_node.move_player_to_connector(connector_name)

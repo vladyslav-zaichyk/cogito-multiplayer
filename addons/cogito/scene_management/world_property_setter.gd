@@ -19,12 +19,22 @@ func on_void_signal():
 
 
 func set_properties(properties_to_set: Dictionary) -> void:
-	var world_dict = CogitoSceneManager._current_world_dict
-
-	for property in properties_to_set:
-		world_dict[property] = properties_to_set[property]
-		CogitoGlobals.debug_log(
-			true,
-			"world_property_setter.gd",
-			str(property) + " set to " + str(properties_to_set[property])
-		)
+	# Use WorldStateManager if available, otherwise fallback to CogitoSceneManager
+	if WorldStateManager:
+		for property in properties_to_set:
+			WorldStateManager.set_world_state(property, properties_to_set[property])
+			CogitoGlobals.debug_log(
+				true,
+				"world_property_setter.gd",
+				str(property) + " set to " + str(properties_to_set[property])
+			)
+	else:
+		# Fallback to old system
+		var world_dict = CogitoSceneManager._current_world_dict
+		for property in properties_to_set:
+			world_dict[property] = properties_to_set[property]
+			CogitoGlobals.debug_log(
+				true,
+				"world_property_setter.gd",
+				str(property) + " set to " + str(properties_to_set[property])
+			)

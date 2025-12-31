@@ -8,6 +8,8 @@ class_name CogitoProjectile
 @onready var lifespan = $Lifespan
 # Damage is being set by the wieldable.
 var damage_amount: int = 0
+## Peer ID of the player who shot this projectile (for multiplayer damage sync)
+var shooter_peer_id: int = -1
 
 ## Determine what happens if the projectile hits something. Keep this false for stuff like Arrows. True for stuff like bullets or rockets.
 @export var destroy_on_impact: bool = false
@@ -51,10 +53,17 @@ func on_timeout():
 ## Checking collision event for property tags.
 func _on_body_entered(collider: Node):
 	var collision_point = global_transform.origin
-	var bullet_direction = (
-		(collision_point - CogitoSceneManager._current_player_node.get_global_transform().origin)
-		. normalized()
-	)  ##This is hacky TODO needs to be fixed for Multiplayer support
+	# Get player from PlayerManager (new system) or fallback to old system
+	var player = PlayerManager.get_current_player() if PlayerManager else null
+	if not player and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+		player = CogitoSceneManager._current_player_node
+	
+	var bullet_direction = Vector3.ZERO
+	if player:
+		bullet_direction = (
+			(collision_point - player.get_global_transform().origin)
+			. normalized()
+		)  ##This is hacky TODO needs to be fixed for Multiplayer support
 
 	if stick_on_impact:
 		self.linear_velocity = Vector3.ZERO
@@ -145,7 +154,45 @@ func deal_damage(collider: Node, bullet_direction, bullet_position):
 		)
 	)
 
-	collider.damage_received.emit(damage_amount, bullet_direction, bullet_position)
+	# Check if this is a local projectile (from local player)
+	# Only local projectiles should deal damage and sync it to other clients
+	var is_local_projectile = false
+	if NetworkManager and NetworkManager.is_multiplayer():
+		var local_peer_id = NetworkManager.get_local_peer_id()
+		is_local_projectile = (shooter_peer_id == local_peer_id)
+	else:
+		# Single-player mode - always deal damage locally
+		is_local_projectile = true
+	
+	if is_local_projectile:
+		# This is a local projectile - deal damage locally and sync to other clients
+		collider.damage_received.emit(damage_amount, bullet_direction, bullet_position)
+		
+		# Sync damage to other clients in multiplayer
+		if NetworkManager and NetworkManager.is_multiplayer():
+			# Get collider path for identification
+			var collider_path = ""
+			if collider and is_instance_valid(collider):
+				collider_path = str(collider.get_path())
+			
+			var damage_data = {
+				"shooter_peer_id": shooter_peer_id,
+				"collider_path": collider_path,
+				"damage_amount": damage_amount,
+				"bullet_direction": bullet_direction,
+				"bullet_position": bullet_position
+			}
+			
+			NetworkManager.sync_damage_dealt.rpc(damage_data)
+	else:
+		# This is a remote projectile - don't deal damage here
+		# Damage will be applied via sync_damage_dealt RPC from the shooter
+		CogitoGlobals.debug_log(
+			true,
+			"CogitoProjectile",
+			"Skipping damage from remote projectile (shooter_peer_id: %d)" % shooter_peer_id
+		)
+	
 	if destroy_on_impact:
 		die()
 

@@ -31,9 +31,15 @@ func _ready() -> void:
 		quickslot.quickslot_cleared.connect(unbind_quickslot)
 
 	await get_tree().process_frame
-	player_interaction_component = (
-		(CogitoSceneManager._current_player_node as CogitoPlayer).player_interaction_component
-	)
+	# Get player from PlayerManager (new system) or fallback to old system
+	var player = PlayerManager.get_current_player() if PlayerManager else null
+	if not player and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+		player = CogitoSceneManager._current_player_node
+	
+	if player and player is CogitoPlayer:
+		player_interaction_component = player.player_interaction_component
+	else:
+		push_warning("CogitoQuickSlots: Could not find player node to get interaction component")
 
 
 # Using this to either set up new inventory or load quickslot of existing inventory
@@ -113,12 +119,15 @@ func _unhandled_input(event):
 	if !self.visible:
 		return
 
+	if not inventory_reference:
+		return
+
 	if inventory_is_open:
 		CogitoGlobals.debug_log(true, "CogitoQuickSlots.gd", "Inventory is open, no item used.")
 		return
 
 	if event.is_action_released("quickslot_1"):
-		if inventory_reference.assigned_quickslots[0]:
+		if inventory_reference.assigned_quickslots.size() > 0 and inventory_reference.assigned_quickslots[0]:
 			CogitoGlobals.debug_log(true, "CogitoQuickSlots.gd", "Using quickslot 1...")
 			inventory_reference.use_slot_data(
 				inventory_reference.assigned_quickslots[0].origin_index
@@ -130,7 +139,7 @@ func _unhandled_input(event):
 			return
 
 	if event.is_action_released("quickslot_2"):
-		if inventory_reference.assigned_quickslots[1]:
+		if inventory_reference.assigned_quickslots.size() > 1 and inventory_reference.assigned_quickslots[1]:
 			CogitoGlobals.debug_log(true, "CogitoQuickSlots.gd", "Using quickslot 2...")
 			inventory_reference.use_slot_data(
 				inventory_reference.assigned_quickslots[1].origin_index
@@ -142,7 +151,7 @@ func _unhandled_input(event):
 			return
 
 	if event.is_action_released("quickslot_3"):
-		if inventory_reference.assigned_quickslots[2]:
+		if inventory_reference.assigned_quickslots.size() > 2 and inventory_reference.assigned_quickslots[2]:
 			CogitoGlobals.debug_log(true, "CogitoQuickSlots.gd", "Using quickslot 3...")
 			inventory_reference.use_slot_data(
 				inventory_reference.assigned_quickslots[2].origin_index
@@ -154,7 +163,7 @@ func _unhandled_input(event):
 			return
 
 	if event.is_action_released("quickslot_4"):
-		if inventory_reference.assigned_quickslots[3]:
+		if inventory_reference.assigned_quickslots.size() > 3 and inventory_reference.assigned_quickslots[3]:
 			CogitoGlobals.debug_log(true, "CogitoQuickSlots.gd", "Using quickslot 4...")
 			inventory_reference.use_slot_data(
 				inventory_reference.assigned_quickslots[3].origin_index

@@ -93,7 +93,7 @@ nodes/Punch/node = SubResource("AnimationNodeAnimation_mf8n2")
 nodes/Punch/position = Vector2(-280, 340)
 nodes/attack/node = SubResource("AnimationNodeOneShot_rdr7m")
 nodes/attack/position = Vector2(40, 140)
-node_connections = [&"attack", 0, &"Animation", &"attack", 1, &"Punch", &"output", 0, &"attack"]
+node_connections = [&"output", 0, &"attack", &"attack", 0, &"Animation", &"attack", 1, &"Punch"]
 
 [sub_resource type="AnimationNodeStateMachineTransition" id="AnimationNodeStateMachineTransition_duam4"]
 advance_mode = 2
@@ -122,6 +122,7 @@ graph_offset = Vector2(-437, 56)
 
 [resource]
 graph_offset = Vector2(-1077.09, 135.23)
+nodes/output/position = Vector2(260, 160)
 nodes/Animation/node = SubResource("AnimationNodeAnimation_duam4")
 nodes/Animation/position = Vector2(-461.97, 626.522)
 nodes/Movement/node = SubResource("AnimationNodeBlendSpace2D_a5a6b")
@@ -132,5 +133,4 @@ nodes/UpperBodyBlend/node = SubResource("AnimationNodeBlend2_8uif1")
 nodes/UpperBodyBlend/position = Vector2(-40, 140)
 nodes/UpperBodyState/node = SubResource("AnimationNodeStateMachine_yvs0n")
 nodes/UpperBodyState/position = Vector2(-600, 340)
-nodes/output/position = Vector2(260, 160)
-node_connections = [&"Transition", 0, &"UpperBodyState", &"Transition", 1, &"Animation", &"UpperBodyBlend", 0, &"Movement", &"UpperBodyBlend", 1, &"Transition", &"output", 0, &"UpperBodyBlend"]
+node_connections = [&"output", 0, &"UpperBodyBlend", &"Transition", 0, &"UpperBodyState", &"Transition", 1, &"Animation", &"UpperBodyBlend", 0, &"Movement", &"UpperBodyBlend", 1, &"Transition"]

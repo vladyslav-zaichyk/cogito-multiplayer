@@ -1,6 +1,8 @@
 extends InteractionComponent
 class_name CogitoCarryableComponent
 
+## Command class uses class_name for static typing, so we can call it directly
+
 signal carry_state_changed(is_being_carried: bool)
 signal thrown(impulse)
 
@@ -64,6 +66,33 @@ func carry(_player_interaction_component: PlayerInteractionComponent):
 	if is_being_carried:
 		leave()
 	else:
+		# Use Command/Event Sourcing architecture
+		# CommandBus is an autoload singleton (registered in cogito_plugin.gd)
+		# Accessible directly as global variable at runtime
+		var player_id = -1
+		if PlayerManager and player_interaction_component:
+			var player = player_interaction_component.get_parent()
+			if player:
+				player_id = PlayerManager.get_player_id(player)
+		
+		if player_id != -1:
+			# Create and execute command (using class_name for static typing)
+			var command = StartCarryingCommand.new(player_id, self)
+			var result = CommandBus.execute_command(command)
+			
+			if result.success:
+				# Command executed successfully, carry handled by command
+				return
+			else:
+				# Command failed, show error
+				player_interaction_component.send_hint(
+					null,
+					result.error_message if result.error_message else "Failed to start carrying"
+				)
+				return
+		
+		# Fallback to old system if player_id not found
+		push_warning("CarryableComponent: Player ID not found, using fallback (old system) instead of StartCarryingCommand")
 		hold()
 
 

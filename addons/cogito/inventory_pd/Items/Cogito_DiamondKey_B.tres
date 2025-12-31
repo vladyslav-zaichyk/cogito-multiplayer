@@ -12,8 +12,6 @@
 resource_local_to_scene = true
 script = ExtResource("4_ki7lq")
 inventory_item = ExtResource("3_pk5ng")
-quantity = 1
-origin_index = -1
 
 [resource]
 script = ExtResource("5_3fxls")
@@ -22,16 +20,8 @@ resulting_item = SubResource("Resource_xp6cd")
 name = "Diamond Half B"
 description = "Looks incomplete. Maybe I can find the rest of it?"
 icon = ExtResource("1_gdixu")
-is_stackable = false
-is_droppable = true
-is_unique = false
-stack_size = 0
 drop_scene = "res://addons/cogito/packed_scenes/Pickups/pickup_diamond_key_b.tscn"
-item_drop_size = 0.5
 hint_icon_on_use = ExtResource("1_txwkg")
 hint_text_on_use = "Can't be used by itself."
-item_size = Vector2(1, 1)
 sound_use = ExtResource("7_m8rd7")
 sound_pickup = ExtResource("6_de5x0")
-can_auto_slot = false
-slot_number = -1

@@ -50,9 +50,10 @@ func update_device(_device, _device_index):
 
 
 func update_input_icon():
-	CogitoGlobals.debug_log(
-		true, "DynamicInputIcon.gd", "update_input_icon() called. current device = " + str(device)
-	)
+	# Temporarily disabled logging to reduce console spam
+	# CogitoGlobals.debug_log(
+	#	true, "DynamicInputIcon.gd", "update_input_icon() called. current device = " + str(device)
+	#)
 	match input_icon_type:
 		InputIconType.DYNAMIC:
 			update_input_icon_dynamic()

@@ -130,7 +130,13 @@ func _physics_process(delta: float) -> void:
 
 func handle_chasing(_delta: float):
 	#Currently just chasing the player. TODO: Change to have a dynamic target.
-	chase_target = CogitoSceneManager._current_player_node
+	# Get player from PlayerManager (new system) or fallback to old system
+	if PlayerManager and PlayerManager.has_local_player():
+		chase_target = PlayerManager.get_local_player()
+	elif CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+		chase_target = CogitoSceneManager._current_player_node
+	else:
+		chase_target = null
 
 	# This is basically a lerped look-at
 	_look_at_target_interpolated(chase_target.global_position)

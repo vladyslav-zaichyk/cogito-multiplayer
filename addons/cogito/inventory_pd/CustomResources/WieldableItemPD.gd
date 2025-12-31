@@ -36,17 +36,69 @@ func use(target) -> bool:
 
 	# Target should always be player? Null check to override using the CogitoSceneManager, which stores a reference to current player node
 	if target == null:
-		CogitoGlobals.debug_log(
-			true,
-			"WieldableItemPD.gd",
-			"Bad target pass. Setting target to " + CogitoSceneManager._current_player_node.name
-		)
-		target = CogitoSceneManager._current_player_node
+		# Get player from PlayerManager (new system) or fallback to old system
+		var player = PlayerManager.get_current_player() if PlayerManager else null
+		if not player and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+			player = CogitoSceneManager._current_player_node
+		
+		if player:
+			CogitoGlobals.debug_log(
+				true,
+				"WieldableItemPD.gd",
+				"Bad target pass. Setting target to " + player.name
+			)
+			target = player
 
 	player_interaction_component = target.player_interaction_component
 	if player_interaction_component.carried_object != null:
 		player_interaction_component.send_hint(null, "Can't equip item while carrying.")
 		return false
+	
+	# Use Command/Event Sourcing architecture
+	# CommandBus is an autoload singleton (registered in cogito_plugin.gd)
+	# Accessible directly as global variable at runtime
+	var player_id = -1
+	if PlayerManager:
+		player_id = PlayerManager.get_player_id(target)
+	
+	# Find slot index in inventory
+	var slot_index = -1
+	if target.inventory_data:
+		for index in range(target.inventory_data.inventory_slots.size()):
+			var slot = target.inventory_data.inventory_slots[index]
+			if slot and slot.inventory_item == self:
+				slot_index = index
+				break
+	
+	if player_id != -1:
+		# Create and execute command
+		if is_being_wielded:
+			# Unequip command
+			# Using class_name for static typing
+			var command = UnequipWieldableCommand.new(player_id, self)
+			var result = CommandBus.execute_command(command)
+			
+			if result.success:
+				# Command executed successfully, unequip handled by command
+				return true
+			else:
+				player_interaction_component.send_hint(null, result.error_message if result.error_message else "Failed to unequip wieldable")
+				return false
+		else:
+			# Equip command
+			# Using class_name for static typing
+			var command = EquipWieldableCommand.new(player_id, self, slot_index)
+			var result = CommandBus.execute_command(command)
+			
+			if result.success:
+				# Command executed successfully, equip handled by command
+				return true
+			else:
+				player_interaction_component.send_hint(null, result.error_message if result.error_message else "Failed to equip wieldable")
+				return false
+	
+	# Fallback to old system if player_id not found
+	push_warning("WieldableItemPD: Player ID not found, using fallback (old system) instead of Equip/UnequipWieldableCommand")
 	if is_being_wielded:
 		CogitoGlobals.debug_log(
 			true,

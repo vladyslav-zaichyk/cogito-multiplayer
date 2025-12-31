@@ -181,7 +181,8 @@ func set_external_inventory(_external_inventory_owner):
 	external_inventory_owner = _external_inventory_owner
 	var inventory_data = external_inventory_owner.inventory_data
 
-	inventory_data.owner = external_inventory_owner  # Setting reference to external inventory owner node
+	# Setting reference to external inventory owner node
+	inventory_data.set_owner(external_inventory_owner)
 #	inventory_data.inventory_interact.connect(on_inventory_interact)
 	inventory_data.inventory_button_press.connect(
 		on_inventory_button_press.bind(external_inventory_ui)
@@ -217,7 +218,12 @@ func clear_external_inventory():
 
 
 func set_player_inventory_data(inventory_data: CogitoInventory):
-	inventory_data.owner = CogitoSceneManager._current_player_node  # Setting player inventory owner reference to player node
+	# Get player from PlayerManager (new system) or fallback to old system
+	var player = PlayerManager.get_current_player() if PlayerManager else null
+	if not player and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+		player = CogitoSceneManager._current_player_node
+	# Setting player inventory owner reference to player node
+	inventory_data.set_owner(player)
 
 #	inventory_data.inventory_interact.connect(on_inventory_interact)
 	if !inventory_data.inventory_button_press.is_connected(on_inventory_button_press):
@@ -502,8 +508,106 @@ func _drop_item(slot_data: InventorySlotPD) -> bool:
 		)
 
 	dropped_item.find_interaction_nodes()
+	CogitoGlobals.debug_log(
+		true,
+		"inventory_interface.gd",
+		"[_drop_item] Found %d interaction nodes, slot_data.inventory_item charge_current: %s" % [
+			dropped_item.interaction_nodes.size(),
+			slot_data.inventory_item.charge_current if slot_data.inventory_item is WieldableItemPD else "N/A"
+		]
+	)
+	
 	for node in dropped_item.interaction_nodes:
-		if node.has_method("get_item_type"):
+		# Only update PickupComponent.slot_data (not other interaction components)
+		if node is PickupComponent:
+			var pickup = node as PickupComponent
+			# For WieldableItemPD, ensure we preserve charge_current by duplicating the item
+			# This is important because the drop_scene may have a PickupComponent with shared resource
+			if slot_data.inventory_item is WieldableItemPD:
+				var wieldable_item = slot_data.inventory_item as WieldableItemPD
+				# Create a new slot_data with duplicated item to preserve charge_current
+				var new_slot_data = slot_data.duplicate()
+				var duplicated_item = wieldable_item.duplicate() as WieldableItemPD
+				duplicated_item.charge_current = wieldable_item.charge_current
+				duplicated_item.charge_max = wieldable_item.charge_max
+				new_slot_data.inventory_item = duplicated_item
+				pickup.slot_data = new_slot_data
+				
+				# Verify that slot_data was set correctly (check immediately after setting)
+				if pickup.slot_data and pickup.slot_data.inventory_item is WieldableItemPD:
+					var verify_wieldable = pickup.slot_data.inventory_item as WieldableItemPD
+					CogitoGlobals.debug_log(
+						true,
+						"inventory_interface.gd",
+						"[_drop_item] Set PickupComponent.slot_data with charge_current: %s / %s for %s (verified immediately: %s / %s)" % [
+							duplicated_item.charge_current,
+							duplicated_item.charge_max,
+							slot_data.inventory_item.name,
+							verify_wieldable.charge_current,
+							verify_wieldable.charge_max
+						]
+					)
+					
+					# Double-check: verify that the item is not a shared resource
+					var resource_path = verify_wieldable.resource_path
+					var is_shared = resource_path != "" and not resource_path.ends_with(".gd")
+					if is_shared:
+						CogitoGlobals.debug_log(
+							true,
+							"inventory_interface.gd",
+							"[_drop_item] WARNING: PickupComponent.slot_data.inventory_item is still a shared resource (resource_path: %s)!" % resource_path
+						)
+				else:
+					CogitoGlobals.debug_log(
+						true,
+						"inventory_interface.gd",
+						"[_drop_item] Set PickupComponent.slot_data with charge_current: %s / %s for %s (verification failed - slot_data is null or not WieldableItemPD)" % [
+							duplicated_item.charge_current,
+							duplicated_item.charge_max,
+							slot_data.inventory_item.name
+						]
+					)
+			else:
+				pickup.slot_data = slot_data
+		elif node.has_method("get_item_type"):
+			# For other interaction components that have get_item_type method
 			node.slot_data = slot_data
+	
+	# Use Command/Event Sourcing architecture
+	# CommandBus is an autoload singleton (registered in cogito_plugin.gd)
+	# Accessible directly as global variable at runtime
+	var player_id = -1
+	if PlayerManager:
+		player_id = PlayerManager.get_player_id(player)
+	
+	if player_id != -1:
+		# Get slot index from inventory
+		var slot_index = -1
+		if player.inventory_data:
+			slot_index = player.inventory_data.inventory_slots.find(slot_data)
+		
+		# Create and execute command with actual drop position
+		var command = DropItemCommand.new(player_id, slot_data, slot_index, dropped_item.global_position)
+		var result = CommandBus.execute_command(command)
+		
+		if not result.success:
+			# Command failed, but item is already spawned - this shouldn't happen
+			push_warning("DropItemCommand failed but item was already spawned: %s" % result.error_message)
+	else:
+		# Fallback warning
+		push_warning("InventoryInterface: Player ID not found, using fallback (old system) instead of DropItemCommand")
+	
+	# Also emit through NetworkEventBus for backward compatibility
+	# Note: We need to preserve charge_current for WieldableItemPD before emitting
+	# because the item might be removed from inventory after this
+	if NetworkEventBus and player:
+		if player_id == -1 and PlayerManager:
+			player_id = PlayerManager.get_player_id(player)
+		if player_id != -1:
+			# For WieldableItemPD, we need to ensure charge_current is preserved
+			# The NetworkInventorySync._on_item_dropped will try to find it in inventory
+			# but if it's already removed, we need to pass it through the item itself
+			# Since we're passing slot_data.inventory_item, it should still have charge_current
+			NetworkEventBus.inventory_item_dropped.emit(player_id, slot_data.inventory_item, dropped_item.global_position)
 
 	return true

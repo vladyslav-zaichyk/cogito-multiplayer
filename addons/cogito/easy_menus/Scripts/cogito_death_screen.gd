@@ -53,16 +53,33 @@ func _play_pressed() -> void:
 
 func open_death_screen():
 	#Stops game and shows pause menu
-	get_tree().paused = true
+	# In multiplayer, only pause local player, not the entire game
+	if NetworkManager and NetworkManager.is_multiplayer():
+		# Pause only local player movement
+		var player = PlayerManager.get_local_player() if PlayerManager else null
+		if player and player is CogitoPlayer:
+			player._on_pause_movement()
+	else:
+		# Single-player: pause entire game
+		get_tree().paused = true
+	
 	label_active_slot.text = "Current Slot: " + CogitoSceneManager._active_slot
 	temp_screenshot = grab_temp_screenshot()
 	show()
-	if !load_current_slot_data():
-		#load_button.disabled = true
+	# In multiplayer, don't show "New Game" button - use "Respawn" instead
+	if NetworkManager and NetworkManager.is_multiplayer():
+		# Hide "New Game" button in multiplayer
 		hide_saved_slot_display()
-		change_load_btn_to_new_game_btn()
+		if load_button:
+			load_button.text = "Respawn"  # Change button text to "Respawn"
 	else:
-		show_saved_slot_display()
+		# Single-player: use original logic
+		if !load_current_slot_data():
+			#load_button.disabled = true
+			hide_saved_slot_display()
+			change_load_btn_to_new_game_btn()
+		else:
+			show_saved_slot_display()
 
 	nodes_to_focus[0].grab_focus.call_deferred()
 
@@ -123,6 +140,17 @@ func change_load_btn_to_new_game_btn() -> void:
 
 
 func _on_new_game_button_pressed() -> void:
+	# In multiplayer, "New Game" should not work (or should work through server)
+	# For now, disable it in multiplayer to avoid errors
+	if NetworkManager and NetworkManager.is_multiplayer():
+		CogitoGlobals.debug_log(
+			true,
+			"DeathScreen",
+			"New Game is disabled in multiplayer mode. Use Respawn instead."
+		)
+		# Optionally, show a message to the player
+		return
+	
 	CogitoSceneManager.delete_temp_saves()
 	start_new_game()
 
@@ -134,9 +162,11 @@ func start_new_game():
 			path_to_scene, "", "temp", CogitoSceneManager.CogitoSceneLoadMode.RESET
 		)  #Load_mode 2 means there's no attempt to load a state.
 		#Setting new game world state:
-		CogitoSceneManager._current_world_dict = (
-			CogitoGlobals.cogito_settings.new_game_world_state.get_world_dict()
-		)
+		var new_world_dict = CogitoGlobals.cogito_settings.new_game_world_state.get_world_dict()
+		if WorldStateManager:
+			WorldStateManager.set_world_state_dict(new_world_dict)
+		# Keep for backward compatibility
+		CogitoSceneManager._current_world_dict = new_world_dict
 	else:
 		print("ISSUE: No start game scene set.")
 
@@ -154,6 +184,13 @@ func _on_back_to_menu_button_pressed():
 
 
 func _on_load_button_pressed() -> void:
+	# Check if we're in multiplayer mode
+	if NetworkManager and NetworkManager.is_multiplayer():
+		# In multiplayer, use respawn instead of load
+		_respawn_in_multiplayer()
+		return
+	
+	# Single-player: use original load logic
 	get_tree().paused = false
 	hide()
 	CogitoGlobals.debug_log(true, "DeathScreen", "LOAD button pressed.")
@@ -163,9 +200,37 @@ func _on_load_button_pressed() -> void:
 	CogitoSceneManager.copy_slot_saves_to_temp(CogitoSceneManager._active_slot)
 
 	# Ensure the game resumes properly when loading after death
-	var player = CogitoSceneManager._current_player_node as CogitoPlayer
-	player.is_dead = false
+	# Get player from PlayerManager (new system) or fallback to old system
+	var player = PlayerManager.get_current_player() if PlayerManager else null
+	if not player and CogitoSceneManager and CogitoSceneManager.has_method("get") and CogitoSceneManager.get("_current_player_node"):
+		player = CogitoSceneManager._current_player_node
+	
+	if player and player is CogitoPlayer:
+		player.is_dead = false
 	player._on_pause_menu_resume()
 	player.get_node(player.pause_menu).close_pause_menu()
 	player.is_showing_ui = false
 	player.animationPlayer.stop()
+
+
+## Respawn player in multiplayer mode
+func _respawn_in_multiplayer() -> void:
+	if not NetworkManager or not NetworkManager.is_multiplayer():
+		return
+	
+	# Get local player
+	var player = PlayerManager.get_local_player() if PlayerManager else null
+	if not player or not player is CogitoPlayer:
+		return
+	
+	# Request respawn through NetworkDeathSync
+	var death_sync = player.get_node_or_null("NetworkDeathSync")
+	if death_sync and death_sync.has_method("request_respawn"):
+		death_sync.request_respawn()
+	
+	# Hide death screen and resume local player movement
+	hide()
+	if player.has_method("_on_resume_movement"):
+		player._on_resume_movement()
+	
+	CogitoGlobals.debug_log(true, "DeathScreen", "Respawn requested in multiplayer mode.")

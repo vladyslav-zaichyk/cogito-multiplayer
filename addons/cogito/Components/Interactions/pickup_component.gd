@@ -11,6 +11,28 @@ func _enter_tree() -> void:
 	if display_item_name:
 		var owner_object: CogitoObject = get_parent()
 		owner_object.display_name = slot_data.inventory_item.name
+	
+	# Add NetworkPickupID component for multiplayer synchronization (deferred to avoid blocking)
+	if NetworkManager and NetworkManager.is_multiplayer():
+		call_deferred("_add_network_pickup_id")
+
+
+func _add_network_pickup_id() -> void:
+	var parent_obj = get_parent()
+	if not parent_obj:
+		return
+	
+	# Check if NetworkPickupID already exists
+	var has_network_id = false
+	for child in parent_obj.get_children():
+		if child.has_method("get_network_id"):
+			has_network_id = true
+			break
+	
+	if not has_network_id:
+		var network_id_component = preload("res://addons/cogito/network/network_pickup_id.gd").new()
+		network_id_component.name = "NetworkPickupID"
+		parent_obj.add_child(network_id_component)
 
 
 func interact(_player_interaction_component: PlayerInteractionComponent):
@@ -34,8 +56,90 @@ func pick_up(_player_interaction_component: PlayerInteractionComponent):
 			)
 			return
 
-	if not _player_interaction_component.get_parent().inventory_data.pick_up_slot_data(slot_data):
+	# Use Command/Event Sourcing architecture
+	# CommandBus is an autoload singleton (registered in cogito_plugin.gd)
+	# Accessible directly as global variable at runtime
+	# Get player ID
+	var player_id = -1
+	if PlayerManager:
+		player_id = PlayerManager.get_player_id(_player_interaction_component.get_parent())
+	
+	if player_id == -1:
+		# Fallback to old system if player not found
+		push_warning("PickupComponent: Player ID not found, using fallback (old system) instead of PickupItemCommand")
+		if not _player_interaction_component.get_parent().inventory_data.pick_up_slot_data(slot_data):
+			return
+		_handle_pickup_success(_player_interaction_component)
 		return
+	
+	# Get item position and network ID
+	var parent_obj = get_parent()
+	var item_position = Vector3.ZERO
+	var network_id = -1
+	var scene_path = ""
+	
+	if parent_obj is Node3D:
+		item_position = (parent_obj as Node3D).global_position
+	
+	# Try to get network_id from NetworkPickupID component
+	# Note: Check specifically for NetworkPickupID to avoid NetworkRigidSync (which returns String)
+	for child in parent_obj.get_children():
+		# Check if this is NetworkPickupID (not NetworkRigidSync which also has get_network_id but returns String)
+		if child.has_method("get_network_id"):
+			var script_path = child.get_script().resource_path if child.get_script() else ""
+			# NetworkPickupID returns int, NetworkRigidSync returns String
+			# Check by script path or by checking return type
+			if script_path.ends_with("network_pickup_id.gd"):
+				network_id = child.get_network_id()
+				break
+	
+	# Get scene path if available
+	if parent_obj.is_inside_tree():
+		scene_path = str(parent_obj.get_path())
+	
+	# Log charge_current before creating command (for debugging)
+	# Also verify that slot_data.inventory_item is not a shared resource
+	if slot_data.inventory_item is WieldableItemPD:
+		var wieldable_item = slot_data.inventory_item as WieldableItemPD
+		var resource_path = wieldable_item.resource_path
+		var is_shared = resource_path != "" and not resource_path.ends_with(".gd")
+		CogitoGlobals.debug_log(
+			true,
+			"PickupComponent",
+			"[pick_up] Creating PickupItemCommand with charge_current: %s / %s (resource_path: %s, is_shared: %s)" % [
+				wieldable_item.charge_current,
+				wieldable_item.charge_max,
+				resource_path,
+				is_shared
+			]
+		)
+		
+		# If this is a shared resource with default charge_current, try to find the correct value
+		# This shouldn't happen, but it's a safety check
+		if is_shared and wieldable_item.charge_current >= wieldable_item.charge_max:
+			CogitoGlobals.debug_log(
+				true,
+				"PickupComponent",
+				"[pick_up] WARNING: slot_data.inventory_item appears to be a shared resource with default charge_current!"
+			)
+	
+	# Create and execute command (using class_name for static typing)
+	var command = PickupItemCommand.new(player_id, slot_data, item_position, network_id, scene_path)
+	var result = CommandBus.execute_command(command)
+	
+	if result.success:
+		# Command executed successfully, handle UI updates
+		_handle_pickup_success(_player_interaction_component)
+	else:
+		# Command failed, show error
+		_player_interaction_component.send_hint(
+			null,
+			result.error_message if result.error_message else "Failed to pick up item"
+		)
+
+
+## Handle successful pickup (UI updates, etc.)
+func _handle_pickup_success(_player_interaction_component: PlayerInteractionComponent) -> void:
 
 	# Update wieldable UI if we have picked up ammo for current wieldable
 	# TODO: Possibly replace with a better solution, maybe by signaling the change
